@@ -1,0 +1,11 @@
+langchain
+langchain-community
+langgraph
+sentence-transformers
+rdflib
+pandas
+groq
+pydantic
+typing_extensions
+owlready2
+python-dotenv

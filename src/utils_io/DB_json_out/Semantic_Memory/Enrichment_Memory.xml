@@ -1,0 +1,1717 @@
+<ENRICHMENT table="persons">
+  <PATTERN>SE</PATTERN>
+  <COLUMN name="persons.assigned_by_reviewer">
+    <intent>literal</intent>
+    <role>assigner ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="persons.author">
+    <intent>flag</intent>
+    <role>author status</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="persons.co_author">
+    <intent>flag</intent>
+    <role>co-author status</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="persons.email">
+    <intent>literal</intent>
+    <role>contact info</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="persons.id">
+    <intent>discriminator</intent>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="persons.name">
+    <intent>label</intent>
+    <role>full name</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="persons.reviewer">
+    <intent>flag</intent>
+    <role>reviewer status</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="persons.sys_user">
+    <intent>flag</intent>
+    <role>system user status</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="persons.type">
+    <intent>status</intent>
+    <role>role classification</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="acceptances">
+  <PATTERN>SE</PATTERN>
+  <COLUMN name="acceptances.id">
+    <intent>identifier</intent>
+    <role>id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="acceptances.type">
+    <intent>category</intent>
+    <role>type</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="administrators">
+  <PATTERN>SE + SH(child_of=persons)</PATTERN>
+  <COLUMN name="administrators.accept_paper">
+    <intent>decision</intent>
+    <role>approval_status</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="administrators.id">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="bids">
+  <PATTERN>offers</PATTERN>
+  <COLUMN name="bids.adjusted">
+    <intent>number</intent>
+    <role>adjusted_value</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="bids.bid">
+    <intent>number</intent>
+    <role>original_value</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="bids.id">
+    <intent>discriminator</intent>
+    <role>unique_id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="co_write_paper">  
+  <PATTERN>SR</PATTERN>  
+  <COLUMN name="co_write_paper.co_author">  
+    <intent>link</intent>  
+    <role>author</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="co_write_paper.paper">  
+    <intent>link</intent>  
+    <role>publication</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+</ENRICHMENT>
+
+<ENRICHMENT table="conference_administrator">
+  <PATTERN>SR</PATTERN>
+  <COLUMN name="conference_administrator.aid">
+    <intent>identifier</intent>
+    <role>admin ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="conference_administrator.cid">
+    <intent>identifier</intent>
+    <role>conference ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="acceptances">  
+  <PATTERN>None</PATTERN>  
+  <COLUMN name="acceptances.id">  
+    <intent>discriminator</intent>  
+    <role>id</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="acceptances.type">  
+    <intent>category</intent>  
+    <role>classification</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+</ENRICHMENT>
+
+<ENRICHMENT table="administrators">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="administrators.accept_paper">
+    <intent>number</intent>
+    <role>count</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="administrators.id">
+    <intent>discriminator</intent>
+    <role>id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="bids">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="bids.adjusted">
+    <intent>number</intent>
+    <role>adjusted</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="bids.bid">
+    <intent>number</intent>
+    <role>amount</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="bids.id">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="co_write_paper">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="co_write_paper.co_author">
+    <intent>link</intent>
+    <role>collaborator</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="co_write_paper.paper">
+    <intent>link</intent>
+    <role>publication</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="conference_administrator">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="conference_administrator.aid">
+    <intent>link</intent>
+    <role>administrator</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="conference_administrator.cid">
+    <intent>link</intent>
+    <role>conference</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="acceptances">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="id">
+    <intent>literal</intent>
+    <role>key</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="type">
+    <intent>label</intent>
+    <role>category</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="administrators">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="administrators.id">
+    <intent>discriminator</intent>
+    <role>admin ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="administrators.accept_paper">
+    <intent>number</intent>
+    <role>accepted count</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="bids">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="bids.id">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="bids.bid">
+    <intent>number</intent>
+    <role>amount</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="bids.adjusted">
+    <intent>number</intent>
+    <role>modified_amount</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="co_write_paper">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="co_write_paper.co_author">
+    <intent>link</intent>
+    <role>author</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="co_write_paper.paper">
+    <intent>link</intent>
+    <role>publication</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="conference_administrator">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="conference_administrator.aid">
+    <intent>discriminator</intent>
+    <role>Administrator ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="conference_administrator.cid">
+    <intent>discriminator</intent>
+    <role>Conference ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="conferences">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="conferences.accepts_hardcopy_submissions">
+    <intent>literal</intent>
+    <intent alt="1">flag</intent>
+    <role>submission type</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="conferences.date">
+    <intent>time</intent>
+    <role>scheduled date</role>
+    <range>xsd:date</range>
+  </COLUMN>
+  <COLUMN name="conferences.id">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="conferences.logo_url">
+    <intent>link</intent>
+    <role>branding image</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="conferences.name">
+    <intent>label</intent>
+    <role>title</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="conferences.reviews_per_paper">
+    <intent>number</intent>
+    <role>review count</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="conferences.site_url">
+    <intent>link</intent>
+    <role>website</role>
+    <range>xsd:string</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<think>
+Okay, let me tackle this problem step by step. The user wants me to generate XML-like tags for each column in the provided table. The table has two columns: 'aid' and 'cid'. Both are integers, and their definitions and synonyms are given.
+
+First, I need to determine the intent for each column. For 'aid', the definition says it's a unique account identifier, and synonyms include User ID and Account ID. Unique identifiers are typically discriminators. So the intent should be 'discriminator'. The role could be 'account', and the range is xsd:integer. That looks straightforward.
+
+For 'cid', the definition is a category or contact identifier code. The synonyms are Category ID, Contact ID, and CID Code. Since the definition mentions 'category or contact', there's a possible alternative. So, maybe the primary intent is 'category' and the alternative is 'contact' with the same CID code. But how to represent that in the XML?
+
+The instructions say if a column can support two possibilities, use a secondary mapping with alt="1". So for 'cid', the main intent is one role, and the alternative is the other. The intent would be 'label' because it's a category or contact, which are labels. Wait, but 'intent' options include 'discriminator' or 'label'? Let me check the possible intent values: literal, link, discriminator, flag, label, status, decision, text, number, time. Wait, 'cid' is an identifier code, maybe a discriminator? But the definition says it's a category or contact identifier code, which could be a label. Hmm. 
+
+Wait, 'cid' is an identifier for a category or contact, so it's a code that refers to another entity. If it's a foreign key pointing to a category or contact record, then maybe it's a link. But the example doesn't mention a link to another table. Since the user says to infer from column type, definition, and synonyms. The type is integer. The definition says it's a code, which could be a discriminator indicating category vs. contact. Wait, maybe the cid can represent both a category and a contact, so the role might be ambiguous. So the role could be either 'category' or 'contact', which would be handled by the alternative mapping.
+
+So for 'cid', the main intent is 'link' because it's a foreign key pointing to another entity (category or contact), but the role is ambiguous. Or maybe 'label' if it's just a code. Wait, maybe 'cid' is used as a foreign key to other tables. So the intent could be 'link' in the main role, but the alternative is 'flag' if it's used as a discriminator. Wait, the problem is that the definition says 'category or contact identifier code', which suggests it could be either, but maybe it's a foreign key reference. So the role would be 'category' and the alt role would be 'contact', both under the same cid. 
+
+But the intent for 'cid' is likely 'link' if it's a foreign key to another table, but since the user hasn't provided any additional context about relationships, maybe I should consider it as a label. Hmm. Alternatively, since it's a code for category or contact, perhaps 'cid' is a discriminator indicating which type it is, but that's more of a flag. Wait, the definition says it's a code, which usually refers to a foreign key pointing to another entity. So maybe the intent should be 'link' with role as 'category' and alt role as 'contact'. 
+
+Alternatively, maybe the cid is a code that can be mapped to either a category or contact, but without knowing the exact relationship, the safest bet is to use 'label' and provide two possible roles. So for the main mapping, role is 'category', and the alternate role is 'contact'. The intent would be 'label' because it's a code that's used to label something, but since it's a code that refers to another entity, 'link' might be more accurate. 
+
+Given the possible ambiguity, I need to check the examples or follow the pattern. The 'aid' is a user ID, which is definitely a discriminator. The 'cid' is a category or contact ID. So perhaps the intent for 'cid' is 'link' with role as 'category' and the alternative role as 'contact'. But the problem is the intent. The possible intent options include 'link', so if it's a foreign key, then 'link' is correct. If it's an internal identifier, 'discriminator' would be, but in this case, it's pointing to other entities.
+
+But without data samples, it's a bit tricky. However, based on the definition, since it's a code, it's likely a foreign key to another table. Therefore, intent is 'link', role is 'category' and alt role is 'contact'. So the XML would have a main mapping with link, role 'category', and an alternative mapping with alt="1" and role 'contact'.
+
+Wait, but the problem says to include at most 3 extra tags. So for each column, we can have <intent>, <mapping>, and maybe <role>, <filter>, <range>. The instruction says to use at most 3 extra tags, but for the main mapping, <intent> and <role> are optional. Wait, no, the main requirement is that for each column, always output <mapping> and <intent>. Wait, the user says: "You must infer column semantics using..."
+Then: "Output format STRICT: <ENRICHMENT> with <COLUMN> having <intent>, <role>, <filter>, <range>"
+
+Wait, looking back at the strict output format, the example shows:
+
+<ENRICHMENT table="...">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="...">
+    <intent>...</intent>
+    <role>...</role>
+    <range>...</range>
+    <mapping>...</mapping>
+    ...
+  </COLUMN>
+<ENRICHMENT>
+
+But the user's instructions say that for each column, ALWAYS output <mapping> and <intent>. Also, the output should include <intent>, <role>, <range>, and <filter> with at most 3 extra tags. Wait, no, the rules state: "For each column: ALWAYS output <mapping> and <intent>." Then, "Use at most 3 extra tags among: <role>, <filter>, <range>." So for each column, mandatory are <intent> and <mapping>? Wait, looking at the example, the sample output includes <intent>, <role>, <range>, but maybe the <mapping> is part of the structure?
+
+Wait, in the user's provided example for output format, the strict format shows that inside each <COLUMN>, the elements are <intent>, <role>, <range>. Wait, but the user says in the format: 
+
+<COLUMN name="details_entered.colA">
+  <intent>...</intent>
+  <role>...</role>
+  <range>...</range>
+</COLUMN>
+
+So maybe the <intent> is required, and <role> and <range> are optional, with at most 3 extra tags. Also, the user says to ALWAYS output <mapping> and <intent>, but in the example provided by the user, there is no <mapping> element. Wait, maybe there's confusion here. Let me recheck the user's instruction.
+
+The user says:
+
+"Rules:
+- For each column: ALWAYS output <mapping> and <intent>."
+
+And in the "Output format STRICT" example, they show:
+
+<ENRICHMENT table="details_entered">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="details_entered.colA">
+    <intent>literal|link|...</intent>
+    <role>short role label ...</role>
+    <range>...</range>
+  </COLUMN>
+  ...
+</ENRICHMENT>
+
+But the user later says that "always include <mapping> and <intent>", but in the example, there's no <mapping>. So perhaps there's a mistake here. Maybe <mapping> is part of the alternative if needed, but according to the user's strict output format, perhaps the <mapping> is not required unless there's an alternative.
+
+Wait, the user says:
+
+"For each column: ALWAYS output <mapping> and <intent>."
+
+But in the strict format example, there's no <mapping> element. This is a bit confusing. Let me read the entire user instruction again carefully.
+
+The user says:
+
+"Output format STRICT:
+<ENRICHMENT table="details_entered">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="details_entered.colA">
+    <intent>literal|link|discriminator|flag|label|status|decision|text|number|time</intent>
+    <role>short role label (if applicable)</role>
+    <range>xsd:string|xsd:integer|xsd:boolean|xsd:dateTime|IRI (optional)</range>
+  </COLUMN>
+  ...
+</ENRICHMENT>"
+
+So the <COLUMN> element contains <intent>, <role>, and <range>. However, in the rules under the output format, the user says: "For each column: ALWAYS output <mapping> and <intent>." But the example doesn't show a <mapping> element. So perhaps there's a discrepancy here. Maybe the user made an error in the example, or maybe <mapping> is to be included outside of the COLUMN element? Wait, no, the user's example includes <PATTERN> and <COLUMN>. 
+
+Wait, perhaps the user's <mapping> refers to the main mapping, and when there are alternatives, you have <intent> and <mapping> with alt="1". The user also says:
+
+"- If column can support 2 possibilities, output a SECOND mapping+intent as alternatives:
+    <mapping alt="1">...</mapping>
+    <intent  alt="1">...</intent>
+  (max one alternative)."
+
+So for example, if a column can be two things, you need to include both with alt tags. The <intent> and <mapping> elements are related. But in the strict output format example, the <intent> is present without <mapping>, so maybe the <mapping> is only used when there are alternatives. But the user's rule says that for each column, we must output <mapping> and <intent>. 
+
+This is a bit confusing. However, looking back at the user's own example input, they might have provided a different structure. Since the user provided the sample input with columns 'aid' and 'cid', and the data samples are empty, but the task is to generate the minimal HTML-like tags for each column.
+
+Let me focus on the task again. The user wants for each column:
+
+- <intent> from the specified list.
+- <role> if applicable.
+- <range> for the data type.
+- <filter> if it changes the mapping.
+
+The key is to determine the intent, role, and range for each column based on their type, definition, and synonyms.
+
+For 'aid', the type is integer not null, definition says it's a unique account identifier. So intent should be 'discriminator', role is 'account', range is xsd:integer. That seems straightforward.
+
+For 'cid', the definition is "Category or contact identifier code", synonyms include Category ID, Contact ID. Since it's a code that can be either a category or contact ID, there's an ambiguity here. So the intent for 'cid' could be 'link' because it's a reference to another entity (category or contact). The role for the main mapping is 'category', and the alternative role is 'contact'. However, the user's rules allow for one alternative with alt="1".
+
+So, in XML:
+
+For 'aid' column:
+
+<intent>discriminator</intent>
+<role>account</role>
+<range>xsd:integer</range>
+
+For 'cid' column:
+
+<intent>link</intent>
+<role>category</role>
+<range>xsd:integer</range>
+Then, an alternative intent and role:
+<mapping alt="1">
+<intent>link</intent>
+<role>contact</role>
+</mapping>
+But wait, the user's example in the rules shows that when there's an alternative, you have a separate <mapping> and <intent> with alt="1". However, in the strict output format, the example doesn't show this. Maybe the correct approach is to have the primary intent and role, and then if there's an alternative, include the alt elements.
+
+But according to the user's rule: "If column can support 2 possibilities, output a SECOND mapping+intent as alternatives:
+
+    <mapping alt="1">...</mapping>
+    <intent  alt="1">...</intent>
+  (max one alternative)."
+
+So for 'cid', since it can be either category or contact, we need to have two mappings. The primary intent would be 'link' with role 'category', and the alternate would be 'link' with role 'contact'.
+
+Therefore, the XML for 'cid' would be:
+
+<COLUNM...>
+<intent>link</intent>
+<role>category</role>
+<range>xsd:integer</range>
+<intent alt="1">link</intent>
+<role alt="1">contact</role>
+</COLUMN>
+
+Wait, but in the example provided in the user's rules, the alternative is nested under <mapping> with alt="1". So maybe:
+
+For the 'cid' column, the main <intent> is 'link', and the <role> is 'category', and then an alternate <intent> with alt="1" and <role> with alt="1" set to 'contact'.
+
+So:
+
+<COLUMN name="cid">
+  <intent>link</intent>
+  <role>category</role>
+  <range>xsd:integer</range>
+  <intent alt="1">link</intent>
+  <role alt="1">contact</role>
+</COLUMN>
+
+But I need to make sure that the XML structure follows the user's example. Let me check the user's own example:
+
+In the user's strict output format example:
+
+<ENRICHMENT table="details_entered">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="details_entered.colA">
+    <intent>literal|link|discriminator|flag|label|status|decision|text|number|time</intent>
+    <role>short role label (if applicable)</role>
+    <range>xsd:string|xsd:integer|xsd:boolean|xsd:dateTime|IRI (optional)</range>
+  </COLUMN>
+  ...
+</ENRICHMENT>
+
+So in their example, there's <COLUMN> with <intent>, <role>, <range>. When there's an alternative, they suggest adding <mapping alt="1"> and <intent alt="1">. However, in their example, there's no mapping element. Maybe <mapping> is a separate element. Wait, the user's rules say:
+
+"For each column: ALWAYS output <mapping> and <intent>."
+
+But in the strict output format, there's no <mapping> element. This is confusing. Perhaps the <mapping> refers to the role or intent? Or maybe the user made a mistake in their example. Since the user says to always output <mapping> and <intent>, but the strict output example doesn't include <mapping>, perhaps <mapping> is another tag that's optional. But the user says for each column, always output <mapping> and <intent>. 
+
+Wait, perhaps the <mapping> refers to the role, but that's not clear. Given the confusion, perhaps the safest approach is to follow the user's rules as written, even if it's conflicting with the strict format example. Since the user's rule explicitly says:
+
+"For each column: ALWAYS output <mapping> and <intent>."
+
+So for each column, there must be <mapping> and <intent> tags. Therefore, in the XML, for each column, include:
+
+<COLUMN>
+  <mapping>...</mapping>
+  <intent>...</intent>
+  <role>...</role>
+  <range>...</range>
+</COLUMN>
+
+But the user's strict example doesn't show <mapping> elements. However, given the user's rules, we must include <mapping> and <intent>. Therefore, perhaps the <mapping> is part of the COLUMN tag, but in the example, it's not shown. Maybe <mapping> is a typo for <role> or <range>? 
+
+Alternatively, perhaps the <mapping> is part of the <intent> or another attribute. This is a potential issue in the user's instructions. However, since the user emphasized the rules, we must follow them. In that case, perhaps the <mapping> refers to the role, but the user's example uses <role> instead. Given the ambiguity, I'll proceed under the assumption that the <intent> is required, and the <mapping> refers to the <role> tag. However, since the user's strict format example doesn't include <mapping>, perhaps there's a mistake in the user's instruction, and <mapping> is not required. Given the conflicting instructions, but since the user says "ALWAYS output <mapping> and <intent>", I must include both. But how? If there's no example for mapping, perhaps <mapping> is an attribute or tag that's part of the COLUMN, but the example doesn't show it. 
+
+This is a bit of a puzzle. To resolve this, perhaps the <mapping> is a tag that indicates how the column is mapped in terms of role or something else. If I must include both <mapping> and <intent> for each column, but the example doesn't show it, perhaps <mapping> is an attribute of the COLUMN. However, the example shows the COLUMN as <COLUMN name="...">, so it's more likely that <mapping> is a child element. Therefore, the correct structure includes <intent>, <mapping>, and optionally <role>, <filter>, <range>.
+
+But given the example in the user's strict format, the <COLUMN> includes <intent>, <role>, <range>. Therefore, maybe the user made a mistake in the rule mentioning <mapping>. Perhaps the <intent> is mandatory, and <mapping> is a typo. Given that, perhaps the rule meant to say that the <intent> and <role> are mandatory. But I can't be sure. 
+
+Alternatively, maybe the <mapping> refers to the <role> tag, and the user made a typo. In that case, the correct structure includes <intent> and <role> for each column. However, the user says to always output <mapping> and <intent>. 
+
+Since the user provided a strict output format example without <mapping>, but the rules insist on <mapping>, I'll proceed to include <intent> and <mapping>, but I'm not sure how. Let me look again at the user's example under rules:
+
+"The user says:
+
+- If column can support 2 possibilities, output a SECOND mapping+intent as alternatives:
+    <mapping alt="1">...</mapping>
+    <intent  alt="1">...</intent>
+  (max one alternative)."
+
+So <mapping> and <intent> are elements that can have an alt attribute. Therefore, possibly, for a column with a single intent and mapping, we have:
+
+<COLUMN>
+  <intent>...</intent>
+  <mapping>...</mapping>
+</COLUMN>
+
+And if there's
+
+<ENRICHMENT table="documents">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="documents.id">
+    <intent>identifier</intent>
+    <role>key</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="enable_virtual_meeting">  
+  <PATTERN>None</PATTERN>  
+  <COLUMN name="enable_virtual_meeting.aid">  
+    <intent>literal</intent>  
+    <role>account identifier</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="enable_virtual_meeting.cid">  
+    <intent>literal</intent>  
+    <role>company identifier</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+</ENRICHMENT>
+
+<ENRICHMENT table="enter_review_criteria">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="enter_review_criteria.aid">
+    <intent>link</intent>
+    <role>subject</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="enter_review_criteria.cid">
+    <intent>link</intent>
+    <role>criterion</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="finalize_paper_assignment">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="finalize_paper_assignment.aid">
+    <intent>link</intent>
+    <role>author</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="finalize_paper_assignment.cid">
+    <intent>link</intent>
+    <role>conference</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="hardcopy_mailing_manifests_p">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="hardcopy_mailing_manifests_p.aid">
+    <intent>discriminator</intent>
+    <role>account_ref</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="hardcopy_mailing_manifests_p.cid">
+    <intent>discriminator</intent>
+    <role>contact_ref</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="mark_conflict_interests">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="mark_conflict_interests.conference_member">
+    <intent>literal</intent>
+    <role>member-reference</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="mark_conflict_interests.paper">
+    <intent>literal</intent>
+    <role>paper-reference</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="paper_person">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="paper_person.paper">
+    <intent>link</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="paper_person.reviewer">
+    <intent>link</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="paper_subject_area">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="paper_subject_area.pid">
+    <intent>literal</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="paper_subject_area.sid">
+    <intent>literal</intent>
+    <role>category_id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="papers">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="papers.accepted">
+    <intent>flag</intent>
+    <role>acceptanceStatus</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="papers.author">
+    <intent>link</intent>
+    <role>author</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="papers.decision">
+    <intent>decision</intent>
+    <role>reviewDecision</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="papers.id">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="papers.paper_id">
+    <intent>discriminator</intent>
+    <role>referenceNumber</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="papers.read_by_meta_reviewer">
+    <intent>flag</intent>
+    <role>readStatus</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="papers.rejected">
+    <intent>flag</intent>
+    <role>rejectionStatus</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="papers.title">
+    <intent>label</intent>
+    <role>title</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="papers.type">
+    <intent>label</intent>
+    <role>category</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="pc_members">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="pc_members.added">
+    <intent>time</intent>
+    <role>join_date</role>
+    <range>xsd:integer</range>
+    <mapping alt="1">
+      <intent>number</intent>
+      <role>addition_order</role>
+    </mapping>
+  </COLUMN>
+  <COLUMN name="pc_members.id">
+    <intent>identifier</intent>
+    <role>person_id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="pc_members.max_papers">
+    <intent>number</intent>
+    <role>quota</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="person_administrator">  
+  <PATTERN>None</PATTERN>  
+  <COLUMN name="person_administrator.aid">  
+    <intent>discriminator</intent>  
+    <role>administrator</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="person_administrator.pid">  
+    <intent>discriminator</intent>  
+    <role>person</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+</ENRICHMENT>
+
+<ENRICHMENT table="person_conference">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="person_conference.cid">
+    <intent>link</intent>
+    <role>conference</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="person_conference.pid">
+    <intent>link</intent>
+    <role>person</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="person_document">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="person_document.did">
+    <intent>link</intent>
+    <role>foreign_key</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="person_document.pid">
+    <intent>link</intent>
+    <role>foreign_key</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="person_paper">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="person_paper.author">
+    <intent>link</intent>
+    <role>person</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="person_paper.paper">
+    <intent>link</intent>
+    <role>document</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="persons">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="persons.assigned_by_reviewer">
+    <intent>number</intent>
+    <role>reviewer_id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="persons.author">
+    <intent>flag</intent>
+    <role>author_status</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="persons.co_author">
+    <intent>flag</intent>
+    <role>coauthor_status</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="persons.email">
+    <intent>literal</intent>
+    <role>contact_info</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="persons.id">
+    <intent>discriminator</intent>
+    <role>person_id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="persons.name">
+    <intent>label</intent>
+    <role>full_name</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="persons.reviewer">
+    <intent>flag</intent>
+    <role>reviewer_status</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="persons.sys_user">
+    <intent>flag</intent>
+    <role>system_user</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="persons.type">
+    <intent>number</intent>
+    <role>role_code</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="preferences">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="preferences.id">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+    <filter>unique</filter>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="program_committee_chair_review">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="program_committee_chair_review.pid">
+    <intent>literal</intent>
+    <role>paperIdentifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="program_committee_chair_review.rid">
+    <intent>literal</intent>
+    <role>reviewIdentifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="program_committee_chairs">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="program_committee_chairs.added">
+    <intent>time</intent>
+    <role>assignment_timestamp</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="program_committee_chairs.id">
+    <intent>literal</intent>
+    <role>unique_identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="program_committee_chairs.max_papers">
+    <intent>number</intent>
+    <role>paper_limit</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="program_committee_members">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="program_committee_members.program_committee">
+    <intent>literal</intent>
+    <role>Committee ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="program_committee_members.program_committee_member">
+    <intent>literal</intent>
+    <role>Member ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="program_committees">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="program_committees.id">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="program_committees.label">
+    <intent>label</intent>
+    <role>name</role>
+    <range>xsd:string</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="read_by_reviewer">  
+  <PATTERN>None</PATTERN>  
+  <COLUMN name="read_by_reviewer.paper">  
+    <intent>identifier</intent>  
+    <role>paper</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="read_by_reviewer.reviewer">  
+    <intent>identifier</intent>  
+    <role>reviewer</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+</ENRICHMENT>
+
+<ENRICHMENT table="reviewer_bidding_started">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="reviewer_bidding_started.aid">
+    <intent>literal</intent>
+    <role>reviewer identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="reviewer_bidding_started.cid">
+    <intent>literal</intent>
+    <role>conference identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+```xml
+<ENRICHMENT table="reviews">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="reviews.comment">
+    <intent>literal</intent>
+    <role>content</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="reviews.id">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="reviews.type">
+    <intent>label</intent>
+    <role>category</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="reviews.written">
+    <intent>link</intent>
+    <role>author</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+```
+
+<ENRICHMENT table="set_max_papers">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="administrator">
+    <intent>literal</intent>
+    <role>admin user ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="program_committee_member">
+    <intent>literal</intent>
+    <role>committee member ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="subject_areas">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="subject_areas.id">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="acceptances">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="acceptances.id">
+    <intent>identifier</intent>
+    <role>record key</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="acceptances.type">
+    <intent>code</intent>
+    <role>classification</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="administrators">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="administrators.id">
+    <intent>discriminator</intent>
+    <role>id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="administrators.accept_paper">
+    <intent>number</intent>
+    <role>accepted_count</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="bids">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="bids.adjusted">
+    <intent>number</intent>
+    <role>adjusted amount</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="bids.bid">
+    <intent>number</intent>
+    <role>amount</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="bids.id">
+    <intent>discriminator</intent>
+    <role>unique id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="co_write_paper">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="co_write_paper.co_author">
+    <intent>link</intent>
+    <role>Person</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="co_write_paper.paper">
+    <intent>link</intent>
+    <role>Paper</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="conference_administrator">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="conference_administrator.aid">
+    <intent>link</intent>
+    <role>administratorReference</role>
+    <range>xsd:integer</range>
+    <filter>true</filter>
+  </COLUMN>
+  <COLUMN name="conference_administrator.cid">
+    <intent>link</intent>
+    <role>conferenceReference</role>
+    <range>xsd:integer</range>
+    <filter>true</filter>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="conferences">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="accepts_hardcopy_submissions">
+    <intent>flag</intent>
+    <range>xsd:boolean</range>
+    <role>submission format</role>
+  </COLUMN>
+  <COLUMN name="date">
+    <intent>time</intent>
+    <range>xsd:date</range>
+    <role>scheduled day</role>
+  </COLUMN>
+  <COLUMN name="id">
+    <intent>discriminator</intent>
+    <range>xsd:integer</range>
+    <role>unique identifier</role>
+  </COLUMN>
+  <COLUMN name="logo_url">
+    <intent>link</intent>
+    <range>IRI</range>
+    <role>image link</role>
+  </COLUMN>
+  <COLUMN name="name">
+    <intent>literal</intent>
+    <range>xsd:string</range>
+    <role>conference title</role>
+  </COLUMN>
+  <COLUMN name="reviews_per_paper">
+    <intent>number</intent>
+    <range>xsd:integer</range>
+    <role>review count</role>
+  </COLUMN>
+  <COLUMN name="site_url">
+    <intent>link</intent>
+    <range>IRI</range>
+    <role>online portal</role>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="details_entered">  
+  <PATTERN>None</PATTERN>  
+  <COLUMN name="details_entered.aid">  
+    <intent>identifier</intent>  
+    <role>discriminator</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="details_entered.cid">  
+    <intent>category</intent>  
+    <role>class</role>  
+    <filter>true</filter>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+</ENRICHMENT>
+
+<ENRICHMENT table="documents">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="documents.id">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="enable_virtual_meeting">  
+  <PATTERN>None</PATTERN>  
+  <COLUMN name="enable_virtual_meeting.aid">  
+    <intent>literal</intent>  
+    <role>account</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="enable_virtual_meeting.cid">  
+    <intent>literal</intent>  
+    <role>company</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+</ENRICHMENT>
+
+<ENRICHMENT table="enter_review_criteria">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="enter_review_criteria.aid">
+    <intent>link</intent>
+    <role>accountId</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="enter_review_criteria.cid">
+    <intent>link</intent>
+    <role>categoryId</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="finalize_paper_assignment">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="finalize_paper_assignment.aid">
+    <intent>link</intent>
+    <role>author_id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="finalize_paper_assignment.cid">
+    <intent>link</intent>
+    <role>conference_id</role>
+    <mapping alt="1">
+      <intent>link</intent>
+      <role>committee_id</role>
+    </mapping>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="acceptances">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="acceptances.id">
+    <intent>discriminator</intent>
+    <role>record identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="acceptances.type">
+    <intent>label</intent>
+    <role>acceptance category</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="administrators">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="administrators.accept_paper">
+    <intent>literal</intent>
+    <role>count</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="administrators.id">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <filter>unique</filter>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="bids">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="bids.adjusted">
+    <intent>number</intent>
+    <role>adjusted_value</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="bids.bid">
+    <intent>number</intent>
+    <role>amount</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="bids.id">
+    <intent>discriminator</intent>
+    <role>ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="co_write_paper">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="co_write_paper.co_author">
+    <intent>link</intent>
+    <role>author</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="co_write_paper.paper">
+    <intent>link</intent>
+    <role>paper</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="conference_administrator">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="conference_administrator.aid">
+    <intent>link</intent>
+    <role>administrator identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="conference_administrator.cid">
+    <intent>link</intent>
+    <role>conference identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="conferences">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="conferences.accepts_hardcopy_submissions">
+    <intent>flag</intent>
+    <role>submission_type</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="conferences.date">
+    <intent>time</intent>
+    <role>event_date</role>
+    <range>xsd:date</range>
+  </COLUMN>
+  <COLUMN name="conferences.id">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="conferences.logo_url">
+    <intent>link</intent>
+    <role>logo_url</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="conferences.name">
+    <intent>label</intent>
+    <role>name</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="conferences.reviews_per_paper">
+    <intent>number</intent>
+    <role>review_count</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="conferences.site_url">
+    <intent>link</intent>
+    <role>website</role>
+    <range>xsd:string</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="details_entered">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="details_entered.aid">
+    <intent>literal</intent>
+    <role>AgentID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="details_entered.cid">
+    <intent>literal</intent>
+    <role>CustomerID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="documents">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="documents.id">
+    <intent>literal</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="enable_virtual_meeting">
+  <COLUMN name="enable_virtual_meeting.aid">
+    <intent>discriminator</intent>
+    <role>user</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="enable_virtual_meeting.cid">
+    <intent>discriminator</intent>
+    <role>organization</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="enter_review_criteria">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="enter_review_criteria.aid">
+    <intent>link</intent>
+    <role>foreign key</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="enter_review_criteria.cid">
+    <intent>number</intent>
+    <role>key</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="finalize_paper_assignment">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="finalize_paper_assignment.aid">
+    <intent>discriminator</intent>
+    <role>assignment</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="finalize_paper_assignment.cid">
+    <intent>link</intent>
+    <role>document</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="hardcopy_mailing_manifests_p">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="hardcopy_mailing_manifests_p.aid">
+    <intent>discriminator</intent>
+    <role>agent</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="hardcopy_mailing_manifests_p.cid">
+    <intent>discriminator</intent>
+    <role>client</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="mark_conflict_interests">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="mark_conflict_interests.conference_member">
+    <intent>link</intent>
+    <role>member</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="mark_conflict_interests.paper">
+    <intent>link</intent>
+    <role>paper</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="paper_person">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="paper">
+    <intent>link</intent>
+    <role>paper</role>
+    <range>IRI</range>
+  </COLUMN>
+  <COLUMN name="reviewer">
+    <intent>link</intent>
+    <role>reviewer</role>
+    <range>IRI</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="paper_subject_area">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="paper_subject_area.pid">
+    <intent>link</intent>
+    <role>foreign key</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="paper_subject_area.sid">
+    <intent>link</intent>
+    <role>foreign key</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="papers">  
+  <PATTERN>None</PATTERN>  
+  <COLUMN name="papers.accepted">  
+    <intent>flag</intent>  
+    <role>acceptance status</role>  
+    <range>xsd:boolean</range>  
+  </COLUMN>  
+  <COLUMN name="papers.author">  
+    <intent>link</intent>  
+    <role>author reference</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="papers.decision">  
+    <intent>decision</intent>  
+    <role>decision code</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="papers.id">  
+    <intent>discriminator</intent>  
+    <role>primary key</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="papers.paper_id">  
+    <intent>discriminator</intent>  
+    <role>alternate key</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="papers.read_by_meta_reviewer">  
+    <intent>flag</intent>  
+    <role>reading status</role>  
+    <range>xsd:boolean</range>  
+  </COLUMN>  
+  <COLUMN name="papers.rejected">  
+    <intent>flag</intent>  
+    <role>rejection status</role>  
+    <range>xsd:boolean</range>  
+  </COLUMN>  
+  <COLUMN name="papers.title">  
+    <intent>text</intent>  
+    <role>title</role>  
+    <range>xsd:string</range>  
+  </COLUMN>  
+  <COLUMN name="papers.type">  
+    <intent>category</intent>  
+    <role>submission category</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+</ENRICHMENT>
+
+<ENRICHMENT table="pc_members">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="pc_members.added">
+    <mapping>add time</mapping>
+    <intent>time</intent>
+    <role>timestamp</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="pc_members.id">
+    <mapping>unique ID</mapping>
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="pc_members.max_papers">
+    <mapping>review limit</mapping>
+    <intent>number</intent>
+    <role>review limit</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="person_administrator">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="person_administrator.aid">
+    <intent>discriminator</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="person_administrator.pid">
+    <intent>link</intent>
+    <role>reference</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="person_conference">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="person_conference.cid">
+    <intent>link</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="person_conference.pid">
+    <intent>link</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="person_document">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="person_document.did">
+    <intent>link</intent>
+    <role>document_id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="person_document.pid">
+    <intent>link</intent>
+    <role>person_id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="person_paper">
+  <PATTERN>associative table</PATTERN>
+  <COLUMN name="author">
+    <intent>link</intent>
+    <role>author</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="paper">
+    <intent>link</intent>
+    <role>paper</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="persons">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="persons.assigned_by_reviewer">
+    <intent>link</intent>
+    <role>assigner</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="persons.author">
+    <intent>flag</intent>
+    <role>paper author</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="persons.co_author">
+    <intent>flag</intent>
+    <role>co-author</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="persons.email">
+    <intent>literal</intent>
+    <role>contact email</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="persons.id">
+    <intent>discriminator</intent>
+    <role>person ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="persons.name">
+    <intent>literal</intent>
+    <role>person name</role>
+    <range>xsd:string</range>
+  </COLUMN>
+  <COLUMN name="persons.reviewer">
+    <intent>flag</intent>
+    <role>paper reviewer</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="persons.sys_user">
+    <intent>flag</intent>
+    <role>system user</role>
+    <range>xsd:boolean</range>
+  </COLUMN>
+  <COLUMN name="persons.type">
+    <intent>status</intent>
+    <role>role category</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="preferences">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="preferences.id">
+    <intent>identifier</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="program_committee_chair_review">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="program_committee_chair_review.pid">
+    <intent>link|discriminator</intent>
+    <role>chair_id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="program_committee_chair_review.rid">
+    <intent>link|discriminator</intent>
+    <role>review_id</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="program_committee_chairs">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="program_committee_chairs.added">
+    <intent>time</intent>
+    <intent alt="1">number</intent>
+    <role>assignment date</role>
+    <role alt="1">assignment count</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="program_committee_chairs.id">
+    <intent>discriminator</intent>
+    <role>person ID</role>
+    <range>xsd:integer</range>
+    <filter>person ID</filter>
+  </COLUMN>
+  <COLUMN name="program_committee_chairs.max_papers">
+    <intent>number</intent>
+    <role>paper limit</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="program_committee_members">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="program_committee">
+    <intent>link</intent>
+    <role>committee ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="program_committee_member">
+    <intent>link</intent>
+    <role>member ID</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="program_committees">  
+  <PATTERN>None</PATTERN>  
+  <COLUMN name="program_committees.id">  
+    <intent>discriminator</intent>  
+    <role>identifier</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="program_committees.label">  
+    <intent>label</intent>  
+    <role>committee name</role>  
+    <range>xsd:string</range>  
+  </COLUMN>  
+</ENRICHMENT>
+
+<ENRICHMENT table="read_by_reviewer">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="paper">
+    <intent>link</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="reviewer">
+    <intent>link</intent>
+    <role>identifier</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="reviewer_bidding_started">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="reviewer_bidding_started.aid">
+    <intent>link</intent>
+    <role>assignment</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="reviewer_bidding_started.cid">
+    <intent>link</intent>
+    <role>conference</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="reviews">  
+  <PATTERN>None</PATTERN>  
+  <COLUMN name="reviews.comment">  
+    <intent>text</intent>  
+    <role>content</role>  
+    <range>xsd:string</range>  
+  </COLUMN>  
+  <COLUMN name="reviews.id">  
+    <intent>discriminator</intent>  
+    <role>identifier</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+  <COLUMN name="reviews.type">  
+    <intent>label</intent>  
+    <role>category</role>  
+    <range>xsd:integer</range>  
+    <intent alt="1">flag</intent>  
+  </COLUMN>  
+  <COLUMN name="reviews.written">  
+    <intent>link</intent>  
+    <role>author</role>  
+    <range>xsd:integer</range>  
+  </COLUMN>  
+</ENRICHMENT>
+
+<ENRICHMENT table="set_max_papers">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="administrator">
+    <intent>link</intent>
+    <role>administrator</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+  <COLUMN name="program_committee_member">
+    <intent>link</intent>
+    <role>program_committee_member</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+
+<ENRICHMENT table="subject_areas">
+  <PATTERN>None</PATTERN>
+  <COLUMN name="subject_areas.id">
+    <intent>discriminator</intent>
+    <role>code</role>
+    <range>xsd:integer</range>
+  </COLUMN>
+</ENRICHMENT>
+

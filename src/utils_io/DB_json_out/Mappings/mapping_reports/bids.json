@@ -1,0 +1,208 @@
+{
+  "table": "bids",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "acceptances",
+          "administrators",
+          "conferences",
+          "documents",
+          "papers",
+          "persons",
+          "preferences",
+          "program_committee_chairs",
+          "pc_members",
+          "program_committees",
+          "reviews",
+          "subject_areas"
+        ],
+        "relationship_tables": [
+          "person_administrator",
+          "paper_person",
+          "co_write_paper",
+          "conference_administrator",
+          "details_entered",
+          "enable_virtual_meeting",
+          "enter_review_criteria",
+          "finalize_paper_assignment",
+          "hardcopy_mailing_manifests_p",
+          "mark_conflict_interests",
+          "paper_subject_area",
+          "person_conference",
+          "person_document",
+          "program_committee_members",
+          "read_by_reviewer",
+          "reviewer_bidding_started",
+          "set_max_papers"
+        ],
+        "notable_discriminators": [
+          "acceptances.type",
+          "papers.type",
+          "co_write_paper.co_author",
+          "mark_conflict_interests.paper",
+          "papers.author"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Conference",
+          "Person",
+          "Paper",
+          "Committee",
+          "Review",
+          "SubjectArea",
+          "Conference_contribution",
+          "Program_committee",
+          "Administrator",
+          "Author"
+        ],
+        "high_value_object_properties": [
+          "hasAuthor",
+          "hasReviewer",
+          "belongsToConference",
+          "hasSubjectArea",
+          "hasProgramCommitteeMember",
+          "hasReview"
+        ]
+      },
+      "notes": [
+        "Many-to-many relationships dominate relationship tables",
+        "Person-centric roles (author/reviewer/administrator) use discriminators in ontology mapping",
+        "Paper types (acceptances.type) likely correspond to Contribution classes in ontology",
+        "Conferences have explicit relationships with administrators and conference participants"
+      ]
+    },
+    "p0": {
+      "table": "bids",
+      "no_match": false,
+      "best": {
+        "kind": "class",
+        "name": "Conference_fees",
+        "score": 0.3,
+        "why": "The 'bid' column aligns with the 'amount' data property in Conference_fees, though the overall context of bids in an auction is not directly represented in the ontology."
+      },
+      "alt": {
+        "kind": "class",
+        "name": "Person",
+        "score": 0.1,
+        "why": "Bids could involve Persons, but there's no explicit linking or bid-related properties in the Person class that justify a stronger match."
+      },
+      "stop_reason": null
+    },
+    "p1": {
+      "table": "bids",
+      "use_filter": false,
+      "filters": [],
+      "use_join": false,
+      "join_hints": [],
+      "notes": []
+    },
+    "p2": {
+      "table": "bids",
+      "class": "Conference_fees",
+      "column_mappings": [
+        {
+          "column": "bids.bid",
+          "kind": "data_property",
+          "predicate": "amount",
+          "datatype": "xsd:integer",
+          "confidence": 0.3,
+          "notes": "Matches Conference_fees.amount based on bid column representing numerical value."
+        },
+        {
+          "column": "bids.adjusted",
+          "kind": "unmapped",
+          "confidence": 0.0,
+          "notes": "No corresponding property found in Conference_fees for adjusted bid value.",
+          "predicate": ""
+        },
+        {
+          "column": "bids.id",
+          "kind": "unmapped",
+          "confidence": 0.0,
+          "notes": "Identifier column with no equivalent property in Conference_fees class.",
+          "predicate": ""
+        }
+      ]
+    },
+    "final": {
+      "table": "bids",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": "class",
+        "name": "Conference_fees"
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"bids\"",
+        "filters": [],
+        "assumptions": [
+          "Bids table represents Conference_fees data even though only 'bid' column has a direct mapping",
+          "Unmapped columns 'adjusted' and 'id' require code discovery for proper integration"
+        ],
+        "needs_code_discovery": [
+          "bids.adjusted",
+          "bids.id"
+        ]
+      },
+      "mappings": [
+        {
+          "kind": "data_property",
+          "column": "bids.bid",
+          "predicate": "amount",
+          "datatype": "xsd:integer"
+        }
+      ],
+      "planner_notes": [
+        "Conference_fees.class selected with 0.3 confidence due to bid-amount correlation",
+        "No object_property mappings available in Conference_fees ontology",
+        "Unmapped columns 'adjusted' and 'id' have no corresponding properties in Conference_fees class",
+        "Bid column mapped to xsd:integer for amount property"
+      ]
+    },
+    "no_match": false
+  },
+  "final_struct": {
+    "table": "bids",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": "class",
+      "name": "Conference_fees"
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"bids\"",
+      "filters": [],
+      "assumptions": [
+        "Bids table represents Conference_fees data even though only 'bid' column has a direct mapping",
+        "Unmapped columns 'adjusted' and 'id' require code discovery for proper integration"
+      ],
+      "needs_code_discovery": [
+        "bids.adjusted",
+        "bids.id"
+      ]
+    },
+    "mappings": [
+      {
+        "kind": "data_property",
+        "column": "bids.bid",
+        "predicate": "amount",
+        "datatype": "xsd:integer"
+      }
+    ],
+    "planner_notes": [
+      "Conference_fees.class selected with 0.3 confidence due to bid-amount correlation",
+      "No object_property mappings available in Conference_fees ontology",
+      "Unmapped columns 'adjusted' and 'id' have no corresponding properties in Conference_fees class",
+      "Bid column mapped to xsd:integer for amount property"
+    ]
+  },
+  "ttl_emitted": true,
+  "saved_to": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl"
+}

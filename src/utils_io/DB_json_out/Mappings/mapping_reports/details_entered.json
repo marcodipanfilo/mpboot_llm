@@ -1,0 +1,135 @@
+{
+  "table": "details_entered",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "persons",
+          "conferences",
+          "papers",
+          "reviews",
+          "administrators",
+          "program_committee_members",
+          "program_committee_chairs"
+        ],
+        "relationship_tables": [
+          "paper_person",
+          "paper_subject_area",
+          "person_administrator",
+          "co_write_paper",
+          "person_conference",
+          "person_document",
+          "reviewer_bidding_started",
+          "enter_review_criteria",
+          "mark_conflict_interests"
+        ],
+        "notable_discriminators": [
+          "persons.sys_user",
+          "persons.reviewer",
+          "persons.author",
+          "papers.type",
+          "acceptances.type",
+          "program_committee_chairs.type"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Conference",
+          "Paper",
+          "Person",
+          "Review",
+          "Committee",
+          "Contribution",
+          "Reviewer",
+          "Administrator"
+        ],
+        "high_value_object_properties": [
+          "hasAuthor",
+          "hasReviewer",
+          "isAssignedBy",
+          "hasSubjectArea",
+          "belongsToConference",
+          "hasDecision",
+          "hasConflict"
+        ]
+      },
+      "notes": [
+        "Complex role discrimination in 'persons' table via boolean flags (author, reviewer, sys_user)",
+        "Multiple junction tables for many-to-many relationships (paper_person, paper_subject_area, etc.)",
+        "Ontology properties should map to relationships like 'hasAuthor' (papers.author) and 'hasReviewer' (reviews.written)",
+        "Potential need for derived classes for administrators vs regular persons",
+        "Subject_areas appear as separate entity but may align with ontology 'Topic' class",
+        "Special attention needed for 'mark_conflict_interests' relationship mapping strategy"
+      ]
+    },
+    "p0": {
+      "table": "details_entered",
+      "no_match": true,
+      "best": {
+        "kind": "class",
+        "name": "Review_expertise",
+        "score": 0.1,
+        "why": "No relevant properties align with agent/customer IDs"
+      },
+      "alt": {
+        "kind": "class",
+        "name": "Review_preference",
+        "score": 0.1,
+        "why": "No relevant properties align with agent/customer IDs"
+      },
+      "stop_reason": null
+    },
+    "p1": {},
+    "p2": {},
+    "final": {
+      "table": "details_entered",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": null,
+        "name": null
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"details_entered\"",
+        "filters": [],
+        "assumptions": [
+          "no_match=true; stopped at p0"
+        ],
+        "needs_code_discovery": []
+      },
+      "mappings": [],
+      "planner_notes": [
+        "no_match=true"
+      ]
+    },
+    "no_match": true
+  },
+  "final_struct": {
+    "table": "details_entered",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": null,
+      "name": null
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"details_entered\"",
+      "filters": [],
+      "assumptions": [
+        "no_match=true; stopped at p0"
+      ],
+      "needs_code_discovery": []
+    },
+    "mappings": [],
+    "planner_notes": [
+      "no_match=true"
+    ]
+  },
+  "ttl_emitted": false,
+  "saved_to": ""
+}

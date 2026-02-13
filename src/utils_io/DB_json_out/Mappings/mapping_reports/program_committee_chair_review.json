@@ -1,0 +1,131 @@
+{
+  "table": "program_committee_chair_review",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "persons",
+          "papers",
+          "conferences",
+          "administrators",
+          "pc_members",
+          "program_committees",
+          "reviews",
+          "subject_areas"
+        ],
+        "relationship_tables": [
+          "person_administrator",
+          "paper_person",
+          "co_write_paper",
+          "person_conference",
+          "person_document",
+          "program_committee_members",
+          "paper_subject_area",
+          "mark_conflict_interests"
+        ],
+        "notable_discriminators": [
+          "persons.type",
+          "reviews.type",
+          "acceptances.type",
+          "papers.type"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Conference",
+          "Conference_contribution",
+          "Person",
+          "Review",
+          "Organization",
+          "Committee",
+          "Submitted_contribution",
+          "Topic"
+        ],
+        "high_value_object_properties": [
+          "hasAuthor",
+          "isReviewerOf",
+          "hasReviewer",
+          "partOf",
+          "hasConferenceContribution",
+          "submittedBy",
+          "assignedTo"
+        ]
+      },
+      "notes": [
+        "Persons table contains role discriminators (reviewer/author/co_author) requiring subclass mapping",
+        "Papers and documents share common ID columns indicating document-entity relationship",
+        "Conference relationships (adminISTRATOR, member) use both direct and join-table connections",
+        "Paper_reviewer relationships exist in both paper_person and reviews tables with different semantics"
+      ]
+    },
+    "p0": {
+      "table": "program_committee_chair_review",
+      "no_match": true,
+      "best": {
+        "kind": "class",
+        "name": "",
+        "score": 0.0,
+        "why": ""
+      },
+      "alt": {
+        "kind": "class",
+        "name": "",
+        "score": 0.0,
+        "why": ""
+      },
+      "stop_reason": "Relationship/bridge table connecting Program Committee Chairs to Reviews, no direct ontology class mapping."
+    },
+    "p1": {},
+    "p2": {},
+    "final": {
+      "table": "program_committee_chair_review",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": null,
+        "name": null
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"program_committee_chair_review\"",
+        "filters": [],
+        "assumptions": [
+          "no_match=true; stopped at p0"
+        ],
+        "needs_code_discovery": []
+      },
+      "mappings": [],
+      "planner_notes": [
+        "no_match=true"
+      ]
+    },
+    "no_match": true
+  },
+  "final_struct": {
+    "table": "program_committee_chair_review",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": null,
+      "name": null
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"program_committee_chair_review\"",
+      "filters": [],
+      "assumptions": [
+        "no_match=true; stopped at p0"
+      ],
+      "needs_code_discovery": []
+    },
+    "mappings": [],
+    "planner_notes": [
+      "no_match=true"
+    ]
+  },
+  "ttl_emitted": false,
+  "saved_to": ""
+}

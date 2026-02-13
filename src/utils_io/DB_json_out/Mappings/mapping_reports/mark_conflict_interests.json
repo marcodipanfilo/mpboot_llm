@@ -1,0 +1,133 @@
+{
+  "table": "mark_conflict_interests",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "persons",
+          "papers",
+          "conferences",
+          "administrators",
+          "reviews",
+          "program_committees",
+          "subject_areas",
+          "documents"
+        ],
+        "relationship_tables": [
+          "person_paper",
+          "paper_subject_area",
+          "person_conference",
+          "co_write_paper",
+          "mark_conflict_interests",
+          "reviewer_bidding_started",
+          "conference_administrator",
+          "paper_person",
+          "program_committee_members",
+          "person_administrator"
+        ],
+        "notable_discriminators": [
+          "persons.type",
+          "acceptances.type",
+          "papers.type",
+          "program_committee_chairs.type",
+          "pc_members.type"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Person",
+          "Paper",
+          "Conference",
+          "Committee",
+          "Review",
+          "Organization",
+          "SubjectArea",
+          "Document"
+        ],
+        "high_value_object_properties": [
+          "hasAuthor",
+          "hasReview",
+          "belongsToConference",
+          "assignedTo",
+          "hasSubjectArea",
+          "writtenBy",
+          "hasConflictOfInterest"
+        ]
+      },
+      "notes": [
+        "Persons table has type discriminators for roles (author/reviewer/co-author)",
+        "Paper-person relationships appear in multiple join tables (person_paper, co_write_paper)",
+        "ProgramCommittee hierarchy spans multiple tables (chairs, members, committees)",
+        "Administrators act as both entities and relationship connectors in schema"
+      ]
+    },
+    "p0": {
+      "table": "mark_conflict_interests",
+      "no_match": true,
+      "best": {
+        "kind": "class",
+        "name": "SR",
+        "score": 0.95,
+        "why": "The table is a pure relationship/bridge table representing conflicts of interest between conference_members and papers, with no additional attributes beyond foreign keys."
+      },
+      "alt": {
+        "kind": "class",
+        "name": "SRR",
+        "score": 0.85,
+        "why": "The table encodes a many-to-many relationship between two entities (member-paper) with no semantic entity in the ontology mapping to this relational pattern."
+      }
+    },
+    "p1": {},
+    "p2": {},
+    "final": {
+      "table": "mark_conflict_interests",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": null,
+        "name": null
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"mark_conflict_interests\"",
+        "filters": [],
+        "assumptions": [
+          "no_match=true; stopped at p0"
+        ],
+        "needs_code_discovery": []
+      },
+      "mappings": [],
+      "planner_notes": [
+        "no_match=true"
+      ]
+    },
+    "no_match": true
+  },
+  "final_struct": {
+    "table": "mark_conflict_interests",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": null,
+      "name": null
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"mark_conflict_interests\"",
+      "filters": [],
+      "assumptions": [
+        "no_match=true; stopped at p0"
+      ],
+      "needs_code_discovery": []
+    },
+    "mappings": [],
+    "planner_notes": [
+      "no_match=true"
+    ]
+  },
+  "ttl_emitted": false,
+  "saved_to": ""
+}

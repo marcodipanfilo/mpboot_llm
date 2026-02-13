@@ -1,0 +1,512 @@
+[
+  {
+    "table": "acceptances",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "acceptances",
+    "column": "type",
+    "data_type": "integer default",
+    "nullable": true
+  },
+  {
+    "table": "administrators",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "administrators",
+    "column": "accept_paper",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "bids",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "bids",
+    "column": "adjusted",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "bids",
+    "column": "bid",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "co_write_paper",
+    "column": "co_author",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "co_write_paper",
+    "column": "paper",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "conference_administrator",
+    "column": "cid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "conference_administrator",
+    "column": "aid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "conferences",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "conferences",
+    "column": "site_url",
+    "data_type": "varchar(22)",
+    "nullable": true
+  },
+  {
+    "table": "conferences",
+    "column": "accepts_hardcopy_submissions",
+    "data_type": "varchar(199)",
+    "nullable": true
+  },
+  {
+    "table": "conferences",
+    "column": "logo_url",
+    "data_type": "varchar(199)",
+    "nullable": true
+  },
+  {
+    "table": "conferences",
+    "column": "date",
+    "data_type": "date",
+    "nullable": true
+  },
+  {
+    "table": "conferences",
+    "column": "name",
+    "data_type": "varchar(6)",
+    "nullable": true
+  },
+  {
+    "table": "conferences",
+    "column": "reviews_per_paper",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "details_entered",
+    "column": "cid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "details_entered",
+    "column": "aid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "documents",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "enable_virtual_meeting",
+    "column": "aid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "enable_virtual_meeting",
+    "column": "cid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "enter_review_criteria",
+    "column": "aid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "enter_review_criteria",
+    "column": "cid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "finalize_paper_assignment",
+    "column": "aid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "finalize_paper_assignment",
+    "column": "cid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "hardcopy_mailing_manifests_p",
+    "column": "cid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "hardcopy_mailing_manifests_p",
+    "column": "aid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "mark_conflict_interests",
+    "column": "conference_member",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "mark_conflict_interests",
+    "column": "paper",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "paper_person",
+    "column": "paper",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "paper_person",
+    "column": "reviewer",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "paper_subject_area",
+    "column": "pid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "paper_subject_area",
+    "column": "sid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "papers",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "papers",
+    "column": "paper_id",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "papers",
+    "column": "rejected",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "papers",
+    "column": "read_by_meta_reviewer",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "papers",
+    "column": "author",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "papers",
+    "column": "title",
+    "data_type": "varchar(101)",
+    "nullable": true
+  },
+  {
+    "table": "papers",
+    "column": "decision",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "papers",
+    "column": "accepted",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "papers",
+    "column": "type",
+    "data_type": "integer default",
+    "nullable": true
+  },
+  {
+    "table": "pc_members",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "pc_members",
+    "column": "max_papers",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "pc_members",
+    "column": "added",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "person_administrator",
+    "column": "aid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "person_administrator",
+    "column": "pid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "person_conference",
+    "column": "cid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "person_conference",
+    "column": "pid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "person_document",
+    "column": "pid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "person_document",
+    "column": "did",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "person_paper",
+    "column": "author",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "person_paper",
+    "column": "paper",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "persons",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "persons",
+    "column": "name",
+    "data_type": "varchar(24)",
+    "nullable": true
+  },
+  {
+    "table": "persons",
+    "column": "email",
+    "data_type": "varchar(43)",
+    "nullable": true
+  },
+  {
+    "table": "persons",
+    "column": "sys_user",
+    "data_type": "boolean default false",
+    "nullable": true
+  },
+  {
+    "table": "persons",
+    "column": "assigned_by_reviewer",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "persons",
+    "column": "reviewer",
+    "data_type": "boolean default false",
+    "nullable": true
+  },
+  {
+    "table": "persons",
+    "column": "author",
+    "data_type": "boolean default false",
+    "nullable": true
+  },
+  {
+    "table": "persons",
+    "column": "co_author",
+    "data_type": "boolean default false",
+    "nullable": true
+  },
+  {
+    "table": "persons",
+    "column": "type",
+    "data_type": "integer default",
+    "nullable": true
+  },
+  {
+    "table": "preferences",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "program_committee_chair_review",
+    "column": "pid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "program_committee_chair_review",
+    "column": "rid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "program_committee_chairs",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "program_committee_chairs",
+    "column": "max_papers",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "program_committee_chairs",
+    "column": "added",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "program_committee_members",
+    "column": "program_committee",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "program_committee_members",
+    "column": "program_committee_member",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "program_committees",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "program_committees",
+    "column": "label",
+    "data_type": "varchar(29)",
+    "nullable": true
+  },
+  {
+    "table": "read_by_reviewer",
+    "column": "paper",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "read_by_reviewer",
+    "column": "reviewer",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "reviewer_bidding_started",
+    "column": "cid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "reviewer_bidding_started",
+    "column": "aid",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "reviews",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "reviews",
+    "column": "written",
+    "data_type": "integer",
+    "nullable": true
+  },
+  {
+    "table": "reviews",
+    "column": "comment",
+    "data_type": "varchar(191)",
+    "nullable": true
+  },
+  {
+    "table": "reviews",
+    "column": "type",
+    "data_type": "integer default",
+    "nullable": true
+  },
+  {
+    "table": "set_max_papers",
+    "column": "administrator",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "set_max_papers",
+    "column": "program_committee_member",
+    "data_type": "integer not null",
+    "nullable": false
+  },
+  {
+    "table": "subject_areas",
+    "column": "id",
+    "data_type": "integer not null",
+    "nullable": false
+  }
+]

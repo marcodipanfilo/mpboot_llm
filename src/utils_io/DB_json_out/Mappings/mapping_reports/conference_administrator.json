@@ -1,0 +1,125 @@
+{
+  "table": "conference_administrator",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "persons",
+          "administrators",
+          "papers",
+          "conferences",
+          "reviews",
+          "program_committee_members",
+          "pc_members",
+          "documents"
+        ],
+        "relationship_tables": [
+          "person_administrator",
+          "paper_person",
+          "person_conference",
+          "co_write_paper",
+          "program_committee_chairs",
+          "reviewer_bidding_started",
+          "paper_subject_area"
+        ],
+        "notable_discriminators": [
+          "papers.type",
+          "acceptances.type",
+          "persons.type"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Person",
+          "Conference",
+          "Paper",
+          "Review",
+          "Committee",
+          "Contribution",
+          "ProgramCommittee",
+          "Document"
+        ],
+        "high_value_object_properties": [
+          "hasAuthor",
+          "hasReviewer",
+          "belongsToConference",
+          "isSubmittedTo",
+          "hasDecision"
+        ]
+      },
+      "notes": [
+        "persons.type column appears to differentiate roles (reviewer/author)",
+        "papers.title and author relationships require special attention",
+        "conferences has URL fields indicating web presence",
+        "reviewer_bidding_started connects bids with conferences/administrators"
+      ]
+    },
+    "p0": {
+      "table": "conference_administrator",
+      "no_match": true,
+      "best": {
+        "kind": "class",
+        "name": "",
+        "score": 0.0,
+        "why": "Table represents a relationship/bridge (admin-conference) but no ontology class matches this pure SR/SRR pattern"
+      },
+      "alt": {
+        "name": "",
+        "kind": "class"
+      },
+      "stop_reason": "Pure relationship table detected"
+    },
+    "p1": {},
+    "p2": {},
+    "final": {
+      "table": "conference_administrator",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": null,
+        "name": null
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"conference_administrator\"",
+        "filters": [],
+        "assumptions": [
+          "no_match=true; stopped at p0"
+        ],
+        "needs_code_discovery": []
+      },
+      "mappings": [],
+      "planner_notes": [
+        "no_match=true"
+      ]
+    },
+    "no_match": true
+  },
+  "final_struct": {
+    "table": "conference_administrator",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": null,
+      "name": null
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"conference_administrator\"",
+      "filters": [],
+      "assumptions": [
+        "no_match=true; stopped at p0"
+      ],
+      "needs_code_discovery": []
+    },
+    "mappings": [],
+    "planner_notes": [
+      "no_match=true"
+    ]
+  },
+  "ttl_emitted": false,
+  "saved_to": ""
+}

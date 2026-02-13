@@ -1,0 +1,483 @@
+{
+  "table": "persons",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "papers",
+          "persons",
+          "conferences",
+          "reviews",
+          "program_committees",
+          "documents",
+          "administrators",
+          "subject_areas"
+        ],
+        "relationship_tables": [
+          "co_write_paper",
+          "paper_person",
+          "person_administrator",
+          "paper_subject_area",
+          "person_conference",
+          "mark_conflict_interests",
+          "enter_review_criteria",
+          "reviewer_bidding_started"
+        ],
+        "notable_discriminators": [
+          "persons.type",
+          "persons.author",
+          "persons.reviewer",
+          "persons.co_author",
+          "papers.type"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Conference",
+          "Person",
+          "Paper",
+          "Review",
+          "ProgramCommittee",
+          "SubjectArea"
+        ],
+        "high_value_object_properties": [
+          "writtenBy",
+          "hasAuthor",
+          "hasReviewer",
+          "belongsToConference",
+          "hasSubjectArea",
+          "assignsReviewer"
+        ]
+      },
+      "notes": [
+        "Persons table contains Boolean flags for role discrimination (author, reviewer, co-author).",
+        "Junction tables like person_administrator and paper_person map many-to-many relationships.",
+        "Paper.type and Acceptances.type may need ontology alignment for classification.",
+        "Relationship tables often use administrator and paper IDs for access control mappings."
+      ]
+    },
+    "p0": {
+      "table": "persons",
+      "no_match": false,
+      "best": {
+        "kind": "class",
+        "name": "Person",
+        "score": 0.95,
+        "why": "Table stores individual profiles with academic roles (authors, reviewers) and personal attributes (name, email) which aligns with the ontology's 'Person' class"
+      },
+      "alt": {
+        "kind": "class",
+        "name": "User",
+        "score": 0.85,
+        "why": "Table includes system role indicators (sys_user, admin) and participant categories that map to 'User' concept"
+      },
+      "stop_reason": null
+    },
+    "p1": {
+      "table": "persons",
+      "use_filter": false,
+      "filters": [],
+      "use_join": false,
+      "join_hints": [],
+      "notes": [
+        "The 'type' column contains numeric codes with unknown meaning per schema. Further code discovery needed to interpret role/role_category classifications."
+      ]
+    },
+    "p2": {
+      "table": "persons",
+      "class": "Person",
+      "column_mappings": [
+        {
+          "column": "persons.id",
+          "kind": "data_property",
+          "predicate": "hasID",
+          "datatype": "xsd:integer",
+          "confidence": 0.99,
+          "notes": "Primary key for Person instances"
+        },
+        {
+          "column": "persons.name",
+          "kind": "data_property",
+          "predicate": "hasName",
+          "datatype": "xsd:string",
+          "confidence": 0.98,
+          "notes": "Full name of person"
+        },
+        {
+          "column": "persons.email",
+          "kind": "data_property",
+          "predicate": "hasEmail",
+          "datatype": "xsd:string",
+          "confidence": 0.97,
+          "notes": "Contact email address"
+        },
+        {
+          "column": "persons.assigned_by_reviewer",
+          "kind": "object_property",
+          "predicate": "assignedBy",
+          "object_class": "Person",
+          "join": {
+            "target_table": "persons",
+            "source_column": "persons.assigned_by_reviewer",
+            "target_column": "persons.id"
+          },
+          "confidence": 0.92,
+          "notes": "Foreign key linking to the Person who assigned reviewer role"
+        },
+        {
+          "column": "persons.author",
+          "kind": "data_property",
+          "predicate": "isAuthor",
+          "datatype": "xsd:boolean",
+          "confidence": 0.9,
+          "notes": "Indicates user is paper author"
+        },
+        {
+          "column": "persons.co_author",
+          "kind": "data_property",
+          "predicate": "isCoAuthor",
+          "datatype": "xsd:boolean",
+          "confidence": 0.9,
+          "notes": "Indicates user is co-author of a paper"
+        },
+        {
+          "column": "persons.reviewer",
+          "kind": "data_property",
+          "predicate": "isReviewer",
+          "datatype": "xsd:boolean",
+          "confidence": 0.9,
+          "notes": "Indicates user is a paper reviewer"
+        },
+        {
+          "column": "persons.sys_user",
+          "kind": "data_property",
+          "predicate": "isSystemUser",
+          "datatype": "xsd:boolean",
+          "confidence": 0.88,
+          "notes": "Indicates if user is a system account"
+        },
+        {
+          "column": "persons.type",
+          "kind": "data_property",
+          "predicate": "hasRole",
+          "datatype": "xsd:integer",
+          "confidence": 0.75,
+          "notes": "Person role category (requires refinement)"
+        },
+        {
+          "column": "persons.id",
+          "kind": "object_property",
+          "predicate": "participatesIn",
+          "object_class": "Paper",
+          "join": {
+            "target_table": "co_write_paper",
+            "source_column": "persons.id",
+            "target_column": "co_write_paper.co_author"
+          },
+          "confidence": 0.85,
+          "notes": "Bridge to Papers via co_write_paper"
+        },
+        {
+          "column": "persons.id",
+          "kind": "object_property",
+          "predicate": "reviews",
+          "object_class": "Paper",
+          "join": {
+            "target_table": "paper_person",
+            "source_column": "persons.id",
+            "target_column": "paper_person.reviewer"
+          },
+          "confidence": 0.82,
+          "notes": "Bridge to Papers via paper_person"
+        },
+        {
+          "column": "persons.id",
+          "kind": "object_property",
+          "predicate": "attends",
+          "object_class": "Conference",
+          "join": {
+            "target_table": "person_conference",
+            "source_column": "persons.id",
+            "target_column": "person_conference.pid"
+          },
+          "confidence": 0.78,
+          "notes": "Bridge to Conferences via person_conference"
+        }
+      ]
+    },
+    "final": {
+      "table": "persons",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": "class",
+        "name": "Person"
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"persons\"",
+        "filters": [],
+        "assumptions": [
+          "System role indicators (sys_user, admin) are explicitly marked in the table",
+          "Person roles (author, reviewer) are mutually exclusive per schema design",
+          "Code discovery for 'type' column is pending before using for role interpretation"
+        ],
+        "needs_code_discovery": [
+          "persons.type"
+        ]
+      },
+      "mappings": [
+        {
+          "kind": "data_property",
+          "column": "persons.id",
+          "predicate": "hasID",
+          "datatype": "xsd:integer",
+          "confidence": 0.99
+        },
+        {
+          "kind": "data_property",
+          "column": "persons.name",
+          "predicate": "hasName",
+          "datatype": "xsd:string",
+          "confidence": 0.98
+        },
+        {
+          "kind": "data_property",
+          "column": "persons.email",
+          "predicate": "hasEmail",
+          "datatype": "xsd:string",
+          "confidence": 0.97
+        },
+        {
+          "kind": "object_property",
+          "column": "persons.assigned_by_reviewer",
+          "predicate": "assignedBy",
+          "object_class": "Person",
+          "join": {
+            "target_table": "persons",
+            "source_column": "persons.assigned_by_reviewer",
+            "target_column": "persons.id"
+          },
+          "confidence": 0.92
+        },
+        {
+          "kind": "data_property",
+          "column": "persons.author",
+          "predicate": "isAuthor",
+          "datatype": "xsd:boolean",
+          "confidence": 0.9
+        },
+        {
+          "kind": "data_property",
+          "column": "persons.co_author",
+          "predicate": "isCoAuthor",
+          "datatype": "xsd:boolean",
+          "confidence": 0.9
+        },
+        {
+          "kind": "data_property",
+          "column": "persons.reviewer",
+          "predicate": "isReviewer",
+          "datatype": "xsd:boolean",
+          "confidence": 0.9
+        },
+        {
+          "kind": "data_property",
+          "column": "persons.sys_user",
+          "predicate": "isSystemUser",
+          "datatype": "xsd:boolean",
+          "confidence": 0.88
+        },
+        {
+          "kind": "data_property",
+          "column": "persons.type",
+          "predicate": "hasRole",
+          "datatype": "xsd:integer",
+          "confidence": 0.75,
+          "needs_code_discovery": true
+        },
+        {
+          "kind": "object_property",
+          "column": "persons.id",
+          "predicate": "participatesIn",
+          "object_class": "Paper",
+          "join": {
+            "target_table": "co_write_paper",
+            "source_column": "persons.id",
+            "target_column": "co_write_paper.co_author"
+          },
+          "confidence": 0.85
+        },
+        {
+          "kind": "object_property",
+          "column": "persons.id",
+          "predicate": "reviews",
+          "object_class": "Paper",
+          "join": {
+            "target_table": "paper_person",
+            "source_column": "persons.id",
+            "target_column": "paper_person.reviewer"
+          },
+          "confidence": 0.82
+        },
+        {
+          "kind": "object_property",
+          "column": "persons.id",
+          "predicate": "attends",
+          "object_class": "Conference",
+          "join": {
+            "target_table": "person_conference",
+            "source_column": "persons.id",
+            "target_column": "person_conference.pid"
+          },
+          "confidence": 0.78
+        }
+      ],
+      "planner_notes": [
+        "Type code mapping should be validated against actual codebase as interpretation is currently unknown",
+        "Alternative class 'User' available but Person class has stronger alignment with schema content (0.95 vs 0.85 score)",
+        "Co-author and author roles require verification against ontology to ensure correct property separation"
+      ]
+    },
+    "no_match": false
+  },
+  "final_struct": {
+    "table": "persons",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": "class",
+      "name": "Person"
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"persons\"",
+      "filters": [],
+      "assumptions": [
+        "System role indicators (sys_user, admin) are explicitly marked in the table",
+        "Person roles (author, reviewer) are mutually exclusive per schema design",
+        "Code discovery for 'type' column is pending before using for role interpretation"
+      ],
+      "needs_code_discovery": [
+        "persons.type"
+      ]
+    },
+    "mappings": [
+      {
+        "kind": "data_property",
+        "column": "persons.id",
+        "predicate": "hasID",
+        "datatype": "xsd:integer",
+        "confidence": 0.99
+      },
+      {
+        "kind": "data_property",
+        "column": "persons.name",
+        "predicate": "hasName",
+        "datatype": "xsd:string",
+        "confidence": 0.98
+      },
+      {
+        "kind": "data_property",
+        "column": "persons.email",
+        "predicate": "hasEmail",
+        "datatype": "xsd:string",
+        "confidence": 0.97
+      },
+      {
+        "kind": "object_property",
+        "column": "persons.assigned_by_reviewer",
+        "predicate": "assignedBy",
+        "object_class": "Person",
+        "join": {
+          "target_table": "persons",
+          "source_column": "persons.assigned_by_reviewer",
+          "target_column": "persons.id"
+        },
+        "confidence": 0.92
+      },
+      {
+        "kind": "data_property",
+        "column": "persons.author",
+        "predicate": "isAuthor",
+        "datatype": "xsd:boolean",
+        "confidence": 0.9
+      },
+      {
+        "kind": "data_property",
+        "column": "persons.co_author",
+        "predicate": "isCoAuthor",
+        "datatype": "xsd:boolean",
+        "confidence": 0.9
+      },
+      {
+        "kind": "data_property",
+        "column": "persons.reviewer",
+        "predicate": "isReviewer",
+        "datatype": "xsd:boolean",
+        "confidence": 0.9
+      },
+      {
+        "kind": "data_property",
+        "column": "persons.sys_user",
+        "predicate": "isSystemUser",
+        "datatype": "xsd:boolean",
+        "confidence": 0.88
+      },
+      {
+        "kind": "data_property",
+        "column": "persons.type",
+        "predicate": "hasRole",
+        "datatype": "xsd:integer",
+        "confidence": 0.75,
+        "needs_code_discovery": true
+      },
+      {
+        "kind": "object_property",
+        "column": "persons.id",
+        "predicate": "participatesIn",
+        "object_class": "Paper",
+        "join": {
+          "target_table": "co_write_paper",
+          "source_column": "persons.id",
+          "target_column": "co_write_paper.co_author"
+        },
+        "confidence": 0.85
+      },
+      {
+        "kind": "object_property",
+        "column": "persons.id",
+        "predicate": "reviews",
+        "object_class": "Paper",
+        "join": {
+          "target_table": "paper_person",
+          "source_column": "persons.id",
+          "target_column": "paper_person.reviewer"
+        },
+        "confidence": 0.82
+      },
+      {
+        "kind": "object_property",
+        "column": "persons.id",
+        "predicate": "attends",
+        "object_class": "Conference",
+        "join": {
+          "target_table": "person_conference",
+          "source_column": "persons.id",
+          "target_column": "person_conference.pid"
+        },
+        "confidence": 0.78
+      }
+    ],
+    "planner_notes": [
+      "Type code mapping should be validated against actual codebase as interpretation is currently unknown",
+      "Alternative class 'User' available but Person class has stronger alignment with schema content (0.95 vs 0.85 score)",
+      "Co-author and author roles require verification against ontology to ensure correct property separation"
+    ]
+  },
+  "ttl_emitted": true,
+  "saved_to": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl"
+}

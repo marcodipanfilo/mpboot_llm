@@ -1,0 +1,119 @@
+{
+  "table": "person_paper",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "papers",
+          "persons",
+          "conferences",
+          "administrators",
+          "reviews"
+        ],
+        "relationship_tables": [
+          "person_paper",
+          "paper_subject_area",
+          "program_committee_members",
+          "paper_person",
+          "person_administrator"
+        ],
+        "notable_discriminators": [
+          "persons.type",
+          "papers.type"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Conference",
+          "Paper",
+          "Person",
+          "Author",
+          "Reviewer",
+          "ProgramCommitteeChair",
+          "SubjectArea"
+        ],
+        "high_value_object_properties": [
+          "hasAuthor",
+          "hasReviewer",
+          "hasProgramCommittee",
+          "belongsToConference",
+          "hasSubjectArea"
+        ]
+      },
+      "notes": [
+        "The schema uses junction tables for many-to-many relationships (e.g., person_paper for authors and reviewers).",
+        "Discriminator columns like 'type' in persons/papers may map to ontology subclass hierarchies.",
+        "Paper decisions (accepted/rejected) align with the 'Accepted_contribution' and 'Rejected_contribution' ontology classes."
+      ]
+    },
+    "p0": {
+      "table": "person_paper",
+      "no_match": true,
+      "best": {
+        "kind": "class",
+        "name": "Person",
+        "score": 0.5,
+        "why": "Linked via author column to Person class"
+      },
+      "alt": {
+        "kind": "class",
+        "name": "Paper",
+        "score": 0.5,
+        "why": "Linked via paper column to Paper class"
+      },
+      "stop_reason": null
+    },
+    "p1": {},
+    "p2": {},
+    "final": {
+      "table": "person_paper",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": null,
+        "name": null
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"person_paper\"",
+        "filters": [],
+        "assumptions": [
+          "no_match=true; stopped at p0"
+        ],
+        "needs_code_discovery": []
+      },
+      "mappings": [],
+      "planner_notes": [
+        "no_match=true"
+      ]
+    },
+    "no_match": true
+  },
+  "final_struct": {
+    "table": "person_paper",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": null,
+      "name": null
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"person_paper\"",
+      "filters": [],
+      "assumptions": [
+        "no_match=true; stopped at p0"
+      ],
+      "needs_code_discovery": []
+    },
+    "mappings": [],
+    "planner_notes": [
+      "no_match=true"
+    ]
+  },
+  "ttl_emitted": false,
+  "saved_to": ""
+}

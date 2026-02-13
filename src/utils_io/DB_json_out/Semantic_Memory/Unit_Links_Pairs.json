@@ -1,0 +1,251 @@
+{
+  "relations": [
+    {
+      "source_entity": "papers",
+      "target_entity": "documents",
+      "from_column": "papers.id",
+      "to_column": "documents.id",
+      "via_bridge": null
+    },
+    {
+      "source_entity": "papers",
+      "target_entity": "persons",
+      "from_column": "papers.id",
+      "to_column": "persons.id",
+      "via_bridge": null
+    },
+    {
+      "source_entity": "pc_members",
+      "target_entity": "persons",
+      "from_column": "pc_members.id",
+      "to_column": "persons.id",
+      "via_bridge": null
+    },
+    {
+      "source_entity": "program_committee_chairs",
+      "target_entity": "persons",
+      "from_column": "program_committee_chairs.id",
+      "to_column": "persons.id",
+      "via_bridge": null
+    },
+    {
+      "source_entity": "program_committee_members",
+      "target_entity": "program_committees",
+      "from_column": "program_committee_members.program_committee",
+      "to_column": "program_committees.id",
+      "via_bridge": null
+    },
+    {
+      "source_entity": "reviews",
+      "target_entity": "documents",
+      "from_column": "reviews.id",
+      "to_column": "documents.id",
+      "via_bridge": null
+    },
+    {
+      "source_entity": "reviews",
+      "target_entity": "persons",
+      "from_column": "reviews.id",
+      "to_column": "persons.id",
+      "via_bridge": null
+    },
+    {
+      "source_entity": "persons",
+      "target_entity": "papers",
+      "from_column": "persons.id",
+      "to_column": "papers.id",
+      "via_bridge": {
+        "bridge_table": "administrators",
+        "bridge_fk_from_source": "administrators.id",
+        "bridge_fk_to_target": "administrators.accept_paper"
+      }
+    },
+    {
+      "source_entity": "papers",
+      "target_entity": "persons",
+      "from_column": "papers.id",
+      "to_column": "persons.id",
+      "via_bridge": {
+        "bridge_table": "administrators",
+        "bridge_fk_from_source": "administrators.accept_paper",
+        "bridge_fk_to_target": "administrators.id"
+      }
+    },
+    {
+      "source_entity": "persons",
+      "target_entity": "papers",
+      "from_column": "persons.id",
+      "to_column": "papers.id",
+      "via_bridge": {
+        "bridge_table": "co_write_paper",
+        "bridge_fk_from_source": "co_write_paper.co_author",
+        "bridge_fk_to_target": "co_write_paper.paper"
+      }
+    },
+    {
+      "source_entity": "papers",
+      "target_entity": "persons",
+      "from_column": "papers.id",
+      "to_column": "persons.id",
+      "via_bridge": {
+        "bridge_table": "co_write_paper",
+        "bridge_fk_from_source": "co_write_paper.paper",
+        "bridge_fk_to_target": "co_write_paper.co_author"
+      }
+    },
+    {
+      "source_entity": "papers",
+      "target_entity": "persons",
+      "from_column": "papers.id",
+      "to_column": "persons.id",
+      "via_bridge": {
+        "bridge_table": "paper_person",
+        "bridge_fk_from_source": "paper_person.paper",
+        "bridge_fk_to_target": "paper_person.reviewer"
+      }
+    },
+    {
+      "source_entity": "persons",
+      "target_entity": "papers",
+      "from_column": "persons.id",
+      "to_column": "papers.id",
+      "via_bridge": {
+        "bridge_table": "paper_person",
+        "bridge_fk_from_source": "paper_person.reviewer",
+        "bridge_fk_to_target": "paper_person.paper"
+      }
+    },
+    {
+      "source_entity": "papers",
+      "target_entity": "subject_areas",
+      "from_column": "papers.id",
+      "to_column": "subject_areas.id",
+      "via_bridge": {
+        "bridge_table": "paper_subject_area",
+        "bridge_fk_from_source": "paper_subject_area.pid",
+        "bridge_fk_to_target": "paper_subject_area.sid"
+      }
+    },
+    {
+      "source_entity": "subject_areas",
+      "target_entity": "papers",
+      "from_column": "subject_areas.id",
+      "to_column": "papers.id",
+      "via_bridge": {
+        "bridge_table": "paper_subject_area",
+        "bridge_fk_from_source": "paper_subject_area.sid",
+        "bridge_fk_to_target": "paper_subject_area.pid"
+      }
+    },
+    {
+      "source_entity": "conferences",
+      "target_entity": "persons",
+      "from_column": "conferences.id",
+      "to_column": "persons.id",
+      "via_bridge": {
+        "bridge_table": "person_conference",
+        "bridge_fk_from_source": "person_conference.cid",
+        "bridge_fk_to_target": "person_conference.pid"
+      }
+    },
+    {
+      "source_entity": "persons",
+      "target_entity": "conferences",
+      "from_column": "persons.id",
+      "to_column": "conferences.id",
+      "via_bridge": {
+        "bridge_table": "person_conference",
+        "bridge_fk_from_source": "person_conference.pid",
+        "bridge_fk_to_target": "person_conference.cid"
+      }
+    },
+    {
+      "source_entity": "persons",
+      "target_entity": "documents",
+      "from_column": "persons.id",
+      "to_column": "documents.id",
+      "via_bridge": {
+        "bridge_table": "person_document",
+        "bridge_fk_from_source": "person_document.pid",
+        "bridge_fk_to_target": "person_document.did"
+      }
+    },
+    {
+      "source_entity": "documents",
+      "target_entity": "persons",
+      "from_column": "documents.id",
+      "to_column": "persons.id",
+      "via_bridge": {
+        "bridge_table": "person_document",
+        "bridge_fk_from_source": "person_document.did",
+        "bridge_fk_to_target": "person_document.pid"
+      }
+    },
+    {
+      "source_entity": "persons",
+      "target_entity": "papers",
+      "from_column": "persons.id",
+      "to_column": "papers.id",
+      "via_bridge": {
+        "bridge_table": "person_paper",
+        "bridge_fk_from_source": "person_paper.author",
+        "bridge_fk_to_target": "person_paper.paper"
+      }
+    },
+    {
+      "source_entity": "papers",
+      "target_entity": "persons",
+      "from_column": "papers.id",
+      "to_column": "persons.id",
+      "via_bridge": {
+        "bridge_table": "person_paper",
+        "bridge_fk_from_source": "person_paper.paper",
+        "bridge_fk_to_target": "person_paper.author"
+      }
+    },
+    {
+      "source_entity": "program_committee_chairs",
+      "target_entity": "reviews",
+      "from_column": "program_committee_chairs.id",
+      "to_column": "reviews.id",
+      "via_bridge": {
+        "bridge_table": "program_committee_chair_review",
+        "bridge_fk_from_source": "program_committee_chair_review.pid",
+        "bridge_fk_to_target": "program_committee_chair_review.rid"
+      }
+    },
+    {
+      "source_entity": "reviews",
+      "target_entity": "program_committee_chairs",
+      "from_column": "reviews.id",
+      "to_column": "program_committee_chairs.id",
+      "via_bridge": {
+        "bridge_table": "program_committee_chair_review",
+        "bridge_fk_from_source": "program_committee_chair_review.rid",
+        "bridge_fk_to_target": "program_committee_chair_review.pid"
+      }
+    },
+    {
+      "source_entity": "papers",
+      "target_entity": "persons",
+      "from_column": "papers.id",
+      "to_column": "persons.id",
+      "via_bridge": {
+        "bridge_table": "read_by_reviewer",
+        "bridge_fk_from_source": "read_by_reviewer.paper",
+        "bridge_fk_to_target": "read_by_reviewer.reviewer"
+      }
+    },
+    {
+      "source_entity": "persons",
+      "target_entity": "papers",
+      "from_column": "persons.id",
+      "to_column": "papers.id",
+      "via_bridge": {
+        "bridge_table": "read_by_reviewer",
+        "bridge_fk_from_source": "read_by_reviewer.reviewer",
+        "bridge_fk_to_target": "read_by_reviewer.paper"
+      }
+    }
+  ]
+}

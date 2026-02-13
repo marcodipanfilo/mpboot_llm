@@ -1,0 +1,160 @@
+{
+  "table": "program_committees",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "persons",
+          "papers",
+          "conferences",
+          "administrators",
+          "reviews",
+          "subject_areas"
+        ],
+        "relationship_tables": [
+          "person_administrator",
+          "person_conference",
+          "paper_person",
+          "program_committee_members",
+          "co_write_paper",
+          "paper_subject_area"
+        ],
+        "notable_discriminators": [
+          "persons.reviewer",
+          "persons.author",
+          "papers.decision",
+          "persons.type",
+          "acceptances.type"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Conference",
+          "ConferenceParticipant",
+          "ConferenceContribution",
+          "Person",
+          "Review",
+          "Paper",
+          "Committee"
+        ],
+        "high_value_object_properties": [
+          "submitted_by",
+          "assigned_to",
+          "reviewed_by",
+          "part_of",
+          "has_contribution"
+        ]
+      },
+      "notes": [
+        "Persons table contains role discriminators (reviewer/author flags) corresponding to multiple ontology classes",
+        "Program_committee_members relationship table mirrors committee membership relations in the ontology",
+        "Paper_decision and paper_author relationships align with Review_expertise and Review_preference in the ontology",
+        "Subject_areas table corresponds to Topic/Track classes in the ontology hierarchy"
+      ]
+    },
+    "p0": {
+      "table": "program_committees",
+      "no_match": false,
+      "best": {
+        "kind": "class",
+        "name": "Program_committee",
+        "score": 0.95,
+        "why": "Direct match with ontology class Program_committee, supported by properties linking to Conference_volume"
+      },
+      "alt": {
+        "kind": "class",
+        "name": "Committee",
+        "score": 0.85,
+        "why": "General committee class with relevant member/chair relationships"
+      },
+      "stop_reason": null
+    },
+    "p1": {
+      "table": "program_committees",
+      "use_filter": false,
+      "filters": [],
+      "use_join": false,
+      "join_hints": [],
+      "notes": [
+        "No WHERE filter needed: no columns identified as discriminators/categories requiring filtering for class mapping.",
+        "No JOIN required: table contains only identifier/label properties, no foreign keys or relationships needing table linkage."
+      ]
+    },
+    "p2": {
+      "table": "program_committees",
+      "class": "Program_committee",
+      "column_mappings": [
+        {
+          "column": "program_committees.id",
+          "kind": "unmapped",
+          "confidence": 0.0,
+          "notes": "No data property in ontology for unique identifier.",
+          "predicate": ""
+        },
+        {
+          "column": "program_committees.label",
+          "kind": "unmapped",
+          "confidence": 0.0,
+          "notes": "No data property in ontology for committee name.",
+          "predicate": ""
+        }
+      ]
+    },
+    "final": {
+      "table": "program_committees",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": "class",
+        "name": "Program_committee"
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"program_committees\"",
+        "filters": [],
+        "assumptions": [
+          "No WHERE filter required: Table contains no categorical/discriminator columns requiring filtering for class mapping",
+          "No JOIN required: No foreign key/relationship columns identified that require table linkage"
+        ],
+        "needs_code_discovery": []
+      },
+      "mappings": [],
+      "planner_notes": [
+        "program_committees.id unmapped: No corresponding data property in ontology for unique identifier",
+        "program_committees.label unmapped: No corresponding data property in ontology for committee name",
+        "Mappings limited by ontology schema which lacks properties for committee identifiers and labels"
+      ]
+    },
+    "no_match": false
+  },
+  "final_struct": {
+    "table": "program_committees",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": "class",
+      "name": "Program_committee"
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"program_committees\"",
+      "filters": [],
+      "assumptions": [
+        "No WHERE filter required: Table contains no categorical/discriminator columns requiring filtering for class mapping",
+        "No JOIN required: No foreign key/relationship columns identified that require table linkage"
+      ],
+      "needs_code_discovery": []
+    },
+    "mappings": [],
+    "planner_notes": [
+      "program_committees.id unmapped: No corresponding data property in ontology for unique identifier",
+      "program_committees.label unmapped: No corresponding data property in ontology for committee name",
+      "Mappings limited by ontology schema which lacks properties for committee identifiers and labels"
+    ]
+  },
+  "ttl_emitted": true,
+  "saved_to": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl"
+}

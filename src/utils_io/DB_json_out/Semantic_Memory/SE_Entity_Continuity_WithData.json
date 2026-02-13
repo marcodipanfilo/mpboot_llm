@@ -1,0 +1,1908 @@
+{
+  "entities": {
+    "papers": {
+      "continuity": [
+        {
+          "kind": "direct",
+          "target": "documents",
+          "from_column": "papers.id",
+          "to_column": "documents.id",
+          "examples": [
+            {
+              "example_row": {
+                "papers": {
+                  "id": "1078",
+                  "paper_id": "37",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": null,
+                  "title": "cerebrum gloves mohairs admiralties",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "2"
+                },
+                "documents": {
+                  "id": "1078"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "1785",
+                  "paper_id": "65",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": null,
+                  "title": "cheaters riffled kerneling napoleons",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "2"
+                },
+                "documents": {
+                  "id": "1785"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "733",
+                  "paper_id": "233",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "1072",
+                  "title": "equalled sandwiching bewitchment cheaters",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "documents": {
+                  "id": "733"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "291",
+                  "paper_id": "364",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "2017",
+                  "title": "immediately canzona interrelated cooked",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "documents": {
+                  "id": "291"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "1935",
+                  "paper_id": "27",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": null,
+                  "title": "pirog desexes summable heliocentricity excretions recelebrating",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "2"
+                },
+                "documents": {
+                  "id": "1935"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "direct",
+          "target": "persons",
+          "from_column": "papers.id",
+          "to_column": "persons.id",
+          "examples": [
+            {
+              "example_row": {
+                "papers": {
+                  "id": "733",
+                  "paper_id": "233",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "1072",
+                  "title": "equalled sandwiching bewitchment cheaters",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "persons": {
+                  "id": "1072",
+                  "name": "Honami Docherty",
+                  "email": "Honami.Docherty@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "f",
+                  "author": "t",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "291",
+                  "paper_id": "364",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "2017",
+                  "title": "immediately canzona interrelated cooked",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "persons": {
+                  "id": "2017",
+                  "name": "Mudri Gamero",
+                  "email": "Mudri.Gamero@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "f",
+                  "author": "t",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "98",
+                  "paper_id": "119",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "94",
+                  "title": "giros podgy vagus kinkiest xix",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "persons": {
+                  "id": "94",
+                  "name": "Casandra Shire",
+                  "email": "Casandra.Shire@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "f",
+                  "author": "t",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "1558",
+                  "paper_id": "296",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "1617",
+                  "title": "surges preheats loggias reconciliating photocatalyst",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "persons": {
+                  "id": "1617",
+                  "name": "Augusto Kempson",
+                  "email": "Augusto.Kempson@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "f",
+                  "author": "t",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "510",
+                  "paper_id": "42",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "509",
+                  "title": "dwelling scrapped prat islanded burlily",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "persons": {
+                  "id": "509",
+                  "name": "Prebrana Kekiwi",
+                  "email": "Prebrana.Kekiwi@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "f",
+                  "author": "t",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "bridge",
+          "target": "persons",
+          "from_column": "papers.id",
+          "to_column": "persons.id",
+          "examples": [
+            {
+              "example_row": {
+                "papers": {},
+                "administrators": {},
+                "persons": {}
+              }
+            }
+          ],
+          "bridge_table": "administrators",
+          "bridge_fk_from_source": "administrators.accept_paper",
+          "bridge_fk_to_target": "administrators.id"
+        },
+        {
+          "kind": "bridge",
+          "target": "persons",
+          "from_column": "papers.id",
+          "to_column": "persons.id",
+          "examples": [
+            {
+              "example_row": {
+                "papers": {
+                  "id": "947",
+                  "paper_id": "13",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "1337",
+                  "title": "thanklessly swiveled polers oinked",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "co_write_paper": {
+                  "co_author": "1",
+                  "paper": "947"
+                },
+                "persons": {
+                  "id": "1",
+                  "name": "Shinji Kapler",
+                  "email": "Shinji.Kapler@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "949",
+                  "paper_id": "211",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "1337",
+                  "title": "summable heliocentricity excretions recelebrating dually plateauing",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "co_write_paper": {
+                  "co_author": "1",
+                  "paper": "949"
+                },
+                "persons": {
+                  "id": "1",
+                  "name": "Shinji Kapler",
+                  "email": "Shinji.Kapler@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "112",
+                  "paper_id": "44",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "110",
+                  "title": "burlily thanklessly swiveled polers oinked apnea maxillary",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "co_write_paper": {
+                  "co_author": "3",
+                  "paper": "112"
+                },
+                "persons": {
+                  "id": "3",
+                  "name": "Dama Leino",
+                  "email": "Dama.Leino@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "113",
+                  "paper_id": "272",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "110",
+                  "title": "desexes summable heliocentricity excretions recelebrating",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "co_write_paper": {
+                  "co_author": "3",
+                  "paper": "113"
+                },
+                "persons": {
+                  "id": "3",
+                  "name": "Dama Leino",
+                  "email": "Dama.Leino@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "1484",
+                  "paper_id": "89",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "992",
+                  "title": "swiveled polers oinked apnea maxillary",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "co_write_paper": {
+                  "co_author": "3",
+                  "paper": "1484"
+                },
+                "persons": {
+                  "id": "3",
+                  "name": "Dama Leino",
+                  "email": "Dama.Leino@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            }
+          ],
+          "bridge_table": "co_write_paper",
+          "bridge_fk_from_source": "co_write_paper.paper",
+          "bridge_fk_to_target": "co_write_paper.co_author"
+        },
+        {
+          "kind": "bridge",
+          "target": "persons",
+          "from_column": "papers.id",
+          "to_column": "persons.id",
+          "examples": [
+            {
+              "example_row": {
+                "papers": {
+                  "id": "10",
+                  "paper_id": "36",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "14",
+                  "title": "embossers cerebrum gloves mohairs admiralties bewigged playgoers cheques batting",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "paper_person": {
+                  "paper": "10",
+                  "reviewer": "12"
+                },
+                "persons": {
+                  "id": "12",
+                  "name": "Patroklus Hertel",
+                  "email": "Patroklus.Hertel@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "10",
+                  "paper_id": "36",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "14",
+                  "title": "embossers cerebrum gloves mohairs admiralties bewigged playgoers cheques batting",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "paper_person": {
+                  "paper": "10",
+                  "reviewer": "13"
+                },
+                "persons": {
+                  "id": "13",
+                  "name": "Dymas Houskeeper",
+                  "email": "Dymas.Houskeeper@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "19",
+                  "paper_id": "188",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "1607",
+                  "title": "earings circumscribed paralyzingly pouchy surrejoinders chestiest measurage tonsils",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "paper_person": {
+                  "paper": "19",
+                  "reviewer": "17"
+                },
+                "persons": {
+                  "id": "17",
+                  "name": "Alon Paulik",
+                  "email": "Alon.Paulik@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "19",
+                  "paper_id": "188",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "1607",
+                  "title": "earings circumscribed paralyzingly pouchy surrejoinders chestiest measurage tonsils",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "paper_person": {
+                  "paper": "19",
+                  "reviewer": "1302"
+                },
+                "persons": {
+                  "id": "1302",
+                  "name": "Dunja Luchenbill",
+                  "email": "Dunja.Luchenbill@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "papers": {
+                  "id": "29",
+                  "paper_id": "125",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "28",
+                  "title": "coreless tuberculoses environs hulled preexamination",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                },
+                "paper_person": {
+                  "paper": "29",
+                  "reviewer": "1018"
+                },
+                "persons": {
+                  "id": "1018",
+                  "name": "Misty Holladay",
+                  "email": "Misty.Holladay@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            }
+          ],
+          "bridge_table": "paper_person",
+          "bridge_fk_from_source": "paper_person.paper",
+          "bridge_fk_to_target": "paper_person.reviewer"
+        },
+        {
+          "kind": "bridge",
+          "target": "subject_areas",
+          "from_column": "papers.id",
+          "to_column": "subject_areas.id",
+          "examples": [
+            {
+              "example_row": {
+                "papers": {},
+                "paper_subject_area": {},
+                "subject_areas": {}
+              }
+            }
+          ],
+          "bridge_table": "paper_subject_area",
+          "bridge_fk_from_source": "paper_subject_area.pid",
+          "bridge_fk_to_target": "paper_subject_area.sid"
+        },
+        {
+          "kind": "bridge",
+          "target": "persons",
+          "from_column": "papers.id",
+          "to_column": "persons.id",
+          "examples": [
+            {
+              "example_row": {
+                "papers": {},
+                "person_paper": {},
+                "persons": {}
+              }
+            }
+          ],
+          "bridge_table": "person_paper",
+          "bridge_fk_from_source": "person_paper.paper",
+          "bridge_fk_to_target": "person_paper.author"
+        },
+        {
+          "kind": "bridge",
+          "target": "persons",
+          "from_column": "papers.id",
+          "to_column": "persons.id",
+          "examples": [
+            {
+              "example_row": {
+                "papers": {},
+                "read_by_reviewer": {},
+                "persons": {}
+              }
+            }
+          ],
+          "bridge_table": "read_by_reviewer",
+          "bridge_fk_from_source": "read_by_reviewer.paper",
+          "bridge_fk_to_target": "read_by_reviewer.reviewer"
+        }
+      ]
+    },
+    "pc_members": {
+      "continuity": [
+        {
+          "kind": "direct",
+          "target": "persons",
+          "from_column": "pc_members.id",
+          "to_column": "persons.id",
+          "examples": [
+            {
+              "example_row": {
+                "pc_members": {
+                  "id": "316",
+                  "max_papers": null,
+                  "added": null
+                },
+                "persons": {
+                  "id": "316",
+                  "name": "Dijana Murfin",
+                  "email": "Dijana.Murfin@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "pc_members": {
+                  "id": "666",
+                  "max_papers": null,
+                  "added": null
+                },
+                "persons": {
+                  "id": "666",
+                  "name": "Kaveri Zombro",
+                  "email": "Kaveri.Zombro@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "pc_members": {
+                  "id": "247",
+                  "max_papers": null,
+                  "added": null
+                },
+                "persons": {
+                  "id": "247",
+                  "name": "Shaqeeqa Levra",
+                  "email": "Shaqeeqa.Levra@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "pc_members": {
+                  "id": "635",
+                  "max_papers": null,
+                  "added": null
+                },
+                "persons": {
+                  "id": "635",
+                  "name": "Tekla Gallerani",
+                  "email": "Tekla.Gallerani@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "pc_members": {
+                  "id": "1328",
+                  "max_papers": null,
+                  "added": null
+                },
+                "persons": {
+                  "id": "1328",
+                  "name": "Xiomara Plowe",
+                  "email": "Xiomara.Plowe@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "program_committee_chairs": {
+      "continuity": [
+        {
+          "kind": "direct",
+          "target": "persons",
+          "from_column": "program_committee_chairs.id",
+          "to_column": "persons.id",
+          "examples": [
+            {
+              "example_row": {
+                "program_committee_chairs": {
+                  "id": "200",
+                  "max_papers": null,
+                  "added": null
+                },
+                "persons": {
+                  "id": "200",
+                  "name": "Lane Portes",
+                  "email": "Lane.Portes@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "program_committee_chairs": {
+                  "id": "678",
+                  "max_papers": null,
+                  "added": null
+                },
+                "persons": {
+                  "id": "678",
+                  "name": "Jace Ruotolo",
+                  "email": "Jace.Ruotolo@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "program_committee_chairs": {
+                  "id": "1034",
+                  "max_papers": null,
+                  "added": null
+                },
+                "persons": {
+                  "id": "1034",
+                  "name": "Casswallawn Scheiblich",
+                  "email": "Casswallawn.Scheiblich@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "program_committee_chairs": {
+                  "id": "535",
+                  "max_papers": null,
+                  "added": null
+                },
+                "persons": {
+                  "id": "535",
+                  "name": "Raaid Chrispen",
+                  "email": "Raaid.Chrispen@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "program_committee_chairs": {
+                  "id": "473",
+                  "max_papers": null,
+                  "added": null
+                },
+                "persons": {
+                  "id": "473",
+                  "name": "Ernestine Barkan",
+                  "email": "Ernestine.Barkan@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "bridge",
+          "target": "reviews",
+          "from_column": "program_committee_chairs.id",
+          "to_column": "reviews.id",
+          "examples": [
+            {
+              "example_row": {
+                "program_committee_chairs": {},
+                "program_committee_chair_review": {},
+                "reviews": {}
+              }
+            }
+          ],
+          "bridge_table": "program_committee_chair_review",
+          "bridge_fk_from_source": "program_committee_chair_review.pid",
+          "bridge_fk_to_target": "program_committee_chair_review.rid"
+        }
+      ]
+    },
+    "program_committee_members": {
+      "continuity": [
+        {
+          "kind": "direct",
+          "target": "program_committees",
+          "from_column": "program_committee_members.program_committee",
+          "to_column": "program_committees.id",
+          "examples": [
+            {
+              "example_row": {
+                "program_committee_members": {
+                  "program_committee": "318",
+                  "program_committee_member": "316"
+                },
+                "program_committees": {
+                  "id": "318",
+                  "label": "ZSWC 2014 Program Committee"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "program_committee_members": {
+                  "program_committee": "318",
+                  "program_committee_member": "393"
+                },
+                "program_committees": {
+                  "id": "318",
+                  "label": "ZSWC 2014 Program Committee"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "program_committee_members": {
+                  "program_committee": "318",
+                  "program_committee_member": "1034"
+                },
+                "program_committees": {
+                  "id": "318",
+                  "label": "ZSWC 2014 Program Committee"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "program_committee_members": {
+                  "program_committee": "318",
+                  "program_committee_member": "1367"
+                },
+                "program_committees": {
+                  "id": "318",
+                  "label": "ZSWC 2014 Program Committee"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "program_committee_members": {
+                  "program_committee": "318",
+                  "program_committee_member": "1810"
+                },
+                "program_committees": {
+                  "id": "318",
+                  "label": "ZSWC 2014 Program Committee"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "reviews": {
+      "continuity": [
+        {
+          "kind": "direct",
+          "target": "documents",
+          "from_column": "reviews.id",
+          "to_column": "documents.id",
+          "examples": [
+            {
+              "example_row": {
+                "reviews": {
+                  "id": "2",
+                  "written": "3",
+                  "comment": "The paper \"XSWC-2014\" is mainly about XSWC-2014.\\nThis says about all about both its strong and weak suits.\\nHowever, the reviewer would like to highlight XSWC-2014 in particular",
+                  "type": "0"
+                },
+                "documents": {
+                  "id": "2"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "reviews": {
+                  "id": "4",
+                  "written": "5",
+                  "comment": "The paper \"ZSWC-2014\" is mainly about ZSWC-2014.\\nThis says about all about both its strong and weak suits.\\nHowever, the reviewer would like to highlight ZSWC-2014 in particular",
+                  "type": "0"
+                },
+                "documents": {
+                  "id": "4"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "reviews": {
+                  "id": "8",
+                  "written": "9",
+                  "comment": "In their paper 'XSWC-2015' the authors discuss XSWC-2015.\\nThis says about all about both its strong and weak suits.\\nHowever, the reviewer would like to highlight XSWC-2015 in particular",
+                  "type": "0"
+                },
+                "documents": {
+                  "id": "8"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "reviews": {
+                  "id": "15",
+                  "written": "16",
+                  "comment": "The paper \"XSWC-2014\" is mainly about XSWC-2014.\\nThough apparently a contribution of remarkable novelty, 'XSWC-2014' also has its weaknesses.",
+                  "type": "0"
+                },
+                "documents": {
+                  "id": "15"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "reviews": {
+                  "id": "21",
+                  "written": "22",
+                  "comment": "In their paper 'ZSWC-2014' the authors discuss ZSWC-2014.\\nThis says about all about both its strong and weak suits.\\nHowever, the reviewer would like to highlight ZSWC-2014 in particular",
+                  "type": "0"
+                },
+                "documents": {
+                  "id": "21"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "direct",
+          "target": "persons",
+          "from_column": "reviews.id",
+          "to_column": "persons.id",
+          "examples": [
+            {
+              "example_row": {
+                "reviews": {
+                  "id": "2",
+                  "written": "3",
+                  "comment": "The paper \"XSWC-2014\" is mainly about XSWC-2014.\\nThis says about all about both its strong and weak suits.\\nHowever, the reviewer would like to highlight XSWC-2014 in particular",
+                  "type": "0"
+                },
+                "persons": {
+                  "id": "3",
+                  "name": "Dama Leino",
+                  "email": "Dama.Leino@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "reviews": {
+                  "id": "4",
+                  "written": "5",
+                  "comment": "The paper \"ZSWC-2014\" is mainly about ZSWC-2014.\\nThis says about all about both its strong and weak suits.\\nHowever, the reviewer would like to highlight ZSWC-2014 in particular",
+                  "type": "0"
+                },
+                "persons": {
+                  "id": "5",
+                  "name": "Aishwarya Hallmon",
+                  "email": "Aishwarya.Hallmon@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "reviews": {
+                  "id": "8",
+                  "written": "9",
+                  "comment": "In their paper 'XSWC-2015' the authors discuss XSWC-2015.\\nThis says about all about both its strong and weak suits.\\nHowever, the reviewer would like to highlight XSWC-2015 in particular",
+                  "type": "0"
+                },
+                "persons": {
+                  "id": "9",
+                  "name": "Sadayoshi Englemann",
+                  "email": "Sadayoshi.Englemann@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "reviews": {
+                  "id": "15",
+                  "written": "16",
+                  "comment": "The paper \"XSWC-2014\" is mainly about XSWC-2014.\\nThough apparently a contribution of remarkable novelty, 'XSWC-2014' also has its weaknesses.",
+                  "type": "0"
+                },
+                "persons": {
+                  "id": "16",
+                  "name": "Ofelia Golde",
+                  "email": "Ofelia.Golde@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "reviews": {
+                  "id": "21",
+                  "written": "22",
+                  "comment": "In their paper 'ZSWC-2014' the authors discuss ZSWC-2014.\\nThis says about all about both its strong and weak suits.\\nHowever, the reviewer would like to highlight ZSWC-2014 in particular",
+                  "type": "0"
+                },
+                "persons": {
+                  "id": "22",
+                  "name": "Kellie Frenner",
+                  "email": "Kellie.Frenner@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "bridge",
+          "target": "program_committee_chairs",
+          "from_column": "reviews.id",
+          "to_column": "program_committee_chairs.id",
+          "examples": [
+            {
+              "example_row": {
+                "reviews": {},
+                "program_committee_chair_review": {},
+                "program_committee_chairs": {}
+              }
+            }
+          ],
+          "bridge_table": "program_committee_chair_review",
+          "bridge_fk_from_source": "program_committee_chair_review.rid",
+          "bridge_fk_to_target": "program_committee_chair_review.pid"
+        }
+      ]
+    },
+    "persons": {
+      "continuity": [
+        {
+          "kind": "bridge",
+          "target": "papers",
+          "from_column": "persons.id",
+          "to_column": "papers.id",
+          "examples": [
+            {
+              "example_row": {
+                "persons": {},
+                "administrators": {},
+                "papers": {}
+              }
+            }
+          ],
+          "bridge_table": "administrators",
+          "bridge_fk_from_source": "administrators.id",
+          "bridge_fk_to_target": "administrators.accept_paper"
+        },
+        {
+          "kind": "bridge",
+          "target": "papers",
+          "from_column": "persons.id",
+          "to_column": "papers.id",
+          "examples": [
+            {
+              "example_row": {
+                "persons": {
+                  "id": "1",
+                  "name": "Shinji Kapler",
+                  "email": "Shinji.Kapler@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                },
+                "co_write_paper": {
+                  "co_author": "1",
+                  "paper": "947"
+                },
+                "papers": {
+                  "id": "947",
+                  "paper_id": "13",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "1337",
+                  "title": "thanklessly swiveled polers oinked",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "persons": {
+                  "id": "1",
+                  "name": "Shinji Kapler",
+                  "email": "Shinji.Kapler@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                },
+                "co_write_paper": {
+                  "co_author": "1",
+                  "paper": "949"
+                },
+                "papers": {
+                  "id": "949",
+                  "paper_id": "211",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "1337",
+                  "title": "summable heliocentricity excretions recelebrating dually plateauing",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "persons": {
+                  "id": "3",
+                  "name": "Dama Leino",
+                  "email": "Dama.Leino@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                },
+                "co_write_paper": {
+                  "co_author": "3",
+                  "paper": "112"
+                },
+                "papers": {
+                  "id": "112",
+                  "paper_id": "44",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "110",
+                  "title": "burlily thanklessly swiveled polers oinked apnea maxillary",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "persons": {
+                  "id": "3",
+                  "name": "Dama Leino",
+                  "email": "Dama.Leino@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                },
+                "co_write_paper": {
+                  "co_author": "3",
+                  "paper": "113"
+                },
+                "papers": {
+                  "id": "113",
+                  "paper_id": "272",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "110",
+                  "title": "desexes summable heliocentricity excretions recelebrating",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "persons": {
+                  "id": "3",
+                  "name": "Dama Leino",
+                  "email": "Dama.Leino@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                },
+                "co_write_paper": {
+                  "co_author": "3",
+                  "paper": "1484"
+                },
+                "papers": {
+                  "id": "1484",
+                  "paper_id": "89",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "992",
+                  "title": "swiveled polers oinked apnea maxillary",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                }
+              }
+            }
+          ],
+          "bridge_table": "co_write_paper",
+          "bridge_fk_from_source": "co_write_paper.co_author",
+          "bridge_fk_to_target": "co_write_paper.paper"
+        },
+        {
+          "kind": "bridge",
+          "target": "papers",
+          "from_column": "persons.id",
+          "to_column": "papers.id",
+          "examples": [
+            {
+              "example_row": {
+                "persons": {
+                  "id": "12",
+                  "name": "Patroklus Hertel",
+                  "email": "Patroklus.Hertel@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                },
+                "paper_person": {
+                  "paper": "10",
+                  "reviewer": "12"
+                },
+                "papers": {
+                  "id": "10",
+                  "paper_id": "36",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "14",
+                  "title": "embossers cerebrum gloves mohairs admiralties bewigged playgoers cheques batting",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "persons": {
+                  "id": "13",
+                  "name": "Dymas Houskeeper",
+                  "email": "Dymas.Houskeeper@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                },
+                "paper_person": {
+                  "paper": "10",
+                  "reviewer": "13"
+                },
+                "papers": {
+                  "id": "10",
+                  "paper_id": "36",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "14",
+                  "title": "embossers cerebrum gloves mohairs admiralties bewigged playgoers cheques batting",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "persons": {
+                  "id": "17",
+                  "name": "Alon Paulik",
+                  "email": "Alon.Paulik@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                },
+                "paper_person": {
+                  "paper": "19",
+                  "reviewer": "17"
+                },
+                "papers": {
+                  "id": "19",
+                  "paper_id": "188",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "1607",
+                  "title": "earings circumscribed paralyzingly pouchy surrejoinders chestiest measurage tonsils",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "persons": {
+                  "id": "1302",
+                  "name": "Dunja Luchenbill",
+                  "email": "Dunja.Luchenbill@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                },
+                "paper_person": {
+                  "paper": "19",
+                  "reviewer": "1302"
+                },
+                "papers": {
+                  "id": "19",
+                  "paper_id": "188",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "1607",
+                  "title": "earings circumscribed paralyzingly pouchy surrejoinders chestiest measurage tonsils",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "persons": {
+                  "id": "1018",
+                  "name": "Misty Holladay",
+                  "email": "Misty.Holladay@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                },
+                "paper_person": {
+                  "paper": "29",
+                  "reviewer": "1018"
+                },
+                "papers": {
+                  "id": "29",
+                  "paper_id": "125",
+                  "rejected": null,
+                  "read_by_meta_reviewer": null,
+                  "author": "28",
+                  "title": "coreless tuberculoses environs hulled preexamination",
+                  "decision": null,
+                  "accepted": null,
+                  "type": "1"
+                }
+              }
+            }
+          ],
+          "bridge_table": "paper_person",
+          "bridge_fk_from_source": "paper_person.reviewer",
+          "bridge_fk_to_target": "paper_person.paper"
+        },
+        {
+          "kind": "bridge",
+          "target": "conferences",
+          "from_column": "persons.id",
+          "to_column": "conferences.id",
+          "examples": [
+            {
+              "example_row": {
+                "persons": {
+                  "id": "17",
+                  "name": "Alon Paulik",
+                  "email": "Alon.Paulik@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                },
+                "person_conference": {
+                  "cid": "20",
+                  "pid": "17"
+                },
+                "conferences": {
+                  "id": "20",
+                  "site_url": "http://SIGXYZ-2014.tld",
+                  "accepts_hardcopy_submissions": null,
+                  "logo_url": null,
+                  "date": "2014-05-05",
+                  "name": "SIGXYZ",
+                  "reviews_per_paper": null
+                }
+              }
+            },
+            {
+              "example_row": {
+                "persons": {
+                  "id": "56",
+                  "name": "Izazkun Suleski",
+                  "email": "Izazkun.Suleski@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                },
+                "person_conference": {
+                  "cid": "20",
+                  "pid": "56"
+                },
+                "conferences": {
+                  "id": "20",
+                  "site_url": "http://SIGXYZ-2014.tld",
+                  "accepts_hardcopy_submissions": null,
+                  "logo_url": null,
+                  "date": "2014-05-05",
+                  "name": "SIGXYZ",
+                  "reviews_per_paper": null
+                }
+              }
+            },
+            {
+              "example_row": {
+                "persons": {
+                  "id": "83",
+                  "name": "Mikio Brunston",
+                  "email": "Mikio.Brunston@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                },
+                "person_conference": {
+                  "cid": "20",
+                  "pid": "83"
+                },
+                "conferences": {
+                  "id": "20",
+                  "site_url": "http://SIGXYZ-2014.tld",
+                  "accepts_hardcopy_submissions": null,
+                  "logo_url": null,
+                  "date": "2014-05-05",
+                  "name": "SIGXYZ",
+                  "reviews_per_paper": null
+                }
+              }
+            },
+            {
+              "example_row": {
+                "persons": {
+                  "id": "106",
+                  "name": "Pantyslawa Pemble",
+                  "email": "Pantyslawa.Pemble@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                },
+                "person_conference": {
+                  "cid": "20",
+                  "pid": "106"
+                },
+                "conferences": {
+                  "id": "20",
+                  "site_url": "http://SIGXYZ-2014.tld",
+                  "accepts_hardcopy_submissions": null,
+                  "logo_url": null,
+                  "date": "2014-05-05",
+                  "name": "SIGXYZ",
+                  "reviews_per_paper": null
+                }
+              }
+            },
+            {
+              "example_row": {
+                "persons": {
+                  "id": "116",
+                  "name": "Aspasa Abaunza",
+                  "email": "Aspasa.Abaunza@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                },
+                "person_conference": {
+                  "cid": "20",
+                  "pid": "116"
+                },
+                "conferences": {
+                  "id": "20",
+                  "site_url": "http://SIGXYZ-2014.tld",
+                  "accepts_hardcopy_submissions": null,
+                  "logo_url": null,
+                  "date": "2014-05-05",
+                  "name": "SIGXYZ",
+                  "reviews_per_paper": null
+                }
+              }
+            }
+          ],
+          "bridge_table": "person_conference",
+          "bridge_fk_from_source": "person_conference.pid",
+          "bridge_fk_to_target": "person_conference.cid"
+        },
+        {
+          "kind": "bridge",
+          "target": "documents",
+          "from_column": "persons.id",
+          "to_column": "documents.id",
+          "examples": [
+            {
+              "example_row": {
+                "persons": {},
+                "person_document": {},
+                "documents": {}
+              }
+            }
+          ],
+          "bridge_table": "person_document",
+          "bridge_fk_from_source": "person_document.pid",
+          "bridge_fk_to_target": "person_document.did"
+        },
+        {
+          "kind": "bridge",
+          "target": "papers",
+          "from_column": "persons.id",
+          "to_column": "papers.id",
+          "examples": [
+            {
+              "example_row": {
+                "persons": {},
+                "person_paper": {},
+                "papers": {}
+              }
+            }
+          ],
+          "bridge_table": "person_paper",
+          "bridge_fk_from_source": "person_paper.author",
+          "bridge_fk_to_target": "person_paper.paper"
+        },
+        {
+          "kind": "bridge",
+          "target": "papers",
+          "from_column": "persons.id",
+          "to_column": "papers.id",
+          "examples": [
+            {
+              "example_row": {
+                "persons": {},
+                "read_by_reviewer": {},
+                "papers": {}
+              }
+            }
+          ],
+          "bridge_table": "read_by_reviewer",
+          "bridge_fk_from_source": "read_by_reviewer.reviewer",
+          "bridge_fk_to_target": "read_by_reviewer.paper"
+        }
+      ]
+    },
+    "subject_areas": {
+      "continuity": [
+        {
+          "kind": "bridge",
+          "target": "papers",
+          "from_column": "subject_areas.id",
+          "to_column": "papers.id",
+          "examples": [
+            {
+              "example_row": {
+                "subject_areas": {},
+                "paper_subject_area": {},
+                "papers": {}
+              }
+            }
+          ],
+          "bridge_table": "paper_subject_area",
+          "bridge_fk_from_source": "paper_subject_area.sid",
+          "bridge_fk_to_target": "paper_subject_area.pid"
+        }
+      ]
+    },
+    "conferences": {
+      "continuity": [
+        {
+          "kind": "bridge",
+          "target": "persons",
+          "from_column": "conferences.id",
+          "to_column": "persons.id",
+          "examples": [
+            {
+              "example_row": {
+                "conferences": {
+                  "id": "20",
+                  "site_url": "http://SIGXYZ-2014.tld",
+                  "accepts_hardcopy_submissions": null,
+                  "logo_url": null,
+                  "date": "2014-05-05",
+                  "name": "SIGXYZ",
+                  "reviews_per_paper": null
+                },
+                "person_conference": {
+                  "cid": "20",
+                  "pid": "17"
+                },
+                "persons": {
+                  "id": "17",
+                  "name": "Alon Paulik",
+                  "email": "Alon.Paulik@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "conferences": {
+                  "id": "20",
+                  "site_url": "http://SIGXYZ-2014.tld",
+                  "accepts_hardcopy_submissions": null,
+                  "logo_url": null,
+                  "date": "2014-05-05",
+                  "name": "SIGXYZ",
+                  "reviews_per_paper": null
+                },
+                "person_conference": {
+                  "cid": "20",
+                  "pid": "56"
+                },
+                "persons": {
+                  "id": "56",
+                  "name": "Izazkun Suleski",
+                  "email": "Izazkun.Suleski@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "conferences": {
+                  "id": "20",
+                  "site_url": "http://SIGXYZ-2014.tld",
+                  "accepts_hardcopy_submissions": null,
+                  "logo_url": null,
+                  "date": "2014-05-05",
+                  "name": "SIGXYZ",
+                  "reviews_per_paper": null
+                },
+                "person_conference": {
+                  "cid": "20",
+                  "pid": "83"
+                },
+                "persons": {
+                  "id": "83",
+                  "name": "Mikio Brunston",
+                  "email": "Mikio.Brunston@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "conferences": {
+                  "id": "20",
+                  "site_url": "http://SIGXYZ-2014.tld",
+                  "accepts_hardcopy_submissions": null,
+                  "logo_url": null,
+                  "date": "2014-05-05",
+                  "name": "SIGXYZ",
+                  "reviews_per_paper": null
+                },
+                "person_conference": {
+                  "cid": "20",
+                  "pid": "106"
+                },
+                "persons": {
+                  "id": "106",
+                  "name": "Pantyslawa Pemble",
+                  "email": "Pantyslawa.Pemble@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "f",
+                  "co_author": "f",
+                  "type": "1"
+                }
+              }
+            },
+            {
+              "example_row": {
+                "conferences": {
+                  "id": "20",
+                  "site_url": "http://SIGXYZ-2014.tld",
+                  "accepts_hardcopy_submissions": null,
+                  "logo_url": null,
+                  "date": "2014-05-05",
+                  "name": "SIGXYZ",
+                  "reviews_per_paper": null
+                },
+                "person_conference": {
+                  "cid": "20",
+                  "pid": "116"
+                },
+                "persons": {
+                  "id": "116",
+                  "name": "Aspasa Abaunza",
+                  "email": "Aspasa.Abaunza@secretresearch.tld",
+                  "sys_user": "t",
+                  "assigned_by_reviewer": null,
+                  "reviewer": "t",
+                  "author": "t",
+                  "co_author": "t",
+                  "type": "1"
+                }
+              }
+            }
+          ],
+          "bridge_table": "person_conference",
+          "bridge_fk_from_source": "person_conference.cid",
+          "bridge_fk_to_target": "person_conference.pid"
+        }
+      ]
+    },
+    "documents": {
+      "continuity": [
+        {
+          "kind": "bridge",
+          "target": "persons",
+          "from_column": "documents.id",
+          "to_column": "persons.id",
+          "examples": [
+            {
+              "example_row": {
+                "documents": {},
+                "person_document": {},
+                "persons": {}
+              }
+            }
+          ],
+          "bridge_table": "person_document",
+          "bridge_fk_from_source": "person_document.did",
+          "bridge_fk_to_target": "person_document.pid"
+        }
+      ]
+    }
+  }
+}

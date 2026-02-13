@@ -1,0 +1,123 @@
+{
+  "table": "hardcopy_mailing_manifests_p",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "persons",
+          "papers",
+          "conferences",
+          "reviews",
+          "administrators",
+          "subject_areas",
+          "program_committees",
+          "documents"
+        ],
+        "relationship_tables": [
+          "paper_person",
+          "person_administrator",
+          "co_write_paper",
+          "paper_subject_area",
+          "program_committee_members",
+          "person_conference",
+          "person_document",
+          "conference_administrator"
+        ],
+        "notable_discriminators": [
+          "persons.reviewer",
+          "persons.author",
+          "persons.co_author",
+          "papers.type",
+          "acceptances.type",
+          "program_committees.label",
+          "persons.type"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Person",
+          "Paper",
+          "Conference",
+          "Review",
+          "Committee",
+          "Subject_area",
+          "Organization",
+          "Document"
+        ],
+        "high_value_object_properties": [
+          "Paper_reviewer",
+          "Paper_author",
+          "Conference_organizer",
+          "Person_affiliation",
+          "Paper_subject_area",
+          "Review_writer"
+        ]
+      },
+      "notes": [
+        "Complex role handling in 'paper_person' for authors vs reviewers",
+        "Discriminator patterns in 'persons' (reviewer/author/co-author) and 'program_committees' require subclassing",
+        "Multiple conference-person relationships via 'person_conference' and 'conference_administrator'",
+        "Subject_area relationships use 'paper_subject_area' junction table"
+      ]
+    },
+    "p0": {
+      "table": "hardcopy_mailing_manifests_p",
+      "no_match": true,
+      "best": null,
+      "alt": null,
+      "stop_reason": null
+    },
+    "p1": {},
+    "p2": {},
+    "final": {
+      "table": "hardcopy_mailing_manifests_p",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": null,
+        "name": null
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"hardcopy_mailing_manifests_p\"",
+        "filters": [],
+        "assumptions": [
+          "no_match=true; stopped at p0"
+        ],
+        "needs_code_discovery": []
+      },
+      "mappings": [],
+      "planner_notes": [
+        "no_match=true"
+      ]
+    },
+    "no_match": true
+  },
+  "final_struct": {
+    "table": "hardcopy_mailing_manifests_p",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": null,
+      "name": null
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"hardcopy_mailing_manifests_p\"",
+      "filters": [],
+      "assumptions": [
+        "no_match=true; stopped at p0"
+      ],
+      "needs_code_discovery": []
+    },
+    "mappings": [],
+    "planner_notes": [
+      "no_match=true"
+    ]
+  },
+  "ttl_emitted": false,
+  "saved_to": ""
+}

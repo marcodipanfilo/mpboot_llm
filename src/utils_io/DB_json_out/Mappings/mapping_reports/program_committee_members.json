@@ -1,0 +1,133 @@
+{
+  "table": "program_committee_members",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "persons",
+          "papers",
+          "conferences",
+          "administrators",
+          "reviews",
+          "program_committees",
+          "subject_areas"
+        ],
+        "relationship_tables": [
+          "paper_person",
+          "person_conference",
+          "person_administrator",
+          "paper_subject_area",
+          "mark_conflict_interests",
+          "co_write_paper",
+          "conference_administrator",
+          "person_document"
+        ],
+        "notable_discriminators": [
+          "persons.author",
+          "persons.reviewer",
+          "persons.sys_user",
+          "persons.co_author",
+          "papers.type",
+          "persons.type",
+          "papers.decision"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Conference",
+          "Person",
+          "Paper",
+          "Review",
+          "ConferenceParticipant",
+          "Committee",
+          "ConferenceContribution"
+        ],
+        "high_value_object_properties": [
+          "hasAuthor",
+          "hasReviewer",
+          "submittedTo",
+          "assignedTo",
+          "hasPaper",
+          "hasConference",
+          "hasReview"
+        ]
+      },
+      "notes": [
+        "Persons table contains multiple role discriminators (author/reviewer/sys_user/co_author)",
+        "Papers table has decision/acceptance type indicators through 'decision' and 'type' columns",
+        "Program_committee and committee_member tables indicate hierarchical committee relationships",
+        "Person_paper and co_write_paper tables suggest both authorship and co-authorship relationships",
+        "Conference_administrator and person_conference tables manage conference participation roles"
+      ]
+    },
+    "p0": {
+      "table": "program_committee_members",
+      "no_match": true,
+      "best": {
+        "kind": "class",
+        "name": "",
+        "score": 0.0,
+        "why": ""
+      },
+      "alt": {
+        "kind": "class",
+        "name": "",
+        "score": 0.0,
+        "why": ""
+      },
+      "stop_reason": "TABLE IS A RELATIONSHIP/Bridge TABLE (SR/SRR)"
+    },
+    "p1": {},
+    "p2": {},
+    "final": {
+      "table": "program_committee_members",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": null,
+        "name": null
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"program_committee_members\"",
+        "filters": [],
+        "assumptions": [
+          "no_match=true; stopped at p0"
+        ],
+        "needs_code_discovery": []
+      },
+      "mappings": [],
+      "planner_notes": [
+        "no_match=true"
+      ]
+    },
+    "no_match": true
+  },
+  "final_struct": {
+    "table": "program_committee_members",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": null,
+      "name": null
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"program_committee_members\"",
+      "filters": [],
+      "assumptions": [
+        "no_match=true; stopped at p0"
+      ],
+      "needs_code_discovery": []
+    },
+    "mappings": [],
+    "planner_notes": [
+      "no_match=true"
+    ]
+  },
+  "ttl_emitted": false,
+  "saved_to": ""
+}

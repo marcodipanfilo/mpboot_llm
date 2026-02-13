@@ -1,0 +1,302 @@
+{
+  "table": "conferences",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entities": [
+          "persons",
+          "papers",
+          "conferences",
+          "administrators"
+        ],
+        "relationship_tables": [
+          "person_paper",
+          "paper_subject_area",
+          "person_conference",
+          "person_administrator",
+          "paper_person",
+          "co_write_paper"
+        ],
+        "notable_keys": [
+          "person_id",
+          "paper_id",
+          "conference_id",
+          "subject_area_id",
+          "admin_id"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Person",
+          "Paper",
+          "Conference",
+          "Conference_participant",
+          "Review",
+          "Committee"
+        ],
+        "key_object_properties": [
+          "hasAuthor",
+          "hasReviewer",
+          "belongsToConference",
+          "hasSubjectArea",
+          "belongsToCommittee"
+        ],
+        "key_data_properties": [
+          "name",
+          "email",
+          "title",
+          "date",
+          "comment"
+        ]
+      },
+      "notes": [
+        "Schema contains explicit administrative actions (bids, assignments) not directly modeled in ontology classes",
+        "Ontology includes specialized contribution types (Poster, Tutorial) not present in schema tables",
+        "Subject areas in schema map to Topic/Track classes in ontology",
+        "Schema uses relationship tables for many-to-many connections while ontology uses direct properties"
+      ]
+    },
+    "p0": {
+      "table": "conferences",
+      "match": {
+        "kind": "class",
+        "best": {
+          "iri_or_name": "Conference",
+          "score": 0.95,
+          "why": "The table directly represents academic conferences with attributes like name, date, and relationships to persons (via bridge table), aligning with the 'Conference' class in ontology_context."
+        },
+        "alt": {
+          "iri_or_name": "Organization",
+          "score": 0.65,
+          "why": "Conferences can be hosted by organizations, but the table's focus on event-specific details (date, site_url, review count) strongly favors 'Conference' as the primary class."
+        }
+      },
+      "no_match": false,
+      "stop_reason": null
+    },
+    "p1": {
+      "needs_code_discovery": false,
+      "plausible_filter": null,
+      "meaning_unknown": false
+    },
+    "p2": {
+      "conferences.id": {
+        "mapping": {
+          "type": "data_property",
+          "iri": "http://conference#identifier"
+        }
+      },
+      "conferences.name": {
+        "mapping": {
+          "type": "data_property",
+          "iri": "http://conference#name"
+        }
+      },
+      "conferences.date": {
+        "mapping": {
+          "type": "data_property",
+          "iri": "http://conference#scheduledDate"
+        }
+      },
+      "conferences.accepts_hardcopy_submissions": {
+        "mapping": {
+          "type": "data_property",
+          "iri": "http://conference#acceptsHardcopySubmissions"
+        }
+      },
+      "conferences.logo_url": {
+        "mapping": {
+          "type": "data_property",
+          "iri": "http://conference#logoUrl"
+        }
+      },
+      "conferences.reviews_per_paper": {
+        "mapping": {
+          "type": "data_property",
+          "iri": "http://conference#reviewsPerPaper"
+        }
+      },
+      "conferences.site_url": {
+        "mapping": {
+          "type": "data_property",
+          "iri": "http://conference#websiteUrl"
+        }
+      },
+      "conferences → persons": {
+        "mapping": {
+          "type": "object_property",
+          "iri": "http://conference#hasParticipant",
+          "join": {
+            "bridge_table": "person_conference",
+            "from_column": "conferences.id",
+            "to_column": "persons.id",
+            "bridge_fk_from_source": "person_conference.cid",
+            "bridge_fk_to_target": "person_conference.pid"
+          }
+        }
+      }
+    },
+    "final": {
+      "table": "conferences",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": "class",
+        "name": "Conference"
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"conferences\"",
+        "filters": [],
+        "needs_code_discovery": [],
+        "assumptions": [
+          "Bridge table 'person_conference' exists with foreign keys (cid, pid) linking conferences and persons"
+        ]
+      },
+      "mappings": [
+        {
+          "kind": "data_property",
+          "column": "conferences.id",
+          "predicate": ":identifier",
+          "datatype": "xsd:string"
+        },
+        {
+          "kind": "data_property",
+          "column": "conferences.name",
+          "predicate": ":name",
+          "datatype": "xsd:string"
+        },
+        {
+          "kind": "data_property",
+          "column": "conferences.date",
+          "predicate": ":scheduledDate",
+          "datatype": "xsd:date"
+        },
+        {
+          "kind": "data_property",
+          "column": "conferences.accepts_hardcopy_submissions",
+          "predicate": ":acceptsHardcopySubmissions",
+          "datatype": "xsd:boolean"
+        },
+        {
+          "kind": "data_property",
+          "column": "conferences.logo_url",
+          "predicate": ":logoUrl",
+          "datatype": "xsd:anyURI"
+        },
+        {
+          "kind": "data_property",
+          "column": "conferences.reviews_per_paper",
+          "predicate": ":reviewsPerPaper",
+          "datatype": "xsd:integer"
+        },
+        {
+          "kind": "data_property",
+          "column": "conferences.site_url",
+          "predicate": ":websiteUrl",
+          "datatype": "xsd:anyURI"
+        },
+        {
+          "kind": "object_property",
+          "column": "conferences → persons",
+          "predicate": ":hasParticipant",
+          "object_class": "Person",
+          "join": {
+            "target_table": "persons",
+            "source_column": "person_conference.cid",
+            "target_column": "person_conference.pid"
+          }
+        }
+      ],
+      "planner_notes": [
+        "Primary class 'Conference' selected based on high alignment with event-specific attributes",
+        "Bridge table joins to 'persons' assumed to reference 'Person' class",
+        "All categorical values have known meanings with no discovery needed"
+      ]
+    },
+    "no_match": false
+  },
+  "final_struct": {
+    "table": "conferences",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": "class",
+      "name": "Conference"
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"conferences\"",
+      "filters": [],
+      "needs_code_discovery": [],
+      "assumptions": [
+        "Bridge table 'person_conference' exists with foreign keys (cid, pid) linking conferences and persons"
+      ]
+    },
+    "mappings": [
+      {
+        "kind": "data_property",
+        "column": "conferences.id",
+        "predicate": ":identifier",
+        "datatype": "xsd:string"
+      },
+      {
+        "kind": "data_property",
+        "column": "conferences.name",
+        "predicate": ":name",
+        "datatype": "xsd:string"
+      },
+      {
+        "kind": "data_property",
+        "column": "conferences.date",
+        "predicate": ":scheduledDate",
+        "datatype": "xsd:date"
+      },
+      {
+        "kind": "data_property",
+        "column": "conferences.accepts_hardcopy_submissions",
+        "predicate": ":acceptsHardcopySubmissions",
+        "datatype": "xsd:boolean"
+      },
+      {
+        "kind": "data_property",
+        "column": "conferences.logo_url",
+        "predicate": ":logoUrl",
+        "datatype": "xsd:anyURI"
+      },
+      {
+        "kind": "data_property",
+        "column": "conferences.reviews_per_paper",
+        "predicate": ":reviewsPerPaper",
+        "datatype": "xsd:integer"
+      },
+      {
+        "kind": "data_property",
+        "column": "conferences.site_url",
+        "predicate": ":websiteUrl",
+        "datatype": "xsd:anyURI"
+      },
+      {
+        "kind": "object_property",
+        "column": "conferences → persons",
+        "predicate": ":hasParticipant",
+        "object_class": "Person",
+        "join": {
+          "target_table": "persons",
+          "source_column": "person_conference.cid",
+          "target_column": "person_conference.pid"
+        }
+      }
+    ],
+    "planner_notes": [
+      "Primary class 'Conference' selected based on high alignment with event-specific attributes",
+      "Bridge table joins to 'persons' assumed to reference 'Person' class",
+      "All categorical values have known meanings with no discovery needed"
+    ]
+  },
+  "ttl_emitted": true,
+  "saved_to": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl"
+}

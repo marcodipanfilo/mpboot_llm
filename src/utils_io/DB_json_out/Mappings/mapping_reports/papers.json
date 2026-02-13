@@ -1,0 +1,367 @@
+{
+  "table": "papers",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "persons",
+          "papers",
+          "conferences",
+          "administrators",
+          "reviews",
+          "documents",
+          "subject_areas",
+          "program_committees"
+        ],
+        "relationship_tables": [
+          "person_administrator",
+          "paper_person",
+          "paper_subject_area",
+          "reviewer_bidding_started",
+          "program_committee_members",
+          "co_write_paper",
+          "conference_administrator"
+        ],
+        "notable_discriminators": [
+          "persons.reviewer",
+          "persons.author",
+          "persons.co_author",
+          "papers.type",
+          "reviews.type",
+          "acceptances.type",
+          "program_committee_members.program_committee"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Person",
+          "Conference",
+          "Paper",
+          "Review",
+          "Committee",
+          "Subject Area",
+          "Document"
+        ],
+        "high_value_object_properties": [
+          "hasAuthor",
+          "hasReviewer",
+          "assignedTo",
+          "hasSubjectArea",
+          "submittedTo",
+          "hasProgramCommittee",
+          "writesReview"
+        ]
+      },
+      "notes": [
+        "Persons table contains multiple role discriminators (reviewer/author/co-author) indicating polymorphic roles",
+        "Junction tables like paper_person handle many-to-many relationships between authors/reviewers and papers",
+        "Program_committee_members connects program committees with both administrators and program committee chairs",
+        "Multiple tables track administrative actions (details_entered, enable_virtual_meeting) with conference/administrator pairs",
+        "Paper table directly references both author and reviewer relationships through foreign keys"
+      ]
+    },
+    "p0": {
+      "table": "papers",
+      "no_match": false,
+      "best": {
+        "kind": "class",
+        "name": "Document",
+        "score": 0.95,
+        "why": "Direct semantic alignment with 'research submissions with metadata' and explicit 1:1 mapping to documents.id in relationships. Synonyms include 'documents' and 'publications'."
+      },
+      "alt": {
+        "kind": "class",
+        "name": "Submission",
+        "score": 0.85,
+        "why": "Secondary alignment to 'submission' concept via columns like accepted/rejected status and decision codes"
+      },
+      "stop_reason": null
+    },
+    "p1": {
+      "table": "papers",
+      "use_filter": true,
+      "filters": [
+        {
+          "expr": "type = <VAL>",
+          "reason": "The 'type' column serves as a category/discriminator indicating submission types, which is critical for mapping to 'Document' class (e.g., excluding non-core document types).",
+          "needs_code_discovery": true
+        }
+      ],
+      "use_join": false,
+      "join_hints": [],
+      "notes": [
+        "Filtering by 'type' is needed to distinguish core 'Document' types from other submission categories. Numeric codes require domain knowledge to validate.",
+        "Direct 1:1 relationship with 'documents' via 'papers.id' confirms primary mapping to 'Document' class."
+      ]
+    },
+    "p2": {
+      "table": "papers",
+      "class": "Document",
+      "column_mappings": [
+        {
+          "column": "papers.accepted",
+          "kind": "data_property",
+          "predicate": "hasAcceptedStatus",
+          "datatype": "xsd:integer",
+          "confidence": 0.9,
+          "notes": "Derived from 'accepted' field indicating 0/1 value."
+        },
+        {
+          "column": "papers.author",
+          "kind": "object_property",
+          "predicate": "hasAuthor",
+          "object_class": "Person",
+          "join": {
+            "target_table": "persons",
+            "source_column": "papers.author",
+            "target_column": "persons.id"
+          },
+          "confidence": 0.85,
+          "notes": "Direct foreign key to persons.id via author column."
+        },
+        {
+          "column": "papers.decision",
+          "kind": "data_property",
+          "predicate": "hasDecisionCode",
+          "datatype": "xsd:integer",
+          "confidence": 0.88,
+          "notes": "Maps to 'decision code' field."
+        },
+        {
+          "column": "papers.id",
+          "kind": "data_property",
+          "predicate": "hasIdentifier",
+          "datatype": "xsd:integer",
+          "confidence": 0.95,
+          "notes": "Primary key with direct 1:1 mapping to documents.id."
+        },
+        {
+          "column": "papers.paper_id",
+          "kind": "data_property",
+          "predicate": "hasAlternativeIdentifier",
+          "datatype": "xsd:integer",
+          "confidence": 0.85,
+          "notes": "Alternative paper ID."
+        },
+        {
+          "column": "papers.read_by_meta_reviewer",
+          "kind": "data_property",
+          "predicate": "hasReadByMetaReviewer",
+          "datatype": "xsd:integer",
+          "confidence": 0.82,
+          "notes": "Indicates meta-reviewer read status (0/1)."
+        },
+        {
+          "column": "papers.rejected",
+          "kind": "data_property",
+          "predicate": "hasRejectionStatus",
+          "datatype": "xsd:integer",
+          "confidence": 0.88,
+          "notes": "Maps to rejection status (0/1)."
+        },
+        {
+          "column": "papers.title",
+          "kind": "data_property",
+          "predicate": "hasTitle",
+          "datatype": "xsd:string",
+          "confidence": 0.95,
+          "notes": "Direct semantic alignment to academic paper title."
+        },
+        {
+          "column": "papers.type",
+          "kind": "data_property",
+          "predicate": "hasCategory",
+          "datatype": "xsd:integer",
+          "confidence": 0.82,
+          "notes": "Refers to paper category code."
+        }
+      ]
+    },
+    "final": {
+      "table": "papers",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": "class",
+        "name": "Document"
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"papers\"",
+        "filters": [
+          {
+            "expr": "type = <VAL>",
+            "reason": "The 'type' column serves as a category/discriminator indicating submission types, which is critical for mapping to 'Document' class (e.g., excluding non-core document types).",
+            "needs_code_discovery": true
+          }
+        ],
+        "assumptions": [
+          "Direct 1:1 relationship with 'documents' via 'papers.id' confirms primary mapping to 'Document' class"
+        ],
+        "needs_code_discovery": [
+          "papers.type"
+        ]
+      },
+      "mappings": [
+        {
+          "kind": "data_property",
+          "column": "papers.accepted",
+          "predicate": "hasAcceptedStatus",
+          "datatype": "xsd:integer"
+        },
+        {
+          "kind": "object_property",
+          "column": "papers.author",
+          "predicate": "hasAuthor",
+          "object_class": "Person",
+          "join": {
+            "target_table": "persons",
+            "source_column": "papers.author",
+            "target_column": "persons.id"
+          }
+        },
+        {
+          "kind": "data_property",
+          "column": "papers.decision",
+          "predicate": "hasDecisionCode",
+          "datatype": "xsd:integer"
+        },
+        {
+          "kind": "data_property",
+          "column": "papers.id",
+          "predicate": "hasIdentifier",
+          "datatype": "xsd:integer"
+        },
+        {
+          "kind": "data_property",
+          "column": "papers.paper_id",
+          "predicate": "hasAlternativeIdentifier",
+          "datatype": "xsd:integer"
+        },
+        {
+          "kind": "data_property",
+          "column": "papers.read_by_meta_reviewer",
+          "predicate": "hasReadByMetaReviewer",
+          "datatype": "xsd:integer"
+        },
+        {
+          "kind": "data_property",
+          "column": "papers.rejected",
+          "predicate": "hasRejectionStatus",
+          "datatype": "xsd:integer"
+        },
+        {
+          "kind": "data_property",
+          "column": "papers.title",
+          "predicate": "hasTitle",
+          "datatype": "xsd:string"
+        },
+        {
+          "kind": "data_property",
+          "column": "papers.type",
+          "predicate": "hasCategory",
+          "datatype": "xsd:integer"
+        }
+      ],
+      "planner_notes": [
+        "Filtering by 'type' is needed to distinguish core 'Document' types from other submission categories. Numeric codes require domain knowledge to validate"
+      ]
+    },
+    "no_match": false
+  },
+  "final_struct": {
+    "table": "papers",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": "class",
+      "name": "Document"
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"papers\"",
+      "filters": [
+        {
+          "expr": "type = <VAL>",
+          "reason": "The 'type' column serves as a category/discriminator indicating submission types, which is critical for mapping to 'Document' class (e.g., excluding non-core document types).",
+          "needs_code_discovery": true
+        }
+      ],
+      "assumptions": [
+        "Direct 1:1 relationship with 'documents' via 'papers.id' confirms primary mapping to 'Document' class"
+      ],
+      "needs_code_discovery": [
+        "papers.type"
+      ]
+    },
+    "mappings": [
+      {
+        "kind": "data_property",
+        "column": "papers.accepted",
+        "predicate": "hasAcceptedStatus",
+        "datatype": "xsd:integer"
+      },
+      {
+        "kind": "object_property",
+        "column": "papers.author",
+        "predicate": "hasAuthor",
+        "object_class": "Person",
+        "join": {
+          "target_table": "persons",
+          "source_column": "papers.author",
+          "target_column": "persons.id"
+        }
+      },
+      {
+        "kind": "data_property",
+        "column": "papers.decision",
+        "predicate": "hasDecisionCode",
+        "datatype": "xsd:integer"
+      },
+      {
+        "kind": "data_property",
+        "column": "papers.id",
+        "predicate": "hasIdentifier",
+        "datatype": "xsd:integer"
+      },
+      {
+        "kind": "data_property",
+        "column": "papers.paper_id",
+        "predicate": "hasAlternativeIdentifier",
+        "datatype": "xsd:integer"
+      },
+      {
+        "kind": "data_property",
+        "column": "papers.read_by_meta_reviewer",
+        "predicate": "hasReadByMetaReviewer",
+        "datatype": "xsd:integer"
+      },
+      {
+        "kind": "data_property",
+        "column": "papers.rejected",
+        "predicate": "hasRejectionStatus",
+        "datatype": "xsd:integer"
+      },
+      {
+        "kind": "data_property",
+        "column": "papers.title",
+        "predicate": "hasTitle",
+        "datatype": "xsd:string"
+      },
+      {
+        "kind": "data_property",
+        "column": "papers.type",
+        "predicate": "hasCategory",
+        "datatype": "xsd:integer"
+      }
+    ],
+    "planner_notes": [
+      "Filtering by 'type' is needed to distinguish core 'Document' types from other submission categories. Numeric codes require domain knowledge to validate"
+    ]
+  },
+  "ttl_emitted": true,
+  "saved_to": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl"
+}

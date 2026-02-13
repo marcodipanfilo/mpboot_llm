@@ -1,0 +1,126 @@
+{
+  "table": "reviewer_bidding_started",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "persons",
+          "papers",
+          "conferences",
+          "administrators",
+          "reviews",
+          "program_committees"
+        ],
+        "relationship_tables": [
+          "person_paper",
+          "person_conference",
+          "paper_subject_area",
+          "person_administrator",
+          "mark_conflict_interests",
+          "co_write_paper"
+        ],
+        "notable_discriminators": [
+          "persons.author",
+          "persons.reviewer",
+          "persons.co_author",
+          "acceptances.type",
+          "subjects.type",
+          "papers.type"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Person",
+          "Paper",
+          "Conference",
+          "ProgramCommittee",
+          "Review",
+          "Administrator"
+        ],
+        "high_value_object_properties": [
+          "hasAuthor",
+          "hasReviewer",
+          "hasConference",
+          "hasPaper",
+          "hasSubjectArea",
+          "hasReview"
+        ]
+      },
+      "notes": [
+        "Complex relationships like person_paper and paper_subject_area indicate N:N connections",
+        "Specialized roles (author/reviewer) are marked as boolean flags in persons",
+        "Administrators are treated as a specialization of persons",
+        "Subject areas have a dedicated table linking to papers"
+      ]
+    },
+    "p0": {
+      "table": "reviewer_bidding_started",
+      "no_match": true,
+      "best": {
+        "kind": "class",
+        "name": "",
+        "score": 0.0,
+        "why": ""
+      },
+      "alt": {
+        "kind": "class",
+        "name": "",
+        "score": 0.0,
+        "why": ""
+      },
+      "stop_reason": "Table represents a process/event (bidding start) rather than a standalone entity; no matching class in ontology candidates"
+    },
+    "p1": {},
+    "p2": {},
+    "final": {
+      "table": "reviewer_bidding_started",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": null,
+        "name": null
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"reviewer_bidding_started\"",
+        "filters": [],
+        "assumptions": [
+          "no_match=true; stopped at p0"
+        ],
+        "needs_code_discovery": []
+      },
+      "mappings": [],
+      "planner_notes": [
+        "no_match=true"
+      ]
+    },
+    "no_match": true
+  },
+  "final_struct": {
+    "table": "reviewer_bidding_started",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": null,
+      "name": null
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"reviewer_bidding_started\"",
+      "filters": [],
+      "assumptions": [
+        "no_match=true; stopped at p0"
+      ],
+      "needs_code_discovery": []
+    },
+    "mappings": [],
+    "planner_notes": [
+      "no_match=true"
+    ]
+  },
+  "ttl_emitted": false,
+  "saved_to": ""
+}

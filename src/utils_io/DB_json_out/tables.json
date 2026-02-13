@@ -1,0 +1,98 @@
+[
+  {
+    "table": "acceptances"
+  },
+  {
+    "table": "administrators"
+  },
+  {
+    "table": "bids"
+  },
+  {
+    "table": "co_write_paper"
+  },
+  {
+    "table": "conference_administrator"
+  },
+  {
+    "table": "conferences"
+  },
+  {
+    "table": "details_entered"
+  },
+  {
+    "table": "documents"
+  },
+  {
+    "table": "enable_virtual_meeting"
+  },
+  {
+    "table": "enter_review_criteria"
+  },
+  {
+    "table": "finalize_paper_assignment"
+  },
+  {
+    "table": "hardcopy_mailing_manifests_p"
+  },
+  {
+    "table": "mark_conflict_interests"
+  },
+  {
+    "table": "paper_person"
+  },
+  {
+    "table": "paper_subject_area"
+  },
+  {
+    "table": "papers"
+  },
+  {
+    "table": "pc_members"
+  },
+  {
+    "table": "person_administrator"
+  },
+  {
+    "table": "person_conference"
+  },
+  {
+    "table": "person_document"
+  },
+  {
+    "table": "person_paper"
+  },
+  {
+    "table": "persons"
+  },
+  {
+    "table": "preferences"
+  },
+  {
+    "table": "program_committee_chair_review"
+  },
+  {
+    "table": "program_committee_chairs"
+  },
+  {
+    "table": "program_committee_members"
+  },
+  {
+    "table": "program_committees"
+  },
+  {
+    "table": "read_by_reviewer"
+  },
+  {
+    "table": "reviewer_bidding_started"
+  },
+  {
+    "table": "reviews"
+  },
+  {
+    "table": "set_max_papers"
+  },
+  {
+    "table": "subject_areas"
+  }
+]

@@ -1,0 +1,131 @@
+{
+  "table": "paper_subject_area",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "persons",
+          "papers",
+          "conferences",
+          "administrators",
+          "program_committees",
+          "subject_areas"
+        ],
+        "relationship_tables": [
+          "person_administrator",
+          "person_conference",
+          "paper_person",
+          "co_write_paper",
+          "paper_subject_area",
+          "conference_administrator",
+          "reviewer_bidding_started",
+          "set_max_papers"
+        ],
+        "notable_discriminators": [
+          "persons.reviewer",
+          "persons.author",
+          "persons.co_author",
+          "papers.type",
+          "persons.sys_user",
+          "conferences.accepts_hardcopy_submissions"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Person",
+          "Conference",
+          "Paper",
+          "Conference_contribution",
+          "Committee",
+          "Organization",
+          "Track"
+        ],
+        "high_value_object_properties": [
+          "participatesIn",
+          "hasAuthor",
+          "hasReviewer",
+          "submittedTo",
+          "memberOf",
+          "belongsTo",
+          "hasDecision"
+        ]
+      },
+      "notes": [
+        "Multiple junction tables (person_administrator, paper_person) indicate role-based relationships",
+        "Persons table contains role discriminators (reviewer, author, co_author) for polymorphic roles",
+        "Papers have decision links (accepted/rejected) aligning with ontology's Reviewed_contribution",
+        "Conferences table has URL/site fields suggesting alignment with Conference_www ontology class",
+        "Paper-subject relationships map to Topic/Track ontology classes"
+      ]
+    },
+    "p0": {
+      "table": "paper_subject_area",
+      "no_match": true,
+      "best": {
+        "kind": "class",
+        "name": "",
+        "score": 0.0,
+        "why": "Table represents a relationship between 'papers' and 'subject_areas' (bridge table) with no intrinsic attributes."
+      },
+      "alt": {
+        "kind": "class",
+        "name": "",
+        "score": 0.0,
+        "why": "No candidate class aligns with the table's relationship-only structure."
+      },
+      "stop_reason": "Table functions as a bridge table (SR/SRR) connecting 'papers' and 'subject_areas', disqualifying direct class mapping."
+    },
+    "p1": {},
+    "p2": {},
+    "final": {
+      "table": "paper_subject_area",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": null,
+        "name": null
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"paper_subject_area\"",
+        "filters": [],
+        "assumptions": [
+          "no_match=true; stopped at p0"
+        ],
+        "needs_code_discovery": []
+      },
+      "mappings": [],
+      "planner_notes": [
+        "no_match=true"
+      ]
+    },
+    "no_match": true
+  },
+  "final_struct": {
+    "table": "paper_subject_area",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": null,
+      "name": null
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"paper_subject_area\"",
+      "filters": [],
+      "assumptions": [
+        "no_match=true; stopped at p0"
+      ],
+      "needs_code_discovery": []
+    },
+    "mappings": [],
+    "planner_notes": [
+      "no_match=true"
+    ]
+  },
+  "ttl_emitted": false,
+  "saved_to": ""
+}

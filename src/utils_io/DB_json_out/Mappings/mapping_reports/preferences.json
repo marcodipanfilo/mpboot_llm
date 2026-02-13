@@ -1,0 +1,172 @@
+{
+  "table": "preferences",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "persons",
+          "papers",
+          "conferences",
+          "administrators",
+          "documents",
+          "subject_areas",
+          "program_committees",
+          "pc_members"
+        ],
+        "relationship_tables": [
+          "person_administrator",
+          "paper_person",
+          "co_write_paper",
+          "person_conference",
+          "person_document",
+          "program_committee_members",
+          "paper_subject_area"
+        ],
+        "notable_discriminators": [
+          "persons.reviewer",
+          "persons.author",
+          "persons.co_author",
+          "persons.sys_user",
+          "acceptances.type"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Conference",
+          "Person",
+          "Paper",
+          "Review",
+          "Committee",
+          "Conference_participant",
+          "Reviewer",
+          "Conference_contribution",
+          "Program_committee"
+        ],
+        "high_value_object_properties": [
+          "hasAuthor",
+          "hasReviewer",
+          "submits",
+          "conflictOfInterest",
+          "participatesInConference",
+          "writtenBy"
+        ]
+      },
+      "notes": [
+        "persons table contains discriminators for roles (reviewer/author/sys_user)",
+        "paper_subject_area links Papers to Topics (SubjectAreas)",
+        "co_write_paper represents co-author relationships",
+        "person_conference can map to Conference_participant relationships"
+      ]
+    },
+    "p0": {
+      "table": "preferences",
+      "no_match": false,
+      "best": {
+        "kind": "class",
+        "name": "Review_preference",
+        "score": 0.8,
+        "why": "The 'preferences' table's id column aligns with the 'has_a_degree' data property of Review_preference, though it's primarily an identifier. No further properties are present to confirm a stronger match."
+      },
+      "alt": {
+        "kind": "class",
+        "name": "Conference",
+        "score": 0.2,
+        "why": "Conference is a top candidate but lacks relevant properties aligning with a preferences table."
+      },
+      "stop_reason": null
+    },
+    "p1": {
+      "table": "preferences",
+      "use_filter": false,
+      "filters": [],
+      "use_join": false,
+      "join_hints": [],
+      "notes": [
+        "Mapping to Review_preference class requires no explicit filtering since the 'id' serves as the primary identifier without status/category role.",
+        "Object property links like 'belongs_to_a_review_reference' require additional tables not referenced in this table's schema."
+      ]
+    },
+    "p2": {
+      "table": "preferences",
+      "class": "Review_preference",
+      "column_mappings": [
+        {
+          "column": "preferences.id",
+          "kind": "data_property",
+          "predicate": "has_a_degree",
+          "datatype": "xsd:integer",
+          "confidence": 0.6,
+          "notes": "Mapped to Review_preference's has_a_degree data property, as id is the primary identifier column"
+        }
+      ]
+    },
+    "final": {
+      "table": "preferences",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": "class",
+        "name": "Review_preference"
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"preferences\"",
+        "filters": [],
+        "assumptions": [
+          "The 'id' column in 'preferences' is mapped as the primary identifier for Review_preference without additional status/category filtering."
+        ],
+        "needs_code_discovery": []
+      },
+      "mappings": [
+        {
+          "kind": "data_property",
+          "column": "preferences.id",
+          "predicate": "has_a_degree",
+          "datatype": "xsd:integer"
+        }
+      ],
+      "planner_notes": [
+        "Review_preference is the best match (0.8 score) over Conference (0.2) based on identifier alignment and lack of other properties.",
+        "No explicit WHERE filters are required since 'id' acts as the primary key without status filtering.",
+        "Object property links like 'belongs_to_a_review_reference' require additional tables not referenced in this schema."
+      ]
+    },
+    "no_match": false
+  },
+  "final_struct": {
+    "table": "preferences",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": "class",
+      "name": "Review_preference"
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"preferences\"",
+      "filters": [],
+      "assumptions": [
+        "The 'id' column in 'preferences' is mapped as the primary identifier for Review_preference without additional status/category filtering."
+      ],
+      "needs_code_discovery": []
+    },
+    "mappings": [
+      {
+        "kind": "data_property",
+        "column": "preferences.id",
+        "predicate": "has_a_degree",
+        "datatype": "xsd:integer"
+      }
+    ],
+    "planner_notes": [
+      "Review_preference is the best match (0.8 score) over Conference (0.2) based on identifier alignment and lack of other properties.",
+      "No explicit WHERE filters are required since 'id' acts as the primary key without status filtering.",
+      "Object property links like 'belongs_to_a_review_reference' require additional tables not referenced in this schema."
+    ]
+  },
+  "ttl_emitted": true,
+  "saved_to": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl"
+}

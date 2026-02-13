@@ -1,0 +1,216 @@
+{
+  "table": "administrators",
+  "base_prefix": "http://conference#",
+  "paths": {
+    "db_folder": "src/utils_io/DB_json_out",
+    "semantic_memory": "src/utils_io/DB_json_out/Semantic_Memory",
+    "mappings_ttl": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl",
+    "reports_dir": "src/utils_io/DB_json_out/Mappings/mapping_reports"
+  },
+  "planner": {
+    "step0": {
+      "schema_summary": {
+        "main_entity_tables": [
+          "acceptances",
+          "administrators",
+          "bids",
+          "co_write_paper",
+          "conferences",
+          "conferences",
+          "documents",
+          "papers",
+          "pc_members",
+          "person_administrator",
+          "person_conference",
+          "person_document",
+          "persons",
+          "preferences",
+          "program_committee_chairs",
+          "program_committee_members",
+          "program_committees",
+          "read_by_reviewer",
+          "reviewer_bidding_started",
+          "reviews",
+          "set_max_papers",
+          "subject_areas"
+        ],
+        "relationship_tables": [
+          "paper_person",
+          "paper_subject_area",
+          "program_committee_chair_review",
+          "person_administrator",
+          "co_write_paper",
+          "person_conference",
+          "person_document",
+          "mark_conflict_interests",
+          "conference_administrator",
+          "read_by_reviewer",
+          "reviewer_bidding_started",
+          "set_max_papers"
+        ],
+        "notable_discriminators": [
+          "persons.type",
+          "papers.type",
+          "acceptances.type"
+        ]
+      },
+      "ontology_summary": {
+        "main_classes": [
+          "Person",
+          "Paper",
+          "Conference",
+          "Review",
+          "Committee",
+          "Conference_proceedings",
+          "Topic",
+          "Track"
+        ],
+        "high_value_object_properties": [
+          "has_Paper",
+          "has_Reviewer",
+          "has_SubjectArea",
+          "has_Author",
+          "has_Review",
+          "is_Part_of_Conference"
+        ]
+      },
+      "notes": [
+        "Person.roles (type, reviewer, author) map to ontology Person specialization classes",
+        "Program_committees require mapping to Committee class hierarchy",
+        "Co_write_paper represents n-ary authorship relationships",
+        "Conference_contribution status transitions tracked in acceptance tables",
+        "Document URIs need special handling as they appear to represent external content"
+      ]
+    },
+    "p0": {
+      "table": "administrators",
+      "no_match": false,
+      "best": {
+        "kind": "class",
+        "name": "Organizer",
+        "score": 0.95,
+        "why": "The table 'administrators' represents system administrators managing conference processes, closely aligning with the ontology class 'Organizer' which often oversees conference operations. The unique ID column matches the discriminator role expected for an entity class, and 'accept_paper' aligns with contribution management responsibilities."
+      },
+      "alt": {
+        "kind": "class",
+        "name": "Committee",
+        "score": 0.85,
+        "why": "Administrators could functionally overlap with Committee members in some conference contexts, particularly as part of organizing committees. However, the ontology context for Committee lacks explicit properties matching the 'accept_paper' metric."
+      },
+      "stop_reason": null
+    },
+    "p1": {
+      "table": "administrators",
+      "use_filter": false,
+      "filters": [],
+      "use_join": false,
+      "join_hints": [],
+      "notes": [
+        "Numeric column 'accept_paper' has unknown codes; further discovery needed for semantic interpretation"
+      ]
+    },
+    "p2": {
+      "table": "administrators",
+      "class": "Organizer",
+      "column_mappings": [
+        {
+          "column": "administrators.id",
+          "kind": "data_property",
+          "predicate": "hasID",
+          "datatype": "xsd:integer",
+          "confidence": 0.95,
+          "notes": "Unique identifier for each administrator, mapped to a standard identifier property."
+        },
+        {
+          "column": "administrators.accept_paper",
+          "kind": "data_property",
+          "predicate": "hasAcceptedPapersCount",
+          "datatype": "xsd:integer",
+          "confidence": 0.9,
+          "notes": "Number of accepted papers managed by an administrator, aligned with contribution oversight responsibilities."
+        }
+      ]
+    },
+    "final": {
+      "table": "administrators",
+      "base_prefix": "http://conference#",
+      "chosen": {
+        "kind": "class",
+        "name": "Organizer"
+      },
+      "sql": {
+        "sqlQuery": "SELECT * FROM \"administrators\"",
+        "filters": [],
+        "assumptions": [
+          "The 'id' column serves as a unique identifier matching the 'Organizer' class discriminator.",
+          "The 'accept_paper' numeric metric correlates to paper acceptance management roles of organizers."
+        ],
+        "needs_code_discovery": [
+          "administrators.accept_paper"
+        ]
+      },
+      "mappings": [
+        {
+          "kind": "data_property",
+          "column": "administrators.id",
+          "predicate": "hasID",
+          "datatype": "xsd:integer",
+          "confidence": 0.95
+        },
+        {
+          "kind": "data_property",
+          "column": "administrators.accept_paper",
+          "predicate": "hasAcceptedPapersCount",
+          "datatype": "xsd:integer",
+          "confidence": 0.9
+        }
+      ],
+      "planner_notes": [
+        "Alternative mapping to 'Committee' considered but rejected due to missing contribution management property alignment.",
+        "Code discovery required for 'accept_paper' to validate semantic meaning of numeric values."
+      ]
+    },
+    "no_match": false
+  },
+  "final_struct": {
+    "table": "administrators",
+    "base_prefix": "http://conference#",
+    "chosen": {
+      "kind": "class",
+      "name": "Organizer"
+    },
+    "sql": {
+      "sqlQuery": "SELECT * FROM \"administrators\"",
+      "filters": [],
+      "assumptions": [
+        "The 'id' column serves as a unique identifier matching the 'Organizer' class discriminator.",
+        "The 'accept_paper' numeric metric correlates to paper acceptance management roles of organizers."
+      ],
+      "needs_code_discovery": [
+        "administrators.accept_paper"
+      ]
+    },
+    "mappings": [
+      {
+        "kind": "data_property",
+        "column": "administrators.id",
+        "predicate": "hasID",
+        "datatype": "xsd:integer",
+        "confidence": 0.95
+      },
+      {
+        "kind": "data_property",
+        "column": "administrators.accept_paper",
+        "predicate": "hasAcceptedPapersCount",
+        "datatype": "xsd:integer",
+        "confidence": 0.9
+      }
+    ],
+    "planner_notes": [
+      "Alternative mapping to 'Committee' considered but rejected due to missing contribution management property alignment.",
+      "Code discovery required for 'accept_paper' to validate semantic meaning of numeric values."
+    ]
+  },
+  "ttl_emitted": true,
+  "saved_to": "src/utils_io/DB_json_out/Mappings/Mappings_r2rml.ttl"
+}

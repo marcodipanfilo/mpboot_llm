@@ -1,0 +1,316 @@
+@prefix rr:  <http://www.w3.org/ns/r2rml#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix :   <http://conference#> .
+
+
+<urn:r2rml:acceptances> a rr:TriplesMap ;
+    rr:logicalTable [ a rr:R2RMLView ;
+            rr:sqlQuery "SELECT * FROM \"acceptances\"" ] ;
+    rr:subjectMap [ a rr:SubjectMap, rr:TermMap ;
+            rr:class :Accepted_contribution ;
+            rr:template "http://conference#Accepted_contribution/{id}" ;
+            rr:termType rr:IRI ] .
+
+<urn:r2rml:administrators> a rr:TriplesMap ;
+    rr:logicalTable [ a rr:R2RMLView ;
+            rr:sqlQuery "SELECT * FROM \"administrators\"" ] ;
+    rr:subjectMap [ a rr:SubjectMap, rr:TermMap ;
+            rr:class :Organizer ;
+            rr:template "http://conference#Organizer/{id}" ;
+            rr:termType rr:IRI ] ;
+    rr:predicateObjectMap
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "id" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasID
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "accept_paper" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasAcceptedPapersCount
+        ] .
+
+<urn:r2rml:bids> a rr:TriplesMap ;
+    rr:logicalTable [ a rr:R2RMLView ;
+            rr:sqlQuery "SELECT * FROM \"bids\"" ] ;
+    rr:subjectMap [ a rr:SubjectMap, rr:TermMap ;
+            rr:class :Conference_fees ;
+            rr:template "http://conference#Conference_fees/{id}" ;
+            rr:termType rr:IRI ] ;
+    rr:predicateObjectMap
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "bid" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :amount
+        ] .
+
+<urn:r2rml:documents> a rr:TriplesMap ;
+    rr:logicalTable [ a rr:R2RMLView ;
+            rr:sqlQuery "SELECT * FROM \"documents\"" ] ;
+    rr:subjectMap [ a rr:SubjectMap, rr:TermMap ;
+            rr:class :Conference_document ;
+            rr:template "http://conference#Conference_document/{id}" ;
+            rr:termType rr:IRI ] .
+
+<urn:r2rml:papers> a rr:TriplesMap ;
+    rr:logicalTable [ a rr:R2RMLView ;
+            rr:sqlQuery "SELECT * FROM \"papers\" WHERE type = <VAL>" ] ;
+    rr:subjectMap [ a rr:SubjectMap, rr:TermMap ;
+            rr:class :Document ;
+            rr:template "http://conference#Document/{id}" ;
+            rr:termType rr:IRI ] ;
+    rr:predicateObjectMap
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "accepted" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasAcceptedStatus
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "decision" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasDecisionCode
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "id" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasIdentifier
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "paper_id" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasAlternativeIdentifier
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "read_by_meta_reviewer" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasReadByMetaReviewer
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "rejected" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasRejectionStatus
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "title" ;
+                rr:datatype xsd:string ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasTitle
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "type" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasCategory
+        ] .
+
+<urn:r2rml:pc_members> a rr:TriplesMap ;
+    rr:logicalTable [ a rr:R2RMLView ;
+            rr:sqlQuery "SELECT * FROM \"pc_members\"" ] ;
+    rr:subjectMap [ a rr:SubjectMap, rr:TermMap ;
+            rr:class :Committee_member ;
+            rr:template "http://conference#Committee_member/{id}" ;
+            rr:termType rr:IRI ] ;
+    rr:predicateObjectMap
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "max_papers" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasReviewLimit
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "added" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasJoinTimestamp
+        ] .
+
+<urn:r2rml:persons> a rr:TriplesMap ;
+    rr:logicalTable [ a rr:R2RMLView ;
+            rr:sqlQuery "SELECT * FROM \"persons\"" ] ;
+    rr:subjectMap [ a rr:SubjectMap, rr:TermMap ;
+            rr:class :Person ;
+            rr:template "http://conference#Person/{id}" ;
+            rr:termType rr:IRI ] ;
+    rr:predicateObjectMap
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "id" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasID
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "name" ;
+                rr:datatype xsd:string ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasName
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "email" ;
+                rr:datatype xsd:string ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasEmail
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "author" ;
+                rr:datatype xsd:boolean ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :isAuthor
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "co_author" ;
+                rr:datatype xsd:boolean ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :isCoAuthor
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "reviewer" ;
+                rr:datatype xsd:boolean ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :isReviewer
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "sys_user" ;
+                rr:datatype xsd:boolean ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :isSystemUser
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "type" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasRole
+        ] .
+
+<urn:r2rml:preferences> a rr:TriplesMap ;
+    rr:logicalTable [ a rr:R2RMLView ;
+            rr:sqlQuery "SELECT * FROM \"preferences\"" ] ;
+    rr:subjectMap [ a rr:SubjectMap, rr:TermMap ;
+            rr:class :Review_preference ;
+            rr:template "http://conference#Review_preference/{id}" ;
+            rr:termType rr:IRI ] ;
+    rr:predicateObjectMap
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "id" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :has_a_degree
+        ] .
+
+<urn:r2rml:program_committee_chairs> a rr:TriplesMap ;
+    rr:logicalTable [ a rr:R2RMLView ;
+            rr:sqlQuery "SELECT * FROM \"program_committee_chairs\"" ] ;
+    rr:subjectMap [ a rr:SubjectMap, rr:TermMap ;
+            rr:class :Chair ;
+            rr:template "http://conference#Chair/{id}" ;
+            rr:termType rr:IRI ] ;
+    rr:predicateObjectMap
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "added" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :assignmentDate
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "max_papers" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :maxPapersAssigned
+        ] .
+
+<urn:r2rml:program_committees> a rr:TriplesMap ;
+    rr:logicalTable [ a rr:R2RMLView ;
+            rr:sqlQuery "SELECT * FROM \"program_committees\"" ] ;
+    rr:subjectMap [ a rr:SubjectMap, rr:TermMap ;
+            rr:class :Program_committee ;
+            rr:template "http://conference#Program_committee/{id}" ;
+            rr:termType rr:IRI ] .
+
+<urn:r2rml:reviews> a rr:TriplesMap ;
+    rr:logicalTable [ a rr:R2RMLView ;
+            rr:sqlQuery "SELECT * FROM \"reviews\"" ] ;
+    rr:subjectMap [ a rr:SubjectMap, rr:TermMap ;
+            rr:class :Review ;
+            rr:template "http://conference#Review/{id}" ;
+            rr:termType rr:IRI ] ;
+    rr:predicateObjectMap
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "id" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasID
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "comment" ;
+                rr:datatype xsd:string ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasComment
+        ] ,
+        [ a rr:PredicateObjectMap ;
+            rr:objectMap [ a rr:ObjectMap, rr:TermMap ;
+                rr:column "type" ;
+                rr:datatype xsd:integer ;
+                rr:termType rr:Literal
+            ] ;
+            rr:predicate :hasType
+        ] .

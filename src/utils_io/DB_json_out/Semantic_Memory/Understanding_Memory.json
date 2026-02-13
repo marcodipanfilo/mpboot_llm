@@ -1,0 +1,1577 @@
+{
+  "tables": {
+    "persons": {
+      "pattern": "None",
+      "definition": "Stores individual profiles with roles in academic publications and conferences.",
+      "synonyms": [
+        "users",
+        "people",
+        "participants",
+        "members"
+      ],
+      "columns": {
+        "assigned_by_reviewer": {
+          "type": "integer",
+          "definition": "User who assigned reviewer role",
+          "synonyms": [
+            "assigner",
+            "allocator",
+            "designator"
+          ]
+        },
+        "author": {
+          "type": "boolean default false",
+          "definition": "Indicates user is paper author",
+          "synonyms": [
+            "writer",
+            "contributor"
+          ]
+        },
+        "co_author": {
+          "type": "boolean default false",
+          "definition": "Indicates user is co-author of a paper",
+          "synonyms": [
+            "collaborator",
+            "joint-author"
+          ]
+        },
+        "email": {
+          "type": "varchar(43)",
+          "definition": "Contact email address",
+          "synonyms": [
+            "mail",
+            "email address"
+          ]
+        },
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique person identifier",
+          "synonyms": [
+            "pid",
+            "uid",
+            "user ID"
+          ]
+        },
+        "name": {
+          "type": "varchar(24)",
+          "definition": "Full name of person",
+          "synonyms": [
+            "username",
+            "display name"
+          ]
+        },
+        "reviewer": {
+          "type": "boolean default false",
+          "definition": "Indicates user is a paper reviewer",
+          "synonyms": [
+            "evaluator",
+            "assessor"
+          ]
+        },
+        "sys_user": {
+          "type": "boolean default false",
+          "definition": "Indicates if user is a system account",
+          "synonyms": [
+            "admin",
+            "service account"
+          ]
+        },
+        "type": {
+          "type": "integer default",
+          "definition": "Person role category",
+          "synonyms": [
+            "role",
+            "classification"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "persons \u2192 papers   via administrators (administrators.id  \u2192  administrators.accept_paper)\npersons \u2192 papers   via co_write_paper (co_write_paper.co_author  \u2192  co_write_paper.paper)\npersons \u2192 papers   via paper_person (paper_person.reviewer  \u2192  paper_person.paper)\npersons \u2192 conferences   via person_conference (person_conference.pid  \u2192  person_conference.cid)\npersons \u2192 documents   via person_document (person_document.pid  \u2192  person_document.did)\npersons \u2192 papers   via person_paper (person_paper.author  \u2192  person_paper.paper)\npersons \u2192 papers   via read_by_reviewer (read_by_reviewer.reviewer  \u2192  read_by_reviewer.paper)",
+        "continuity_text": "{\n  \"continuity\": [\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"papers\",\n      \"from_column\": \"persons.id\",\n      \"to_column\": \"papers.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"persons\": {},\n            \"administrators\": {},\n            \"papers\": {}\n          }\n        }\n      ],\n      \"bridge_table\": \"administrators\",\n      \"bridge_fk_from_source\": \"administrators.id\",\n      \"bridge_fk_to_target\": \"administrators.accept_paper\"\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"papers\",\n      \"from_column\": \"persons.id\",\n      \"to_column\": \"papers.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"1\",\n              \"name\": \"Shinji Kapler\",\n              \"email\": \"Shinji.Kapler@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            },\n            \"co_write_paper\": {\n              \"co_author\": \"1\",\n              \"paper\": \"947\"\n            },\n            \"papers\": {\n              \"id\": \"947\",\n              \"paper_id\": \"13\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"1337\",\n              \"title\": \"thanklessly swiveled polers oinked\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"1\",\n              \"name\": \"Shinji Kapler\",\n              \"email\": \"Shinji.Kapler@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            },\n            \"co_write_paper\": {\n              \"co_author\": \"1\",\n              \"paper\": \"949\"\n            },\n            \"papers\": {\n              \"id\": \"949\",\n              \"paper_id\": \"211\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"1337\",\n              \"title\": \"summable heliocentricity excretions recelebrating dually plateauing\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"3\",\n              \"name\": \"Dama Leino\",\n              \"email\": \"Dama.Leino@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            },\n            \"co_write_paper\": {\n              \"co_author\": \"3\",\n              \"paper\": \"112\"\n            },\n            \"papers\": {\n              \"id\": \"112\",\n              \"paper_id\": \"44\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"110\",\n              \"title\": \"burlily thanklessly swiveled polers oinked apnea maxillary\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"3\",\n              \"name\": \"Dama Leino\",\n              \"email\": \"Dama.Leino@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            },\n            \"co_write_paper\": {\n              \"co_author\": \"3\",\n              \"paper\": \"113\"\n            },\n            \"papers\": {\n              \"id\": \"113\",\n              \"paper_id\": \"272\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"110\",\n              \"title\": \"desexes summable heliocentricity excretions recelebrating\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"3\",\n              \"name\": \"Dama Leino\",\n              \"email\": \"Dama.Leino@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            },\n            \"co_write_paper\": {\n              \"co_author\": \"3\",\n              \"paper\": \"1484\"\n            },\n            \"papers\": {\n              \"id\": \"1484\",\n              \"paper_id\": \"89\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"992\",\n              \"title\": \"swiveled polers oinked apnea maxillary\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            }\n          }\n        }\n      ],\n      \"bridge_table\": \"co_write_paper\",\n      \"bridge_fk_from_source\": \"co_write_paper.co_author\",\n      \"bridge_fk_to_target\": \"co_write_paper.paper\"\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"papers\",\n      \"from_column\": \"persons.id\",\n      \"to_column\": \"papers.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"12\",\n              \"name\": \"Patroklus Hertel\",\n              \"email\": \"Patroklus.Hertel@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            },\n            \"paper_person\": {\n              \"paper\": \"10\",\n              \"reviewer\": \"12\"\n            },\n            \"papers\": {\n              \"id\": \"10\",\n              \"paper_id\": \"36\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"14\",\n              \"title\": \"embossers cerebrum gloves mohairs admiralties bewigged playgoers cheques batting\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"13\",\n              \"name\": \"Dymas Houskeeper\",\n              \"email\": \"Dymas.Houskeeper@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            },\n            \"paper_person\": {\n              \"paper\": \"10\",\n              \"reviewer\": \"13\"\n            },\n            \"papers\": {\n              \"id\": \"10\",\n              \"paper_id\": \"36\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"14\",\n              \"title\": \"embossers cerebrum gloves mohairs admiralties bewigged playgoers cheques batting\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"17\",\n              \"name\": \"Alon Paulik\",\n              \"email\": \"Alon.Paulik@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            },\n            \"paper_person\": {\n              \"paper\": \"19\",\n              \"reviewer\": \"17\"\n            },\n            \"papers\": {\n              \"id\": \"19\",\n              \"paper_id\": \"188\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"1607\",\n              \"title\": \"earings circumscribed paralyzingly pouchy surrejoinders chestiest measurage tonsils\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"1302\",\n              \"name\": \"Dunja Luchenbill\",\n              \"email\": \"Dunja.Luchenbill@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            },\n            \"paper_person\": {\n              \"paper\": \"19\",\n              \"reviewer\": \"1302\"\n            },\n            \"papers\": {\n              \"id\": \"19\",\n              \"paper_id\": \"188\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"1607\",\n              \"title\": \"earings circumscribed paralyzingly pouchy surrejoinders chestiest measurage tonsils\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"1018\",\n              \"name\": \"Misty Holladay\",\n              \"email\": \"Misty.Holladay@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            },\n            \"paper_person\": {\n              \"paper\": \"29\",\n              \"reviewer\": \"1018\"\n            },\n            \"papers\": {\n              \"id\": \"29\",\n              \"paper_id\": \"125\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"28\",\n              \"title\": \"coreless tuberculoses environs hulled preexamination\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            }\n          }\n        }\n      ],\n      \"bridge_table\": \"paper_person\",\n      \"bridge_fk_from_source\": \"paper_person.reviewer\",\n      \"bridge_fk_to_target\": \"paper_person.paper\"\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"conferences\",\n      \"from_column\": \"persons.id\",\n      \"to_column\": \"conferences.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"17\",\n              \"name\": \"Alon Paulik\",\n              \"email\": \"Alon.Paulik@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            },\n            \"person_conference\": {\n              \"cid\": \"20\",\n              \"pid\": \"17\"\n            },\n            \"conferences\": {\n              \"id\": \"20\",\n              \"site_url\": \"http://SIGXYZ-2014.tld\",\n              \"accepts_hardcopy_submissions\": null,\n              \"logo_url\": null,\n              \"date\": \"2014-05-05\",\n              \"name\": \"SIGXYZ\",\n              \"reviews_per_paper\": null\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"56\",\n              \"name\": \"Izazkun Suleski\",\n              \"email\": \"Izazkun.Suleski@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            },\n            \"person_conference\": {\n              \"cid\": \"20\",\n              \"pid\": \"56\"\n            },\n            \"conferences\": {\n              \"id\": \"20\",\n              \"site_url\": \"http://SIGXYZ-2014.tld\",\n              \"accepts_hardcopy_submissions\": null,\n              \"logo_url\": null,\n              \"date\": \"2014-05-05\",\n              \"name\": \"SIGXYZ\",\n              \"reviews_per_paper\": null\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"83\",\n              \"name\": \"Mikio Brunston\",\n              \"email\": \"Mikio.Brunston@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            },\n            \"person_conference\": {\n              \"cid\": \"20\",\n              \"pid\": \"83\"\n            },\n            \"conferences\": {\n              \"id\": \"20\",\n              \"site_url\": \"http://SIGXYZ-2014.tld\",\n              \"accepts_hardcopy_submissions\": null,\n              \"logo_url\": null,\n              \"date\": \"2014-05-05\",\n              \"name\": \"SIGXYZ\",\n              \"reviews_per_paper\": null\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"106\",\n              \"name\": \"Pantyslawa Pemble\",\n              \"email\": \"Pantyslawa.Pemble@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            },\n            \"person_conference\": {\n              \"cid\": \"20\",\n              \"pid\": \"106\"\n            },\n            \"conferences\": {\n              \"id\": \"20\",\n              \"site_url\": \"http://SIGXYZ-2014.tld\",\n              \"accepts_hardcopy_submissions\": null,\n              \"logo_url\": null,\n              \"date\": \"2014-05-05\",\n              \"name\": \"SIGXYZ\",\n              \"reviews_per_paper\": null\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"persons\": {\n              \"id\": \"116\",\n              \"name\": \"Aspasa Abaunza\",\n              \"email\": \"Aspasa.Abaunza@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            },\n            \"person_conference\": {\n              \"cid\": \"20\",\n              \"pid\": \"116\"\n            },\n            \"conferences\": {\n              \"id\": \"20\",\n              \"site_url\": \"http://SIGXYZ-2014.tld\",\n              \"accepts_hardcopy_submissions\": null,\n              \"logo_url\": null,\n              \"date\": \"2014-05-05\",\n              \"name\": \"SIGXYZ\",\n              \"reviews_per_paper\": null\n            }\n          }\n        }\n      ],\n      \"bridge_table\": \"person_conference\",\n      \"bridge_fk_from_source\": \"person_conference.pid\",\n      \"bridge_fk_to_target\": \"person_conference.cid\"\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"documents\",\n      \"from_column\": \"persons.id\",\n      \"to_column\": \"documents.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"persons\": {},\n            \"person_document\": {},\n            \"documents\": {}\n          }\n        }\n      ],\n      \"bridge_table\": \"person_document\",\n      \"bridge_fk_from_source\": \"person_document.pid\",\n      \"bridge_fk_to_target\": \"person_document.did\"\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"papers\",\n      \"from_column\": \"persons.id\",\n      \"to_column\": \"papers.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"persons\": {},\n            \"person_paper\": {},\n            \"papers\": {}\n          }\n        }\n      ],\n      \"bridge_table\": \"person_paper\",\n      \"bridge_fk_from_source\": \"person_paper.author\",\n      \"bridge_fk_to_target\": \"person_paper.paper\"\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"papers\",\n      \"from_column\": \"persons.id\",\n      \"to_column\": \"papers.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"persons\": {},\n            \"read_by_reviewer\": {},\n            \"papers\": {}\n          }\n        }\n      ],\n      \"bridge_table\": \"read_by_reviewer\",\n      \"bridge_fk_from_source\": \"read_by_reviewer.reviewer\",\n      \"bridge_fk_to_target\": \"read_by_reviewer.paper\"\n    }\n  ]\n}",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "acceptances": {
+      "pattern": "None",
+      "definition": "Records of accepted agreements or consents between parties",
+      "synonyms": [
+        "Consents",
+        "Approvals",
+        "Permissions"
+      ],
+      "columns": {
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique identifier for each acceptance record",
+          "synonyms": [
+            "ID",
+            "Identifier",
+            "Record ID"
+          ]
+        },
+        "type": {
+          "type": "integer default",
+          "definition": "Classification indicating the category of acceptance",
+          "synonyms": [
+            "Category",
+            "Kind",
+            "Classification"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'acceptances'.",
+        "continuity_text": "No continuity data found for entity 'acceptances'.",
+        "semantic_unit": [
+          "acceptances"
+        ]
+      }
+    },
+    "administrators": {
+      "pattern": "None",
+      "definition": "Entity representing system administrators managing conference paper processes.",
+      "synonyms": [
+        "sys_admins",
+        "conf_admins",
+        "admins",
+        "conference_organizers"
+      ],
+      "columns": {
+        "accept_paper": {
+          "type": "integer",
+          "definition": "Number of accepted papers associated with an administrator",
+          "synonyms": [
+            "papers_accepted",
+            "accepted_count",
+            "accepted_papers"
+          ]
+        },
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique identifier for each administrator",
+          "synonyms": [
+            "admin_id",
+            "administrator_id",
+            "unique_id"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'administrators'.",
+        "continuity_text": "No continuity data found for entity 'administrators'.",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "bids": {
+      "pattern": "None",
+      "definition": "Records details of bids made in an auction or similar process.",
+      "synonyms": [
+        "Offers",
+        "Tender",
+        "Bidding",
+        "AuctionBids"
+      ],
+      "columns": {
+        "adjusted": {
+          "type": "integer",
+          "definition": "Modified or adjusted value of the bid.",
+          "synonyms": [
+            "Amended",
+            "Modified",
+            "Revised"
+          ]
+        },
+        "bid": {
+          "type": "integer",
+          "definition": "Numerical value representing the bid amount.",
+          "synonyms": [
+            "Amount",
+            "BidValue",
+            "Offer"
+          ]
+        },
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique identifier for each bid record.",
+          "synonyms": [
+            "ID",
+            "BidID",
+            "RecordID"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'bids'.",
+        "continuity_text": "No continuity data found for entity 'bids'.",
+        "semantic_unit": [
+          "bids"
+        ]
+      }
+    },
+    "co_write_paper": {
+      "pattern": "None",
+      "definition": "Links co-authors to the papers they have collaborated on.",
+      "synonyms": [
+        "collaboration",
+        "co_authorship",
+        "author_paper"
+      ],
+      "columns": {
+        "co_author": {
+          "type": "integer not null",
+          "definition": "Author collaborating on a paper.",
+          "synonyms": [
+            "collaborator",
+            "co_writer",
+            "partner"
+          ]
+        },
+        "paper": {
+          "type": "integer not null",
+          "definition": "Academic work co-authored.",
+          "synonyms": [
+            "article",
+            "publication",
+            "research_paper"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'co_write_paper'.",
+        "continuity_text": "No continuity data found for entity 'co_write_paper'.",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "conference_administrator": {
+      "pattern": "None",
+      "definition": "Links administrators to conferences they manage.",
+      "synonyms": [
+        "conference_coordinator",
+        "admin_conference_link",
+        "conf_admin_map"
+      ],
+      "columns": {
+        "aid": {
+          "type": "integer not null",
+          "definition": "Unique administrator identifier",
+          "synonyms": [
+            "admin_id",
+            "admin_number",
+            "administrator_key"
+          ]
+        },
+        "cid": {
+          "type": "integer not null",
+          "definition": "Unique conference identifier",
+          "synonyms": [
+            "conference_id",
+            "conf_number",
+            "event_code"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'conference_administrator'.",
+        "continuity_text": "No continuity data found for entity 'conference_administrator'.",
+        "semantic_unit": [
+          "conference_administrator"
+        ]
+      }
+    },
+    "conferences": {
+      "pattern": "None",
+      "definition": "Stores academic conference details like name, date, and website.",
+      "synonyms": [
+        "events",
+        "symposiums"
+      ],
+      "columns": {
+        "accepts_hardcopy_submissions": {
+          "type": "varchar(199)",
+          "definition": "Hardcopy submission indicator",
+          "synonyms": [
+            "hardcopy_allowed",
+            "paper_submission_type"
+          ]
+        },
+        "date": {
+          "type": "date",
+          "definition": "Conference occurrence date",
+          "synonyms": [
+            "event_date",
+            "scheduled_date"
+          ]
+        },
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique conference identifier",
+          "synonyms": [
+            "conference_id",
+            "event_id"
+          ]
+        },
+        "logo_url": {
+          "type": "varchar(199)",
+          "definition": "Conference logo image URL",
+          "synonyms": [
+            "logo_image_url",
+            "conference_logo"
+          ]
+        },
+        "name": {
+          "type": "varchar(6)",
+          "definition": "Conference name abbreviation",
+          "synonyms": [
+            "title",
+            "conference_name"
+          ]
+        },
+        "reviews_per_paper": {
+          "type": "integer",
+          "definition": "Reviews required per paper",
+          "synonyms": [
+            "reviews_per_submission",
+            "paper_reviews_count"
+          ]
+        },
+        "site_url": {
+          "type": "varchar(22)",
+          "definition": "Official website URL",
+          "synonyms": [
+            "website",
+            "conference_url"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "conferences \u2192 persons   via person_conference (person_conference.cid  \u2192  person_conference.pid)",
+        "continuity_text": "{\n  \"continuity\": [\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"persons\",\n      \"from_column\": \"conferences.id\",\n      \"to_column\": \"persons.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"conferences\": {\n              \"id\": \"20\",\n              \"site_url\": \"http://SIGXYZ-2014.tld\",\n              \"accepts_hardcopy_submissions\": null,\n              \"logo_url\": null,\n              \"date\": \"2014-05-05\",\n              \"name\": \"SIGXYZ\",\n              \"reviews_per_paper\": null\n            },\n            \"person_conference\": {\n              \"cid\": \"20\",\n              \"pid\": \"17\"\n            },\n            \"persons\": {\n              \"id\": \"17\",\n              \"name\": \"Alon Paulik\",\n              \"email\": \"Alon.Paulik@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"conferences\": {\n              \"id\": \"20\",\n              \"site_url\": \"http://SIGXYZ-2014.tld\",\n              \"accepts_hardcopy_submissions\": null,\n              \"logo_url\": null,\n              \"date\": \"2014-05-05\",\n              \"name\": \"SIGXYZ\",\n              \"reviews_per_paper\": null\n            },\n            \"person_conference\": {\n              \"cid\": \"20\",\n              \"pid\": \"56\"\n            },\n            \"persons\": {\n              \"id\": \"56\",\n              \"name\": \"Izazkun Suleski\",\n              \"email\": \"Izazkun.Suleski@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"conferences\": {\n              \"id\": \"20\",\n              \"site_url\": \"http://SIGXYZ-2014.tld\",\n              \"accepts_hardcopy_submissions\": null,\n              \"logo_url\": null,\n              \"date\": \"2014-05-05\",\n              \"name\": \"SIGXYZ\",\n              \"reviews_per_paper\": null\n            },\n            \"person_conference\": {\n              \"cid\": \"20\",\n              \"pid\": \"83\"\n            },\n            \"persons\": {\n              \"id\": \"83\",\n              \"name\": \"Mikio Brunston\",\n              \"email\": \"Mikio.Brunston@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"conferences\": {\n              \"id\": \"20\",\n              \"site_url\": \"http://SIGXYZ-2014.tld\",\n              \"accepts_hardcopy_submissions\": null,\n              \"logo_url\": null,\n              \"date\": \"2014-05-05\",\n              \"name\": \"SIGXYZ\",\n              \"reviews_per_paper\": null\n            },\n            \"person_conference\": {\n              \"cid\": \"20\",\n              \"pid\": \"106\"\n            },\n            \"persons\": {\n              \"id\": \"106\",\n              \"name\": \"Pantyslawa Pemble\",\n              \"email\": \"Pantyslawa.Pemble@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"conferences\": {\n              \"id\": \"20\",\n              \"site_url\": \"http://SIGXYZ-2014.tld\",\n              \"accepts_hardcopy_submissions\": null,\n              \"logo_url\": null,\n              \"date\": \"2014-05-05\",\n              \"name\": \"SIGXYZ\",\n              \"reviews_per_paper\": null\n            },\n            \"person_conference\": {\n              \"cid\": \"20\",\n              \"pid\": \"116\"\n            },\n            \"persons\": {\n              \"id\": \"116\",\n              \"name\": \"Aspasa Abaunza\",\n              \"email\": \"Aspasa.Abaunza@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        }\n      ],\n      \"bridge_table\": \"person_conference\",\n      \"bridge_fk_from_source\": \"person_conference.cid\",\n      \"bridge_fk_to_target\": \"person_conference.pid\"\n    }\n  ]\n}",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "details_entered": {
+      "pattern": "None",
+      "definition": "Record of entries with associated identifiers",
+      "synonyms": [
+        "Entry Logs",
+        "Input Records",
+        "Data Entries"
+      ],
+      "columns": {
+        "aid": {
+          "type": "integer not null",
+          "definition": "Identifier for an agent",
+          "synonyms": [
+            "Agent",
+            "Representative"
+          ]
+        },
+        "cid": {
+          "type": "integer not null",
+          "definition": "Identifier for a customer",
+          "synonyms": [
+            "Customer",
+            "Client"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'details_entered'.",
+        "continuity_text": "No continuity data found for entity 'details_entered'.",
+        "semantic_unit": [
+          "details_entered"
+        ]
+      }
+    },
+    "documents": {
+      "pattern": "None",
+      "definition": "Data records linked to persons via person-document associations",
+      "synonyms": [
+        "files",
+        "papers",
+        "docs"
+      ],
+      "columns": {
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique identifier for the document",
+          "synonyms": [
+            "identifier",
+            "number",
+            "key"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "documents \u2192 persons   via person_document (person_document.did  \u2192  person_document.pid)",
+        "continuity_text": "{\n  \"continuity\": [\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"persons\",\n      \"from_column\": \"documents.id\",\n      \"to_column\": \"persons.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"documents\": {},\n            \"person_document\": {},\n            \"persons\": {}\n          }\n        }\n      ],\n      \"bridge_table\": \"person_document\",\n      \"bridge_fk_from_source\": \"person_document.did\",\n      \"bridge_fk_to_target\": \"person_document.pid\"\n    }\n  ]\n}",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "enable_virtual_meeting": {
+      "pattern": "None",
+      "definition": "Table for managing virtual meeting activation with entity IDs.",
+      "synonyms": [
+        "virtual meeting setup",
+        "web conference configuration",
+        "online meeting activation"
+      ],
+      "columns": {
+        "aid": {
+          "type": "integer not null",
+          "definition": "User account identifier",
+          "synonyms": [
+            "account ID",
+            "user ID",
+            "login ID"
+          ]
+        },
+        "cid": {
+          "type": "integer not null",
+          "definition": "Organization identifier",
+          "synonyms": [
+            "company ID",
+            "business ID",
+            "entity code"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'enable_virtual_meeting'.",
+        "continuity_text": "No continuity data found for entity 'enable_virtual_meeting'.",
+        "semantic_unit": [
+          "enable_virtual_meeting"
+        ]
+      }
+    },
+    "enter_review_criteria": {
+      "pattern": "None",
+      "definition": "Criteria for determining entry into a review process.",
+      "synonyms": [
+        "Review Entry Standards",
+        "Admission Review Rules",
+        "Entry Evaluation Conditions"
+      ],
+      "columns": {
+        "aid": {
+          "type": "integer not null",
+          "definition": "Unique identifier for an application or account",
+          "synonyms": [
+            "Application Number",
+            "Case ID",
+            "Request Identifier"
+          ]
+        },
+        "cid": {
+          "type": "integer not null",
+          "definition": "Identifier for specific review criteria",
+          "synonyms": [
+            "Rule ID",
+            "Standard Number",
+            "Condition Identifier"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'enter_review_criteria'.",
+        "continuity_text": "No continuity data found for entity 'enter_review_criteria'.",
+        "semantic_unit": [
+          "enter_review_criteria"
+        ]
+      }
+    },
+    "finalize_paper_assignment": {
+      "pattern": "None",
+      "definition": "Records assignments of papers to finalization processes.",
+      "synonyms": [
+        "paper finalization logs",
+        "document completion records",
+        "academic assignment tracker"
+      ],
+      "columns": {
+        "aid": {
+          "type": "integer not null",
+          "definition": "Assignment unique identifier",
+          "synonyms": [
+            "assignment ID",
+            "task number"
+          ]
+        },
+        "cid": {
+          "type": "integer not null",
+          "definition": "Corresponding document or case identifier",
+          "synonyms": [
+            "case ID",
+            "document number",
+            "paper code"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'finalize_paper_assignment'.",
+        "continuity_text": "No continuity data found for entity 'finalize_paper_assignment'.",
+        "semantic_unit": [
+          "finalize_paper_assignment"
+        ]
+      }
+    },
+    "hardcopy_mailing_manifests_p": {
+      "pattern": "None",
+      "definition": "Physical mail distribution records for printed materials",
+      "synonyms": [
+        "hardcopy manifests",
+        "physical mail logs",
+        "printed mailing records",
+        "mailing lists (hardcopy)"
+      ],
+      "columns": {
+        "aid": {
+          "type": "integer not null",
+          "definition": "Agent/organization identifier",
+          "synonyms": [
+            "Agent ID",
+            "Agency Code",
+            "Operator Number",
+            "Agent Code"
+          ]
+        },
+        "cid": {
+          "type": "integer not null",
+          "definition": "Recipient client identifier",
+          "synonyms": [
+            "Client ID",
+            "Account Number",
+            "Customer Code",
+            "Recipient Code"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'hardcopy_mailing_manifests_p'.",
+        "continuity_text": "No continuity data found for entity 'hardcopy_mailing_manifests_p'.",
+        "semantic_unit": [
+          "hardcopy_mailing_manifests_p"
+        ]
+      }
+    },
+    "mark_conflict_interests": {
+      "pattern": "None",
+      "definition": "Records conflicts of interest between conference members and paper submissions.",
+      "synonyms": [
+        "conflict_records",
+        "interest_flags"
+      ],
+      "columns": {
+        "conference_member": {
+          "type": "integer not null",
+          "definition": "Individuals in the conference.",
+          "synonyms": [
+            "member_id",
+            "participant"
+          ]
+        },
+        "paper": {
+          "type": "integer not null",
+          "definition": "Submitted academic work.",
+          "synonyms": [
+            "submission",
+            "manuscript"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'mark_conflict_interests'.",
+        "continuity_text": "No continuity data found for entity 'mark_conflict_interests'.",
+        "semantic_unit": [
+          "mark_conflict_interests"
+        ]
+      }
+    },
+    "paper_person": {
+      "pattern": "None",
+      "definition": "Links papers to assigned reviewers or evaluators",
+      "synonyms": [
+        "paper_reviewer",
+        "document_assignee"
+      ],
+      "columns": {
+        "paper": {
+          "type": "integer not null",
+          "definition": "Research paper identifier",
+          "synonyms": [
+            "paper_id",
+            "document_id"
+          ]
+        },
+        "reviewer": {
+          "type": "integer not null",
+          "definition": "Person assigned to evaluate paper",
+          "synonyms": [
+            "reviewer_id",
+            "evaluator_id"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'paper_person'.",
+        "continuity_text": "No continuity data found for entity 'paper_person'.",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "paper_subject_area": {
+      "pattern": "None",
+      "definition": "Associates papers with their subject areas",
+      "synonyms": [
+        "paper-topic",
+        "document-area",
+        "paper-field"
+      ],
+      "columns": {
+        "pid": {
+          "type": "integer not null",
+          "definition": "Unique identifier for a research paper",
+          "synonyms": [
+            "paper_id",
+            "doc_id",
+            "publication_id"
+          ]
+        },
+        "sid": {
+          "type": "integer not null",
+          "definition": "Unique identifier for a subject area category",
+          "synonyms": [
+            "subject_id",
+            "area_id",
+            "topic_id"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'paper_subject_area'.",
+        "continuity_text": "No continuity data found for entity 'paper_subject_area'.",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "papers": {
+      "pattern": "None",
+      "definition": "Research submissions with metadata, authors, reviewers, and subject areas",
+      "synonyms": [
+        "documents",
+        "submissions",
+        "manuscripts",
+        "publications"
+      ],
+      "columns": {
+        "accepted": {
+          "type": "integer",
+          "definition": "Indicates acceptance status (0/1)",
+          "synonyms": [
+            "accept_flag",
+            "accepted_status"
+          ]
+        },
+        "author": {
+          "type": "integer",
+          "definition": "ID of the primary author",
+          "synonyms": [
+            "auth_id",
+            "author_person_id"
+          ]
+        },
+        "decision": {
+          "type": "integer",
+          "definition": "Final decision code for submission",
+          "synonyms": [
+            "decision_code",
+            "outcome"
+          ]
+        },
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique identifier for the paper",
+          "synonyms": [
+            "identifier",
+            "unique_id"
+          ]
+        },
+        "paper_id": {
+          "type": "integer",
+          "definition": "Alternative paper identifier",
+          "synonyms": [
+            "alt_id",
+            "document_number"
+          ]
+        },
+        "read_by_meta_reviewer": {
+          "type": "integer",
+          "definition": "Indicates if meta-reviewer read paper",
+          "synonyms": [
+            "read_flag",
+            "meta_read_status"
+          ]
+        },
+        "rejected": {
+          "type": "integer",
+          "definition": "Indicates rejection status (0/1)",
+          "synonyms": [
+            "reject_flag",
+            "rejected_status"
+          ]
+        },
+        "title": {
+          "type": "varchar(101)",
+          "definition": "Title of the academic paper",
+          "synonyms": [
+            "name",
+            "paper_name"
+          ]
+        },
+        "type": {
+          "type": "integer default",
+          "definition": "Category or type of submission",
+          "synonyms": [
+            "category",
+            "paper_type"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "papers \u2192 documents   (papers.id  \u2192  documents.id)\npapers \u2192 persons   (papers.id  \u2192  persons.id)\npapers \u2192 persons   via administrators (administrators.accept_paper  \u2192  administrators.id)\npapers \u2192 persons   via co_write_paper (co_write_paper.paper  \u2192  co_write_paper.co_author)\npapers \u2192 persons   via paper_person (paper_person.paper  \u2192  paper_person.reviewer)\npapers \u2192 subject_areas   via paper_subject_area (paper_subject_area.pid  \u2192  paper_subject_area.sid)\npapers \u2192 persons   via person_paper (person_paper.paper  \u2192  person_paper.author)\npapers \u2192 persons   via read_by_reviewer (read_by_reviewer.paper  \u2192  read_by_reviewer.reviewer)",
+        "continuity_text": "{\n  \"continuity\": [\n    {\n      \"kind\": \"direct\",\n      \"target\": \"documents\",\n      \"from_column\": \"papers.id\",\n      \"to_column\": \"documents.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"1078\",\n              \"paper_id\": \"37\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": null,\n              \"title\": \"cerebrum gloves mohairs admiralties\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"2\"\n            },\n            \"documents\": {\n              \"id\": \"1078\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"1785\",\n              \"paper_id\": \"65\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": null,\n              \"title\": \"cheaters riffled kerneling napoleons\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"2\"\n            },\n            \"documents\": {\n              \"id\": \"1785\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"733\",\n              \"paper_id\": \"233\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"1072\",\n              \"title\": \"equalled sandwiching bewitchment cheaters\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"documents\": {\n              \"id\": \"733\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"291\",\n              \"paper_id\": \"364\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"2017\",\n              \"title\": \"immediately canzona interrelated cooked\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"documents\": {\n              \"id\": \"291\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"1935\",\n              \"paper_id\": \"27\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": null,\n              \"title\": \"pirog desexes summable heliocentricity excretions recelebrating\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"2\"\n            },\n            \"documents\": {\n              \"id\": \"1935\"\n            }\n          }\n        }\n      ]\n    },\n    {\n      \"kind\": \"direct\",\n      \"target\": \"persons\",\n      \"from_column\": \"papers.id\",\n      \"to_column\": \"persons.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"733\",\n              \"paper_id\": \"233\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"1072\",\n              \"title\": \"equalled sandwiching bewitchment cheaters\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"persons\": {\n              \"id\": \"1072\",\n              \"name\": \"Honami Docherty\",\n              \"email\": \"Honami.Docherty@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"f\",\n              \"author\": \"t\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"291\",\n              \"paper_id\": \"364\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"2017\",\n              \"title\": \"immediately canzona interrelated cooked\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"persons\": {\n              \"id\": \"2017\",\n              \"name\": \"Mudri Gamero\",\n              \"email\": \"Mudri.Gamero@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"f\",\n              \"author\": \"t\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"98\",\n              \"paper_id\": \"119\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"94\",\n              \"title\": \"giros podgy vagus kinkiest xix\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"persons\": {\n              \"id\": \"94\",\n              \"name\": \"Casandra Shire\",\n              \"email\": \"Casandra.Shire@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"f\",\n              \"author\": \"t\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"1558\",\n              \"paper_id\": \"296\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"1617\",\n              \"title\": \"surges preheats loggias reconciliating photocatalyst\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"persons\": {\n              \"id\": \"1617\",\n              \"name\": \"Augusto Kempson\",\n              \"email\": \"Augusto.Kempson@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"f\",\n              \"author\": \"t\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"510\",\n              \"paper_id\": \"42\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"509\",\n              \"title\": \"dwelling scrapped prat islanded burlily\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"persons\": {\n              \"id\": \"509\",\n              \"name\": \"Prebrana Kekiwi\",\n              \"email\": \"Prebrana.Kekiwi@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"f\",\n              \"author\": \"t\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        }\n      ]\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"persons\",\n      \"from_column\": \"papers.id\",\n      \"to_column\": \"persons.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"papers\": {},\n            \"administrators\": {},\n            \"persons\": {}\n          }\n        }\n      ],\n      \"bridge_table\": \"administrators\",\n      \"bridge_fk_from_source\": \"administrators.accept_paper\",\n      \"bridge_fk_to_target\": \"administrators.id\"\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"persons\",\n      \"from_column\": \"papers.id\",\n      \"to_column\": \"persons.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"947\",\n              \"paper_id\": \"13\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"1337\",\n              \"title\": \"thanklessly swiveled polers oinked\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"co_write_paper\": {\n              \"co_author\": \"1\",\n              \"paper\": \"947\"\n            },\n            \"persons\": {\n              \"id\": \"1\",\n              \"name\": \"Shinji Kapler\",\n              \"email\": \"Shinji.Kapler@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"949\",\n              \"paper_id\": \"211\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"1337\",\n              \"title\": \"summable heliocentricity excretions recelebrating dually plateauing\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"co_write_paper\": {\n              \"co_author\": \"1\",\n              \"paper\": \"949\"\n            },\n            \"persons\": {\n              \"id\": \"1\",\n              \"name\": \"Shinji Kapler\",\n              \"email\": \"Shinji.Kapler@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"112\",\n              \"paper_id\": \"44\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"110\",\n              \"title\": \"burlily thanklessly swiveled polers oinked apnea maxillary\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"co_write_paper\": {\n              \"co_author\": \"3\",\n              \"paper\": \"112\"\n            },\n            \"persons\": {\n              \"id\": \"3\",\n              \"name\": \"Dama Leino\",\n              \"email\": \"Dama.Leino@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"113\",\n              \"paper_id\": \"272\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"110\",\n              \"title\": \"desexes summable heliocentricity excretions recelebrating\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"co_write_paper\": {\n              \"co_author\": \"3\",\n              \"paper\": \"113\"\n            },\n            \"persons\": {\n              \"id\": \"3\",\n              \"name\": \"Dama Leino\",\n              \"email\": \"Dama.Leino@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"1484\",\n              \"paper_id\": \"89\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"992\",\n              \"title\": \"swiveled polers oinked apnea maxillary\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"co_write_paper\": {\n              \"co_author\": \"3\",\n              \"paper\": \"1484\"\n            },\n            \"persons\": {\n              \"id\": \"3\",\n              \"name\": \"Dama Leino\",\n              \"email\": \"Dama.Leino@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        }\n      ],\n      \"bridge_table\": \"co_write_paper\",\n      \"bridge_fk_from_source\": \"co_write_paper.paper\",\n      \"bridge_fk_to_target\": \"co_write_paper.co_author\"\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"persons\",\n      \"from_column\": \"papers.id\",\n      \"to_column\": \"persons.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"10\",\n              \"paper_id\": \"36\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"14\",\n              \"title\": \"embossers cerebrum gloves mohairs admiralties bewigged playgoers cheques batting\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"paper_person\": {\n              \"paper\": \"10\",\n              \"reviewer\": \"12\"\n            },\n            \"persons\": {\n              \"id\": \"12\",\n              \"name\": \"Patroklus Hertel\",\n              \"email\": \"Patroklus.Hertel@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"10\",\n              \"paper_id\": \"36\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"14\",\n              \"title\": \"embossers cerebrum gloves mohairs admiralties bewigged playgoers cheques batting\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"paper_person\": {\n              \"paper\": \"10\",\n              \"reviewer\": \"13\"\n            },\n            \"persons\": {\n              \"id\": \"13\",\n              \"name\": \"Dymas Houskeeper\",\n              \"email\": \"Dymas.Houskeeper@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"19\",\n              \"paper_id\": \"188\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"1607\",\n              \"title\": \"earings circumscribed paralyzingly pouchy surrejoinders chestiest measurage tonsils\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"paper_person\": {\n              \"paper\": \"19\",\n              \"reviewer\": \"17\"\n            },\n            \"persons\": {\n              \"id\": \"17\",\n              \"name\": \"Alon Paulik\",\n              \"email\": \"Alon.Paulik@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"19\",\n              \"paper_id\": \"188\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"1607\",\n              \"title\": \"earings circumscribed paralyzingly pouchy surrejoinders chestiest measurage tonsils\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"paper_person\": {\n              \"paper\": \"19\",\n              \"reviewer\": \"1302\"\n            },\n            \"persons\": {\n              \"id\": \"1302\",\n              \"name\": \"Dunja Luchenbill\",\n              \"email\": \"Dunja.Luchenbill@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"papers\": {\n              \"id\": \"29\",\n              \"paper_id\": \"125\",\n              \"rejected\": null,\n              \"read_by_meta_reviewer\": null,\n              \"author\": \"28\",\n              \"title\": \"coreless tuberculoses environs hulled preexamination\",\n              \"decision\": null,\n              \"accepted\": null,\n              \"type\": \"1\"\n            },\n            \"paper_person\": {\n              \"paper\": \"29\",\n              \"reviewer\": \"1018\"\n            },\n            \"persons\": {\n              \"id\": \"1018\",\n              \"name\": \"Misty Holladay\",\n              \"email\": \"Misty.Holladay@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        }\n      ],\n      \"bridge_table\": \"paper_person\",\n      \"bridge_fk_from_source\": \"paper_person.paper\",\n      \"bridge_fk_to_target\": \"paper_person.reviewer\"\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"subject_areas\",\n      \"from_column\": \"papers.id\",\n      \"to_column\": \"subject_areas.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"papers\": {},\n            \"paper_subject_area\": {},\n            \"subject_areas\": {}\n          }\n        }\n      ],\n      \"bridge_table\": \"paper_subject_area\",\n      \"bridge_fk_from_source\": \"paper_subject_area.pid\",\n      \"bridge_fk_to_target\": \"paper_subject_area.sid\"\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"persons\",\n      \"from_column\": \"papers.id\",\n      \"to_column\": \"persons.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"papers\": {},\n            \"person_paper\": {},\n            \"persons\": {}\n          }\n        }\n      ],\n      \"bridge_table\": \"person_paper\",\n      \"bridge_fk_from_source\": \"person_paper.paper\",\n      \"bridge_fk_to_target\": \"person_paper.author\"\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"persons\",\n      \"from_column\": \"papers.id\",\n      \"to_column\": \"persons.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"papers\": {},\n            \"read_by_reviewer\": {},\n            \"persons\": {}\n          }\n        }\n      ],\n      \"bridge_table\": \"read_by_reviewer\",\n      \"bridge_fk_from_source\": \"read_by_reviewer.paper\",\n      \"bridge_fk_to_target\": \"read_by_reviewer.reviewer\"\n    }\n  ]\n}",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "pc_members": {
+      "pattern": "None",
+      "definition": "Program committee members.",
+      "synonyms": [
+        "committee members",
+        "program committee",
+        "committee participants"
+      ],
+      "columns": {
+        "added": {
+          "type": "integer",
+          "definition": "Timestamp when the member was added to the system.",
+          "synonyms": [
+            "add time",
+            "join timestamp"
+          ]
+        },
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique identifier for the program committee member.",
+          "synonyms": [
+            "unique ID",
+            "member ID"
+          ]
+        },
+        "max_papers": {
+          "type": "integer",
+          "definition": "Maximum number of papers the member can review.",
+          "synonyms": [
+            "review limit",
+            "paper cap"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "pc_members \u2192 persons   (pc_members.id  \u2192  persons.id)",
+        "continuity_text": "{\n  \"continuity\": [\n    {\n      \"kind\": \"direct\",\n      \"target\": \"persons\",\n      \"from_column\": \"pc_members.id\",\n      \"to_column\": \"persons.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"pc_members\": {\n              \"id\": \"316\",\n              \"max_papers\": null,\n              \"added\": null\n            },\n            \"persons\": {\n              \"id\": \"316\",\n              \"name\": \"Dijana Murfin\",\n              \"email\": \"Dijana.Murfin@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"pc_members\": {\n              \"id\": \"666\",\n              \"max_papers\": null,\n              \"added\": null\n            },\n            \"persons\": {\n              \"id\": \"666\",\n              \"name\": \"Kaveri Zombro\",\n              \"email\": \"Kaveri.Zombro@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"pc_members\": {\n              \"id\": \"247\",\n              \"max_papers\": null,\n              \"added\": null\n            },\n            \"persons\": {\n              \"id\": \"247\",\n              \"name\": \"Shaqeeqa Levra\",\n              \"email\": \"Shaqeeqa.Levra@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"pc_members\": {\n              \"id\": \"635\",\n              \"max_papers\": null,\n              \"added\": null\n            },\n            \"persons\": {\n              \"id\": \"635\",\n              \"name\": \"Tekla Gallerani\",\n              \"email\": \"Tekla.Gallerani@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"pc_members\": {\n              \"id\": \"1328\",\n              \"max_papers\": null,\n              \"added\": null\n            },\n            \"persons\": {\n              \"id\": \"1328\",\n              \"name\": \"Xiomara Plowe\",\n              \"email\": \"Xiomara.Plowe@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        }\n      ]\n    }\n  ]\n}",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "person_administrator": {
+      "pattern": "None",
+      "definition": "Links individuals to administrative roles or permissions.",
+      "synonyms": [
+        "user_admin",
+        "admin_user",
+        "staff_admin"
+      ],
+      "columns": {
+        "aid": {
+          "type": "integer not null",
+          "definition": "Unique administrator identifier",
+          "synonyms": [
+            "admin_id",
+            "adm_id"
+          ]
+        },
+        "pid": {
+          "type": "integer not null",
+          "definition": "Reference to person identifier",
+          "synonyms": [
+            "person_id",
+            "user_id"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'person_administrator'.",
+        "continuity_text": "No continuity data found for entity 'person_administrator'.",
+        "semantic_unit": [
+          "person_administrator"
+        ]
+      }
+    },
+    "person_conference": {
+      "pattern": "None",
+      "definition": "Associates persons with conferences",
+      "synonyms": [
+        "person_conference_link",
+        "conference_participants",
+        "event_person"
+      ],
+      "columns": {
+        "cid": {
+          "type": "integer not null",
+          "definition": "Conference identifier",
+          "synonyms": [
+            "conference_id",
+            "conf_id",
+            "meeting_id"
+          ]
+        },
+        "pid": {
+          "type": "integer not null",
+          "definition": "Person identifier",
+          "synonyms": [
+            "person_id",
+            "user_id",
+            "individual_id"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'person_conference'.",
+        "continuity_text": "No continuity data found for entity 'person_conference'.",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "person_document": {
+      "pattern": "None",
+      "definition": "Links persons to documents/papers they are associated with",
+      "synonyms": [
+        "person_paper",
+        "author_work",
+        "writer_document"
+      ],
+      "columns": {
+        "did": {
+          "type": "integer not null",
+          "definition": "Unique document identifier",
+          "synonyms": [
+            "document_id",
+            "paper_id"
+          ]
+        },
+        "pid": {
+          "type": "integer not null",
+          "definition": "Unique person identifier",
+          "synonyms": [
+            "person_id",
+            "author_id"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'person_document'.",
+        "continuity_text": "No continuity data found for entity 'person_document'.",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "person_paper": {
+      "pattern": "None",
+      "definition": "Links individuals to research papers they have authored or contributed to.",
+      "synonyms": [
+        "paper-person",
+        "research collaboration",
+        "authorship"
+      ],
+      "columns": {
+        "author": {
+          "type": "integer not null",
+          "definition": "Unique identifier for the author.",
+          "synonyms": [
+            "author ID",
+            "individual ID",
+            "researcher ID"
+          ]
+        },
+        "paper": {
+          "type": "integer not null",
+          "definition": "Unique identifier for the academic paper.",
+          "synonyms": [
+            "paper ID",
+            "document ID",
+            "publication ID",
+            "research ID"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'person_paper'.",
+        "continuity_text": "No continuity data found for entity 'person_paper'.",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "preferences": {
+      "pattern": "None",
+      "definition": "Stores user preferences or settings.",
+      "synonyms": [
+        "settings",
+        "options",
+        "choices"
+      ],
+      "columns": {
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique identifier for the preference.",
+          "synonyms": [
+            "identifier",
+            "ID",
+            "key"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'preferences'.",
+        "continuity_text": "No continuity data found for entity 'preferences'.",
+        "semantic_unit": [
+          "preferences"
+        ]
+      }
+    },
+    "program_committee_chair_review": {
+      "pattern": "None",
+      "definition": "Association between program committee chairs and their reviews",
+      "synonyms": [
+        "chair_reviews",
+        "committee_chairs_reviews",
+        "pc_chair_reviews"
+      ],
+      "columns": {
+        "pid": {
+          "type": "integer not null",
+          "definition": "Unique identifier for a program committee chair",
+          "synonyms": [
+            "chair_id",
+            "person_id",
+            "pc_member_id"
+          ]
+        },
+        "rid": {
+          "type": "integer not null",
+          "definition": "Unique identifier for an assigned review",
+          "synonyms": [
+            "review_id",
+            "evaluation_id",
+            "assessment_id"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'program_committee_chair_review'.",
+        "continuity_text": "No continuity data found for entity 'program_committee_chair_review'.",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "program_committee_chairs": {
+      "pattern": "None",
+      "definition": "Individuals serving as chairs on a program committee",
+      "synonyms": [
+        "committee chairs",
+        "program committee leads",
+        "pc chairs"
+      ],
+      "columns": {
+        "added": {
+          "type": "integer",
+          "definition": "Timestamp of committee chair assignment",
+          "synonyms": [
+            "addition date",
+            "assignment count"
+          ]
+        },
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique person identifier",
+          "synonyms": [
+            "person ID",
+            "member ID"
+          ]
+        },
+        "max_papers": {
+          "type": "integer",
+          "definition": "Maximum paper assignments allowed",
+          "synonyms": [
+            "paper limit",
+            "assignment cap"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "program_committee_chairs \u2192 persons   (program_committee_chairs.id  \u2192  persons.id)\nprogram_committee_chairs \u2192 reviews   via program_committee_chair_review (program_committee_chair_review.pid  \u2192  program_committee_chair_review.rid)",
+        "continuity_text": "{\n  \"continuity\": [\n    {\n      \"kind\": \"direct\",\n      \"target\": \"persons\",\n      \"from_column\": \"program_committee_chairs.id\",\n      \"to_column\": \"persons.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"program_committee_chairs\": {\n              \"id\": \"200\",\n              \"max_papers\": null,\n              \"added\": null\n            },\n            \"persons\": {\n              \"id\": \"200\",\n              \"name\": \"Lane Portes\",\n              \"email\": \"Lane.Portes@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"program_committee_chairs\": {\n              \"id\": \"678\",\n              \"max_papers\": null,\n              \"added\": null\n            },\n            \"persons\": {\n              \"id\": \"678\",\n              \"name\": \"Jace Ruotolo\",\n              \"email\": \"Jace.Ruotolo@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"program_committee_chairs\": {\n              \"id\": \"1034\",\n              \"max_papers\": null,\n              \"added\": null\n            },\n            \"persons\": {\n              \"id\": \"1034\",\n              \"name\": \"Casswallawn Scheiblich\",\n              \"email\": \"Casswallawn.Scheiblich@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"program_committee_chairs\": {\n              \"id\": \"535\",\n              \"max_papers\": null,\n              \"added\": null\n            },\n            \"persons\": {\n              \"id\": \"535\",\n              \"name\": \"Raaid Chrispen\",\n              \"email\": \"Raaid.Chrispen@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"program_committee_chairs\": {\n              \"id\": \"473\",\n              \"max_papers\": null,\n              \"added\": null\n            },\n            \"persons\": {\n              \"id\": \"473\",\n              \"name\": \"Ernestine Barkan\",\n              \"email\": \"Ernestine.Barkan@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        }\n      ]\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"reviews\",\n      \"from_column\": \"program_committee_chairs.id\",\n      \"to_column\": \"reviews.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"program_committee_chairs\": {},\n            \"program_committee_chair_review\": {},\n            \"reviews\": {}\n          }\n        }\n      ],\n      \"bridge_table\": \"program_committee_chair_review\",\n      \"bridge_fk_from_source\": \"program_committee_chair_review.pid\",\n      \"bridge_fk_to_target\": \"program_committee_chair_review.rid\"\n    }\n  ]\n}",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "program_committee_members": {
+      "pattern": "None",
+      "definition": "Links program committees to their members",
+      "synonyms": [
+        "committee members",
+        "committee participants",
+        "committee team"
+      ],
+      "columns": {
+        "program_committee": {
+          "type": "integer not null",
+          "definition": "Identifier linking to the program committee",
+          "synonyms": [
+            "committee ID",
+            "committee reference"
+          ]
+        },
+        "program_committee_member": {
+          "type": "integer not null",
+          "definition": "Identifier for the committee member",
+          "synonyms": [
+            "member ID",
+            "participant ID"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "program_committee_members \u2192 program_committees   (program_committee_members.program_committee  \u2192  program_committees.id)",
+        "continuity_text": "{\n  \"continuity\": [\n    {\n      \"kind\": \"direct\",\n      \"target\": \"program_committees\",\n      \"from_column\": \"program_committee_members.program_committee\",\n      \"to_column\": \"program_committees.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"program_committee_members\": {\n              \"program_committee\": \"318\",\n              \"program_committee_member\": \"316\"\n            },\n            \"program_committees\": {\n              \"id\": \"318\",\n              \"label\": \"ZSWC 2014 Program Committee\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"program_committee_members\": {\n              \"program_committee\": \"318\",\n              \"program_committee_member\": \"393\"\n            },\n            \"program_committees\": {\n              \"id\": \"318\",\n              \"label\": \"ZSWC 2014 Program Committee\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"program_committee_members\": {\n              \"program_committee\": \"318\",\n              \"program_committee_member\": \"1034\"\n            },\n            \"program_committees\": {\n              \"id\": \"318\",\n              \"label\": \"ZSWC 2014 Program Committee\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"program_committee_members\": {\n              \"program_committee\": \"318\",\n              \"program_committee_member\": \"1367\"\n            },\n            \"program_committees\": {\n              \"id\": \"318\",\n              \"label\": \"ZSWC 2014 Program Committee\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"program_committee_members\": {\n              \"program_committee\": \"318\",\n              \"program_committee_member\": \"1810\"\n            },\n            \"program_committees\": {\n              \"id\": \"318\",\n              \"label\": \"ZSWC 2014 Program Committee\"\n            }\n          }\n        }\n      ]\n    }\n  ]\n}",
+        "semantic_unit": [
+          "program_committee_members",
+          "program_committees"
+        ]
+      }
+    },
+    "program_committees": {
+      "pattern": "None",
+      "definition": "Groups responsible for overseeing academic or event programs.",
+      "synonyms": [
+        "committee groups",
+        "program boards",
+        "organizing teams"
+      ],
+      "columns": {
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique identifier for each committee.",
+          "synonyms": [
+            "committee ID",
+            "group ID",
+            "panel ID"
+          ]
+        },
+        "label": {
+          "type": "varchar(29)",
+          "definition": "Name or title of the committee.",
+          "synonyms": [
+            "committee name",
+            "group title",
+            "panel designation"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'program_committees'.",
+        "continuity_text": "No continuity data found for entity 'program_committees'.",
+        "semantic_unit": [
+          "program_committee_members",
+          "program_committees"
+        ]
+      }
+    },
+    "read_by_reviewer": {
+      "pattern": "None",
+      "definition": "Tracks papers read by specific reviewers in a system.",
+      "synonyms": [
+        "reviewer_paper",
+        "reader_paper",
+        "paper_reviewer"
+      ],
+      "columns": {
+        "paper": {
+          "type": "integer not null",
+          "definition": "Academic paper identifier",
+          "synonyms": [
+            "article",
+            "document",
+            "publication"
+          ]
+        },
+        "reviewer": {
+          "type": "integer not null",
+          "definition": "Reviewer who has read the paper",
+          "synonyms": [
+            "reader",
+            "critic",
+            "assessor"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'read_by_reviewer'.",
+        "continuity_text": "No continuity data found for entity 'read_by_reviewer'.",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "reviewer_bidding_started": {
+      "pattern": "None",
+      "definition": "Tracks when reviewers start bidding on assignments",
+      "synonyms": [
+        "reviewer_bidding_initiated",
+        "assignment_bidding_start",
+        "academic_reviewer_bidding"
+      ],
+      "columns": {
+        "aid": {
+          "type": "integer not null",
+          "definition": "Unique assignment identifier",
+          "synonyms": [
+            "Assignment ID",
+            "Application ID",
+            "Task ID"
+          ]
+        },
+        "cid": {
+          "type": "integer not null",
+          "definition": "Academic conference identifier",
+          "synonyms": [
+            "Conference ID",
+            "Category ID",
+            "Event ID"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'reviewer_bidding_started'.",
+        "continuity_text": "No continuity data found for entity 'reviewer_bidding_started'.",
+        "semantic_unit": [
+          "reviewer_bidding_started"
+        ]
+      }
+    },
+    "reviews": {
+      "pattern": "None",
+      "definition": "Reviewer feedback linked to documents and persons.",
+      "synonyms": [
+        "feedback",
+        "peer reviews",
+        "commentary"
+      ],
+      "columns": {
+        "comment": {
+          "type": "varchar(191)",
+          "definition": "Text content of the review.",
+          "synonyms": [
+            "feedback notes",
+            "assessment text"
+          ]
+        },
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique review identifier.",
+          "synonyms": [
+            "review ID",
+            "feedback ID"
+          ]
+        },
+        "type": {
+          "type": "integer default",
+          "definition": "Review category code.",
+          "synonyms": [
+            "category",
+            "review kind"
+          ]
+        },
+        "written": {
+          "type": "integer",
+          "definition": "ID of person who wrote review.",
+          "synonyms": [
+            "reviewer ID",
+            "author ID"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "reviews \u2192 documents   (reviews.id  \u2192  documents.id)\nreviews \u2192 persons   (reviews.id  \u2192  persons.id)\nreviews \u2192 program_committee_chairs   via program_committee_chair_review (program_committee_chair_review.rid  \u2192  program_committee_chair_review.pid)",
+        "continuity_text": "{\n  \"continuity\": [\n    {\n      \"kind\": \"direct\",\n      \"target\": \"documents\",\n      \"from_column\": \"reviews.id\",\n      \"to_column\": \"documents.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"reviews\": {\n              \"id\": \"2\",\n              \"written\": \"3\",\n              \"comment\": \"The paper \\\"XSWC-2014\\\" is mainly about XSWC-2014.\\\\nThis says about all about both its strong and weak suits.\\\\nHowever, the reviewer would like to highlight XSWC-2014 in particular\",\n              \"type\": \"0\"\n            },\n            \"documents\": {\n              \"id\": \"2\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"reviews\": {\n              \"id\": \"4\",\n              \"written\": \"5\",\n              \"comment\": \"The paper \\\"ZSWC-2014\\\" is mainly about ZSWC-2014.\\\\nThis says about all about both its strong and weak suits.\\\\nHowever, the reviewer would like to highlight ZSWC-2014 in particular\",\n              \"type\": \"0\"\n            },\n            \"documents\": {\n              \"id\": \"4\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"reviews\": {\n              \"id\": \"8\",\n              \"written\": \"9\",\n              \"comment\": \"In their paper 'XSWC-2015' the authors discuss XSWC-2015.\\\\nThis says about all about both its strong and weak suits.\\\\nHowever, the reviewer would like to highlight XSWC-2015 in particular\",\n              \"type\": \"0\"\n            },\n            \"documents\": {\n              \"id\": \"8\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"reviews\": {\n              \"id\": \"15\",\n              \"written\": \"16\",\n              \"comment\": \"The paper \\\"XSWC-2014\\\" is mainly about XSWC-2014.\\\\nThough apparently a contribution of remarkable novelty, 'XSWC-2014' also has its weaknesses.\",\n              \"type\": \"0\"\n            },\n            \"documents\": {\n              \"id\": \"15\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"reviews\": {\n              \"id\": \"21\",\n              \"written\": \"22\",\n              \"comment\": \"In their paper 'ZSWC-2014' the authors discuss ZSWC-2014.\\\\nThis says about all about both its strong and weak suits.\\\\nHowever, the reviewer would like to highlight ZSWC-2014 in particular\",\n              \"type\": \"0\"\n            },\n            \"documents\": {\n              \"id\": \"21\"\n            }\n          }\n        }\n      ]\n    },\n    {\n      \"kind\": \"direct\",\n      \"target\": \"persons\",\n      \"from_column\": \"reviews.id\",\n      \"to_column\": \"persons.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"reviews\": {\n              \"id\": \"2\",\n              \"written\": \"3\",\n              \"comment\": \"The paper \\\"XSWC-2014\\\" is mainly about XSWC-2014.\\\\nThis says about all about both its strong and weak suits.\\\\nHowever, the reviewer would like to highlight XSWC-2014 in particular\",\n              \"type\": \"0\"\n            },\n            \"persons\": {\n              \"id\": \"3\",\n              \"name\": \"Dama Leino\",\n              \"email\": \"Dama.Leino@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"reviews\": {\n              \"id\": \"4\",\n              \"written\": \"5\",\n              \"comment\": \"The paper \\\"ZSWC-2014\\\" is mainly about ZSWC-2014.\\\\nThis says about all about both its strong and weak suits.\\\\nHowever, the reviewer would like to highlight ZSWC-2014 in particular\",\n              \"type\": \"0\"\n            },\n            \"persons\": {\n              \"id\": \"5\",\n              \"name\": \"Aishwarya Hallmon\",\n              \"email\": \"Aishwarya.Hallmon@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"reviews\": {\n              \"id\": \"8\",\n              \"written\": \"9\",\n              \"comment\": \"In their paper 'XSWC-2015' the authors discuss XSWC-2015.\\\\nThis says about all about both its strong and weak suits.\\\\nHowever, the reviewer would like to highlight XSWC-2015 in particular\",\n              \"type\": \"0\"\n            },\n            \"persons\": {\n              \"id\": \"9\",\n              \"name\": \"Sadayoshi Englemann\",\n              \"email\": \"Sadayoshi.Englemann@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"f\",\n              \"co_author\": \"f\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"reviews\": {\n              \"id\": \"15\",\n              \"written\": \"16\",\n              \"comment\": \"The paper \\\"XSWC-2014\\\" is mainly about XSWC-2014.\\\\nThough apparently a contribution of remarkable novelty, 'XSWC-2014' also has its weaknesses.\",\n              \"type\": \"0\"\n            },\n            \"persons\": {\n              \"id\": \"16\",\n              \"name\": \"Ofelia Golde\",\n              \"email\": \"Ofelia.Golde@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        },\n        {\n          \"example_row\": {\n            \"reviews\": {\n              \"id\": \"21\",\n              \"written\": \"22\",\n              \"comment\": \"In their paper 'ZSWC-2014' the authors discuss ZSWC-2014.\\\\nThis says about all about both its strong and weak suits.\\\\nHowever, the reviewer would like to highlight ZSWC-2014 in particular\",\n              \"type\": \"0\"\n            },\n            \"persons\": {\n              \"id\": \"22\",\n              \"name\": \"Kellie Frenner\",\n              \"email\": \"Kellie.Frenner@secretresearch.tld\",\n              \"sys_user\": \"t\",\n              \"assigned_by_reviewer\": null,\n              \"reviewer\": \"t\",\n              \"author\": \"t\",\n              \"co_author\": \"t\",\n              \"type\": \"1\"\n            }\n          }\n        }\n      ]\n    },\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"program_committee_chairs\",\n      \"from_column\": \"reviews.id\",\n      \"to_column\": \"program_committee_chairs.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"reviews\": {},\n            \"program_committee_chair_review\": {},\n            \"program_committee_chairs\": {}\n          }\n        }\n      ],\n      \"bridge_table\": \"program_committee_chair_review\",\n      \"bridge_fk_from_source\": \"program_committee_chair_review.rid\",\n      \"bridge_fk_to_target\": \"program_committee_chair_review.pid\"\n    }\n  ]\n}",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    },
+    "set_max_papers": {
+      "pattern": "None",
+      "definition": "Configuration for setting maximum papers per reviewer",
+      "synonyms": [
+        "review limit setup",
+        "paper cap configuration",
+        "maximum review assignment"
+      ],
+      "columns": {
+        "administrator": {
+          "type": "integer not null",
+          "definition": "Administrator user identifier",
+          "synonyms": [
+            "admin ID",
+            "system admin"
+          ]
+        },
+        "program_committee_member": {
+          "type": "integer not null",
+          "definition": "Program committee member identifier",
+          "synonyms": [
+            "committee member ID",
+            "pc member"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "No links found for table 'set_max_papers'.",
+        "continuity_text": "No continuity data found for entity 'set_max_papers'.",
+        "semantic_unit": [
+          "set_max_papers"
+        ]
+      }
+    },
+    "subject_areas": {
+      "pattern": "None",
+      "definition": "Academic disciplines or classification categories for publications",
+      "synonyms": [
+        "fields",
+        "categories",
+        "domains",
+        "areas"
+      ],
+      "columns": {
+        "id": {
+          "type": "integer not null",
+          "definition": "Unique identifier for a subject area",
+          "synonyms": [
+            "identifier",
+            "ID",
+            "code"
+          ]
+        }
+      },
+      "relationships_evidence": {
+        "links_text": "subject_areas \u2192 papers   via paper_subject_area (paper_subject_area.sid  \u2192  paper_subject_area.pid)",
+        "continuity_text": "{\n  \"continuity\": [\n    {\n      \"kind\": \"bridge\",\n      \"target\": \"papers\",\n      \"from_column\": \"subject_areas.id\",\n      \"to_column\": \"papers.id\",\n      \"examples\": [\n        {\n          \"example_row\": {\n            \"subject_areas\": {},\n            \"paper_subject_area\": {},\n            \"papers\": {}\n          }\n        }\n      ],\n      \"bridge_table\": \"paper_subject_area\",\n      \"bridge_fk_from_source\": \"paper_subject_area.sid\",\n      \"bridge_fk_to_target\": \"paper_subject_area.pid\"\n    }\n  ]\n}",
+        "semantic_unit": [
+          "administrators",
+          "co_write_paper",
+          "conferences",
+          "documents",
+          "paper_person",
+          "paper_subject_area",
+          "papers",
+          "pc_members",
+          "person_conference",
+          "person_document",
+          "person_paper",
+          "persons",
+          "program_committee_chair_review",
+          "program_committee_chairs",
+          "read_by_reviewer",
+          "reviews",
+          "subject_areas"
+        ]
+      }
+    }
+  }
+}
