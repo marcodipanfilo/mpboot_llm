@@ -2,11 +2,11 @@
 Database Enrichment Agent
 Enriches ALL database tables with semantic metadata for ontology mapping.
 
-Reads  : src2/outputs/DB_as_json/tables_structure.json
-         src2/outputs/DB_as_json/relationship_summary.json
-         src2/memory/understanding.json
-         src2/inputs/database/dump.sql
-Writes : src2/memory/enrichment.json
+Reads  : src/outputs/DB_as_json/tables_structure.json
+         src/outputs/DB_as_json/relationship_summary.json
+         src/memory/understanding.json
+         src/inputs/database/dump.sql
+Writes : src/memory/enrichment.json
 
 Output shape (simple flat JSON):
 {
@@ -36,11 +36,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.llm_config import LLMConfig
 from config.llm_config import SELECTED_PROVIDER
 # ===== PATHS =====
-TABLES_STRUCTURE_FILE  = "src2/outputs/DB_as_json/tables_structure.json"
-RELATIONSHIP_FILE      = "src2/outputs/DB_as_json/relationship_summary.json"
-UNDERSTANDING_FILE     = "src2/memory/understanding.json"
-DUMP_FILE              = "src2/inputs/database/dump.sql"
-OUTPUT_DIR             = "src2/memory"
+TABLES_STRUCTURE_FILE  = "src/outputs/DB_as_json/tables_structure.json"
+RELATIONSHIP_FILE      = "src/outputs/DB_as_json/relationship_summary.json"
+UNDERSTANDING_FILE     = "src/memory/understanding.json"
+DUMP_FILE              = "src/inputs/database/dump.sql"
+OUTPUT_DIR             = "src/memory"
 OUTPUT_FILE            = os.path.join(OUTPUT_DIR, "enrichment.json")
 
 
