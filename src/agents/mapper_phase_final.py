@@ -14,6 +14,9 @@ Asks the LLM to revise the TTL for:
   B) WHERE-clause type correctness — verify that every sql_filter value
      matches the actual column data_type and real stored values from the
      dump samples (boolean → true/false, integer → 0/1, string → 'val').
+  C) Hyphen-safe SQL aliasing — convert rr:tableName to rr:sqlQuery with
+     underscore aliases for any table/column containing hyphens, so that
+     the R2RML engine never emits unquoted hyphens in JOIN SQL.
 
 The LLM must return ONLY valid Turtle/R2RML — no explanation, no markdown,
 no commentary.  Any wrapping (```turtle … ```) is stripped automatically.
@@ -30,7 +33,7 @@ import os
 import re
 import sys
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 import requests
 
@@ -116,6 +119,48 @@ def parse_ontology_summary(owl_path: str) -> str:
         f"DATA_PROPERTIES ({len(data_props)}):  " + ",  ".join(sorted(data_props)),
     ]
     return "\n".join(lines)
+
+
+# ============================================================
+# Hyphen inventory — detect tables/columns with hyphens
+# ============================================================
+
+def build_hyphen_inventory(tables_structure: Dict) -> Tuple[Dict[str, List[str]], str]:
+    """
+    Scan tables_structure.json for table names and column names containing
+    hyphens. Returns:
+      - hyphen_map: { table_name: [col_with_hyphen, ...] }
+                    Also includes table_name itself if it contains a hyphen
+                    (stored under key with value []).
+      - inventory_text: A human-readable summary for the LLM prompt.
+
+    Only entries that actually contain '-' are included.
+    """
+    hyphen_map: Dict[str, List[str]] = {}
+
+    for table_name, table_info in tables_structure.items():
+        hyphen_cols: List[str] = []
+        columns = table_info.get("columns", {})
+        for col_name in columns:
+            if "-" in col_name:
+                hyphen_cols.append(col_name)
+        # Record if the table name itself or any columns have hyphens
+        if "-" in table_name or hyphen_cols:
+            hyphen_map[table_name] = hyphen_cols
+
+    if not hyphen_map:
+        return hyphen_map, "(no hyphenated table/column names found)"
+
+    lines: List[str] = []
+    for tbl in sorted(hyphen_map.keys()):
+        cols = hyphen_map[tbl]
+        tbl_flag = " [TABLE NAME HAS HYPHEN]" if "-" in tbl else ""
+        if cols:
+            col_list = ", ".join(f'"{c}" → alias as "{c.replace("-", "_")}"' for c in cols)
+            lines.append(f'  TABLE "{tbl}"{tbl_flag}: {col_list}')
+        else:
+            lines.append(f'  TABLE "{tbl}"{tbl_flag}: (no hyphenated columns)')
+    return hyphen_map, "\n".join(lines)
 
 
 # ============================================================
@@ -365,6 +410,142 @@ def extract_ttl(raw: str) -> str:
 
 
 # ============================================================
+# Post-processing — deterministic hyphen-safe alias fix
+# ============================================================
+
+def postprocess_hyphen_aliases(ttl: str, hyphen_map: Dict[str, List[str]]) -> str:
+    """
+    Deterministic post-processing pass on the LLM output to guarantee that
+    hyphenated column/table names are handled correctly.
+
+    For every triples map that uses rr:tableName for a table which has
+    hyphenated columns (per hyphen_map), convert it to an rr:sqlQuery
+    that aliases those columns with underscores.
+
+    Also fixes any rr:child / rr:parent / rr:column values that reference
+    the original hyphenated name — they must use the underscore alias instead.
+
+    Additionally, for existing rr:sqlQuery blocks, ensures that any
+    hyphenated column referenced in SELECT, WHERE, or aliases is properly
+    double-quoted in the SQL and aliased with underscores.
+    """
+    if not hyphen_map:
+        return ttl
+
+    # Build a global lookup: original_hyphen_col -> underscore_alias
+    col_alias_map: Dict[str, str] = {}
+    for table_name, cols in hyphen_map.items():
+        for col in cols:
+            col_alias_map[col] = col.replace("-", "_")
+        if "-" in table_name:
+            # Table name itself needs quoting in SQL but no alias change
+            pass
+
+    # ── Step 1: Convert rr:tableName to rr:sqlQuery where needed ──
+    # Pattern: rr:logicalTable [ rr:tableName "sometable" ] ;
+    def replace_tablename(match):
+        table_name = match.group(1)
+        if table_name not in hyphen_map:
+            return match.group(0)  # no hyphens, leave as-is
+
+        hyphen_cols = hyphen_map[table_name]
+        if not hyphen_cols and "-" not in table_name:
+            return match.group(0)  # table is in map but no actual hyphens
+
+        # Build SELECT with aliases for hyphenated columns
+        # We use SELECT *, "hyphen-col" AS hyphen_col ... but that's redundant.
+        # Better: SELECT *, then individual aliases. But simplest correct approach
+        # is to explicitly list columns. However, we don't have the full column
+        # list here reliably, so use:  SELECT *, "hyp-col" AS hyp_col
+        alias_parts = []
+        for col in hyphen_cols:
+            alias_parts.append(f'"{col}" AS {col.replace("-", "_")}')
+
+        quoted_table = f'"{table_name}"'
+        if alias_parts:
+            aliases = ", ".join(alias_parts)
+            sql = f"SELECT *, {aliases} FROM {quoted_table}"
+        else:
+            sql = f"SELECT * FROM {quoted_table}"
+
+        return f"rr:logicalTable [ rr:sqlQuery '''{sql}''' ]"
+
+    ttl = re.sub(
+        r'''rr:logicalTable\s*\[\s*rr:tableName\s*"([^"]+)"\s*\]''',
+        replace_tablename,
+        ttl
+    )
+
+    # ── Step 2: Fix rr:sqlQuery blocks that reference hyphenated columns ──
+    # For existing sqlQuery entries, ensure hyphenated columns are quoted
+    # and aliased properly. This handles cases like:
+    #   SELECT "id", "is_co-author" AS is_co_author FROM "person" WHERE "is_co-author" = true
+    # which should already be correct if the LLM did its job, but we verify.
+
+    def fix_sql_query(match):
+        sql = match.group(1)
+        modified = False
+
+        for orig_col, alias in col_alias_map.items():
+            # Fix unquoted references to hyphenated columns in WHERE clauses
+            # e.g., WHERE is_co-author = true  →  WHERE "is_co-author" = true
+            # Pattern: word boundary + bare hyphenated col (not inside quotes)
+            # This is tricky with regex, so we do targeted replacements:
+
+            # Ensure the column is quoted in WHERE clauses
+            # Match: WHERE <optional stuff> bare_col = ...
+            where_bare = re.compile(
+                r'(WHERE\s+)' + re.escape(orig_col) + r'(\s*=)',
+                re.IGNORECASE
+            )
+            if where_bare.search(sql):
+                sql = where_bare.sub(rf'\1"{orig_col}"\2', sql)
+                modified = True
+
+            # Ensure aliased in SELECT if present but not aliased
+            # Look for "orig_col" without AS alias following it
+            select_pattern = re.compile(
+                r'"' + re.escape(orig_col) + r'"(?!\s+AS\s)',
+                re.IGNORECASE
+            )
+            # Only add alias in SELECT part (before FROM)
+            from_idx = sql.upper().find("FROM")
+            if from_idx > 0:
+                select_part = sql[:from_idx]
+                if f'"{orig_col}"' in select_part and f'AS {alias}' not in select_part:
+                    select_part = select_part.replace(
+                        f'"{orig_col}"',
+                        f'"{orig_col}" AS {alias}'
+                    )
+                    sql = select_part + sql[from_idx:]
+                    modified = True
+
+        if modified:
+            return f"rr:sqlQuery '''{sql}'''"
+        return match.group(0)
+
+    ttl = re.sub(
+        r"rr:sqlQuery\s*'''(.*?)'''",
+        fix_sql_query,
+        ttl,
+        flags=re.DOTALL
+    )
+
+    # ── Step 3: Fix rr:child / rr:parent / rr:column that still use hyphens ──
+    # These must reference the underscore alias, not the original hyphenated name
+    for orig_col, alias in col_alias_map.items():
+        # rr:child  "some-col"  →  rr:child  "some_col"
+        ttl = ttl.replace(f'rr:child  "{orig_col}"', f'rr:child  "{alias}"')
+        ttl = ttl.replace(f'rr:child "{orig_col}"',  f'rr:child "{alias}"')
+        ttl = ttl.replace(f'rr:parent  "{orig_col}"', f'rr:parent  "{alias}"')
+        ttl = ttl.replace(f'rr:parent "{orig_col}"',  f'rr:parent "{alias}"')
+        ttl = ttl.replace(f'rr:column  "{orig_col}"', f'rr:column  "{alias}"')
+        ttl = ttl.replace(f'rr:column "{orig_col}"',  f'rr:column "{alias}"')
+
+    return ttl
+
+
+# ============================================================
 # Prompt builder
 # ============================================================
 
@@ -373,6 +554,7 @@ def build_prompt(
     ontology_summary:  str,
     tables_structure:  Dict,
     samples_block:     str,
+    hyphen_inventory:  str,
 ) -> str:
     tables_json = json.dumps(tables_structure, indent=2, ensure_ascii=False)
 
@@ -383,8 +565,25 @@ You will receive:
 2. The ontology (classes and properties)
 3. The database schema (tables_structure.json)
 4. Sample data rows from each table
+5. An inventory of table/column names that contain hyphens
 
-Your job is to produce a REVISED version of the R2RML that fixes two categories of errors:
+Your job is to produce a REVISED version of the R2RML that fixes the following categories of errors:
+
+════════════════════════════════════════════════════════
+CRITICAL RULE — Preserve exact attribute representations
+════════════════════════════════════════════════════════
+Before applying any fix, you MUST preserve the EXACT spelling of every
+rr:column, rr:child, rr:parent, rr:template, rr:class, triple-map IRI,
+and SQL alias that appears in the INPUT R2RML — character for character.
+- Do NOT change underscores (_) to hyphens (-) or vice versa in any
+  rr:column, rr:child, or rr:parent value UNLESS specifically instructed
+  by Task C below.
+- Do NOT rename triple-map IRIs (e.g. <urn:r2rml:SE_bid>).
+- Do NOT change rr:template URIs.
+- Do NOT change rr:class values.
+- If the input uses "is_co_author" as an rr:column, keep it as "is_co_author".
+- If the input uses "hasbid_inv" as an rr:child, keep it as "hasbid_inv".
+When in doubt, copy the attribute value verbatim from the input.
 
 ════════════════════════════════════════════════════════
 TASK A — Fix property names against the ontology
@@ -413,6 +612,48 @@ Correct rules (PostgreSQL):
 - data_type = varchar  AND sample shows 'val'  -> WHERE col = 'val'  (quoted string)
 - NEVER use = true or = false for an integer column
 - NEVER use = 1 or = 0 for a boolean column
+
+════════════════════════════════════════════════════════
+TASK C — Hyphen-safe SQL aliasing (CRITICAL for R2RML engines)
+════════════════════════════════════════════════════════
+Some database column names and table names contain HYPHENS (e.g. "readbymeta-reviewer",
+"co-author", "is_co-author", "co-writepaper"). Hyphens in SQL identifiers are interpreted
+as the MINUS operator when unquoted, causing runtime errors like:
+    ERROR: column child.readbymeta does not exist
+because the engine reads  child.readbymeta-reviewer  as  child.readbymeta - reviewer.
+
+Most R2RML engines do NOT quote column names in the JOIN SQL they generate from
+rr:child / rr:parent. Therefore, hyphenated column names used in rr:child or rr:parent
+will ALWAYS break.
+
+THE FIX — for every triples map that references a table with hyphenated columns:
+
+1. If the triples map uses  rr:tableName "sometable"  and "sometable" has hyphenated
+   columns that are referenced anywhere (in rr:child, rr:parent, rr:column, or
+   in a joinCondition from another triples map):
+   → Replace  rr:tableName "sometable"
+     with     rr:sqlQuery '''SELECT *, "hyphen-col" AS hyphen_col FROM "sometable"'''
+   → This creates an underscore alias that the engine can safely use in JOINs.
+   → List ALL hyphenated columns as aliases, even if not all are used in this map
+     (another map's joinCondition may reference them via rr:parent).
+
+2. If the triples map already uses rr:sqlQuery, ensure that every hyphenated column
+   in the SELECT list is:
+   → Double-quoted: "hyphen-col"
+   → Aliased to underscore: "hyphen-col" AS hyphen_col
+   → And in WHERE clauses, the hyphenated column is double-quoted: WHERE "is_co-author" = true
+
+3. Every rr:child and rr:parent that previously referenced a hyphenated column
+   MUST now use the underscore alias instead:
+   → rr:child  "readbymeta-reviewer"   becomes   rr:child  "readbymeta_reviewer"
+   → rr:parent "co-author"             becomes   rr:parent "co_author"
+
+4. rr:column values for hyphenated columns should also use the underscore alias:
+   → rr:column "is_co-author"   becomes   rr:column "is_co_author"
+   (because rr:column is also used in generated SQL)
+
+Here is the inventory of tables/columns with hyphens:
+{hyphen_inventory}
 
 ════════════════════════════════════════════════════════
 OUTPUT REQUIREMENT — CRITICAL
@@ -446,7 +687,7 @@ INPUT 4 — SAMPLE DATA ROWS (from dump.sql)
 {samples_block}
 
 ════════════════════════════════════════════════════════
-Important: all capital letters found in the old mapping file should rempain in capital letter for the new final one, 
+Important: all capital letters found in the old mapping file should remain in capital letter for the new final one.
 Now output ONLY the revised R2RML Turtle  — start with @prefix:
 ════════════════════════════════════════════════════════"""
 
@@ -479,6 +720,11 @@ def run_final_revision():
     # ── Build compact ontology summary ───────────────────────
     ontology_summary = parse_ontology_summary(ONTOLOGY_FILE)
 
+    # ── Build hyphen inventory ───────────────────────────────
+    hyphen_map, hyphen_inventory = build_hyphen_inventory(tables_structure)
+    if hyphen_map:
+        log(f"  Found hyphenated identifiers in {len(hyphen_map)} table(s)")
+
     # ── Extract sample rows from dump ────────────────────────
     if dump_available:
         samples_block = build_samples_block(tables_structure, DUMP_FILE)
@@ -490,7 +736,10 @@ def run_final_revision():
         samples_block = "(dump.sql not available — no sample rows)"
 
     # ── Build prompt ─────────────────────────────────────────
-    prompt = build_prompt(ttl_content, ontology_summary, tables_structure, samples_block)
+    prompt = build_prompt(
+        ttl_content, ontology_summary, tables_structure,
+        samples_block, hyphen_inventory,
+    )
     prompt_chars = len(prompt)
 
     if prompt_chars > 600_000:
@@ -512,6 +761,12 @@ def run_final_revision():
     if "@prefix" not in revised_ttl:
         log("\n  WARNING: response does not contain @prefix — saving raw response anyway.", warn=True)
         revised_ttl = raw_response
+
+    # ── Deterministic post-processing: fix hyphen aliases ────
+    # This runs AFTER the LLM to catch anything it missed or hallucinated.
+    if hyphen_map:
+        revised_ttl = postprocess_hyphen_aliases(revised_ttl, hyphen_map)
+        log("  Applied deterministic hyphen-alias post-processing")
 
     ttl_lines = revised_ttl.count("\n")
 

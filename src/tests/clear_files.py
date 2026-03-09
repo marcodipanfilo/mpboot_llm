@@ -5,7 +5,8 @@ Deletes all JSON files in:
   - src/outputs/DB_as_json/
   - src/outputs/mappings/
   - src/outputs/
-Deletes specific non-JSON files (e.g. .ttl) and empties memory files.
+Deletes specific non-JSON files (e.g. .ttl).
+Deletes memory files in src/memory/.
 
 Usage:
   python clear_mappings.py           # dry run — shows what would be cleared
@@ -27,19 +28,16 @@ MEMORY_DIR     = "src/memory"
 # Non-JSON files that also need deletion
 EXTRA_DELETE_FILES = [
     os.path.join(MAPPINGS_DIR, "mappings_r2rml.ttl"),
+    os.path.join(MAPPINGS_DIR, "mappings_r2rml_final.ttl"),
 ]
 
-# Memory files in src/memory/ (these get emptied, not deleted)
+# Memory files in src/memory/ (these get DELETED, not emptied)
 MEMORY_FILES = [
-    "enrichment.json",
     "understanding.json",
+    "patterns.json",
+    "patterns_final.json",
+    "enrichment.json",
 ]
-
-
-def clear_json(path: str):
-    """Overwrite a JSON file with an empty dict {}."""
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump({}, f)
 
 
 def delete_file(path: str):
@@ -68,9 +66,9 @@ def process_glob(base_dir: str, pattern: str = "*.json"):
     return deleted, len(matches)
 
 
-def process_named(file_list: list, base_dir: str):
-    """Empty specific named files (for memory files)."""
-    cleared = 0
+def process_named_deletes(file_list: list, base_dir: str):
+    """Delete specific named files entirely."""
+    deleted = 0
     skipped = 0
     for fname in file_list:
         path = os.path.join(base_dir, fname)
@@ -81,13 +79,13 @@ def process_named(file_list: list, base_dir: str):
 
         size = os.path.getsize(path)
         if DRY_RUN:
-            print(f"  EMPTY  (dry run) {path}  [{size} bytes]")
+            print(f"  DELETE (dry run) {path}  [{size} bytes]")
         else:
-            clear_json(path)
-            print(f"  EMPTIED  {path}  [{size} bytes → 2 bytes]")
-            cleared += 1
+            delete_file(path)
+            print(f"  DELETED  {path}  [{size} bytes]")
+            deleted += 1
 
-    return cleared, skipped
+    return deleted, skipped
 
 
 def process_extra_deletes():
@@ -104,7 +102,7 @@ def process_extra_deletes():
             print(f"  DELETE (dry run) {path}  [{size} bytes]")
         else:
             delete_file(path)
-            print(f"  DELETED  {path}")
+            print(f"  DELETED  {path}  [{size} bytes]")
             deleted += 1
     return deleted, skipped
 
@@ -115,7 +113,7 @@ def main():
     if DRY_RUN:
         print("  MODE: DRY RUN — run with --confirm to apply")
     else:
-        print("  MODE: CONFIRMED — files will be deleted/cleared")
+        print("  MODE: CONFIRMED — files will be deleted")
     print("=" * 56)
 
     total_deleted = 0
@@ -142,9 +140,9 @@ def main():
     total_deleted += d
     total_found += f
 
-    print(f"\n── {MEMORY_DIR} (schema memory — emptied, not deleted) ──")
-    c, s = process_named(MEMORY_FILES, MEMORY_DIR)
-    total_deleted += c
+    print(f"\n── {MEMORY_DIR} (memory files — deleted) ──")
+    d, s = process_named_deletes(MEMORY_FILES, MEMORY_DIR)
+    total_deleted += d
     total_skipped += s
 
     print(f"\n{'=' * 56}")
@@ -153,7 +151,7 @@ def main():
         print(f"  {total_skipped} named files not found (already clean)")
         print(f"\n  Run with --confirm to apply.")
     else:
-        print(f"  {total_deleted} files deleted/cleared")
+        print(f"  {total_deleted} files deleted")
         print(f"  {total_skipped} named files not found (already clean)")
         print(f"\n  Ready for a fresh run: phase1 → phase2 → ... → phase6b → phase7")
     print("=" * 56)
