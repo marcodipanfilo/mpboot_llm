@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
 from owlready2 import get_ontology
 
-ONTOLOGY_PATH = os.environ.get("MPBOOT_ONTOLOGY_PATH", "src2/inputs/ontology/ontology.owl")
+ONTOLOGY_PATH = os.environ.get("MPBOOT_ONTOLOGY_PATH", "src/inputs/ontology/ontology.owl")
 
 _OWL_ONTO = None
 _BASE_IRI = None

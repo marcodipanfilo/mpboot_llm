@@ -1,1 +1,333 @@
-{}
+{
+  "acceptances": {
+    "table_meaning": "Stores individual acceptance records (e.g., a user or entity accepting a request, terms, or offer), each identified by a unique ID.",
+    "columns": {
+      "id": "Primary key, unique identifier for each acceptance record (typically an auto\u2011increment integer)."
+    }
+  },
+  "administrator_conference": {
+    "table_meaning": "A junction table that links administrators to the conferences they manage or are associated with, representing a many\u2011to\u2011many relationship between administrators and conferences.",
+    "columns": {
+      "aid": "Foreign key referencing the unique identifier of an administrator (e.g., user or staff ID).",
+      "cid": "Foreign key referencing the unique identifier of a conference (e.g., event or meeting ID)."
+    }
+  },
+  "administrators": {
+    "table_meaning": "Stores information about system administrators and whether each has the authority to accept submitted papers.",
+    "columns": {
+      "id": "Unique identifier for each administrator (primary key).",
+      "accept_paper": "Boolean flag (or similar) indicating if the administrator is permitted to accept/review submitted papers."
+    }
+  },
+  "associated_chairs": {
+    "table_meaning": "Stores records that represent chairs (e.g., committee or conference chairs) that are linked or associated with other entities in the system.",
+    "columns": {
+      "id": "Primary key uniquely identifying each associated chair record."
+    }
+  },
+  "author_not_reviewers": {
+    "table_meaning": "Stores a list of author identifiers that are excluded from acting as reviewers.",
+    "columns": {
+      "id": "Primary key for the record, typically referencing an author ID that should not be assigned reviewer duties."
+    }
+  },
+  "authors": {
+    "table_meaning": "Stores a list of unique author identifiers, representing individual authors in the system.",
+    "columns": {
+      "id": "Primary key for the author; a unique integer (or string) that identifies each author."
+    }
+  },
+  "bids": {
+    "table_meaning": "Stores individual bids submitted in an auction or procurement process, including any adjustments made to the original amount.",
+    "columns": {
+      "id": "Unique identifier for each bid record (primary key).",
+      "adjusted": "Flag or value indicating whether the bid amount has been modified after the initial submission.",
+      "bid": "The monetary value of the bid (original or current)."
+    }
+  },
+  "chairmans": {
+    "table_meaning": "Stores unique identifiers for individuals who serve or have served as chairmen (e.g., board chairs) in the organization.",
+    "columns": {
+      "id": "Primary key; a unique identifier for each chairman record."
+    }
+  },
+  "co_author_paper": {
+    "table_meaning": "A junction table that records which co\u2011authors (identified by cid) have contributed to which papers (identified by pid), representing a many\u2011to\u2011many relationship between authors and papers.",
+    "columns": {
+      "cid": "Identifier for a co\u2011author (author ID) in the system.",
+      "pid": "Identifier for a paper (paper ID) in the system."
+    }
+  },
+  "co_authors": {
+    "table_meaning": "Stores the identifiers of authors who are designated as co\u2011authors, typically referencing a primary authors table.",
+    "columns": {
+      "id": "Unique identifier for the co\u2011author; serves as a foreign key linking to the main authors table."
+    }
+  },
+  "conf_members": {
+    "table_meaning": "Stores the identifiers of members that belong to a particular conference or configuration group.",
+    "columns": {
+      "id": "Unique identifier of a member (likely a foreign key referencing a member record)."
+    }
+  },
+  "conference_administrator": {
+    "table_meaning": "Associative table linking conferences to their administrators, defining which administrator manages each conference.",
+    "columns": {
+      "cid": "Identifier of the conference (foreign key to the conferences table).",
+      "aid": "Identifier of the administrator (foreign key to the administrators table)."
+    }
+  },
+  "conference_chairs": {
+    "table_meaning": "Stores records for individuals who serve as chairs of conferences, typically linking to a person or user entity.",
+    "columns": {
+      "id": "Primary key identifier for each conference chair record."
+    }
+  },
+  "conference_members": {
+    "table_meaning": "A linking (junction) table that records which members are registered for or belong to each conference, representing a many\u2011to\u2011many relationship between conferences and members.",
+    "columns": {
+      "conference": "The identifier (likely a foreign key) of a conference.",
+      "conference_member": "The identifier (likely a foreign key) of a member who is associated with the conference."
+    }
+  },
+  "conferences": {
+    "table_meaning": "Stores basic information about academic or professional conferences, including identifiers, names, dates, and related web resources.",
+    "columns": {
+      "id": "Unique identifier for each conference record (primary key).",
+      "site_url": "Web address of the conference's official website.",
+      "accepts_hardcopy_submissions": "Flag indicating whether the conference accepts physical (paper) submissions (e.g., true/false or null if unknown).",
+      "logo_url": "Link to an image file containing the conference's logo.",
+      "date": "Date on which the conference takes place (typically the start date).",
+      "name": "Short name or acronym of the conference (e.g., SIGXYZ, XSWC).",
+      "reviews_per_paper": "Number of peer reviews each submitted paper is expected to receive (null if not recorded)."
+    }
+  },
+  "decisions": {
+    "table_meaning": "Stores individual decision records, each representing a choice or action taken within the application.",
+    "columns": {
+      "id": "Unique identifier (primary key) for each decision entry."
+    }
+  },
+  "details_entered": {
+    "table_meaning": "Stores a relationship between two entities, recording that a detail identified by one ID has been entered for the entity identified by the other ID.",
+    "columns": {
+      "cid": "Identifier of the primary entity (e.g., customer, case, content) for which a detail was entered.",
+      "aid": "Identifier of the associated detail or secondary entity (e.g., address, attribute, author) that was entered."
+    }
+  },
+  "documents": {
+    "table_meaning": "Stores a list of documents, each identified by a unique document ID.",
+    "columns": {
+      "id": "A unique identifier (primary key) for each document, represented as a string."
+    }
+  },
+  "enable_virtual_meeting": {
+    "table_meaning": "Associates a primary entity (such as an account, user, or appointment) with a specific meeting or conference to indicate that virtual meeting functionality is enabled for that pairing.",
+    "columns": {
+      "aid": "Identifier of the primary entity (e.g., account ID, user ID, or appointment ID).",
+      "cid": "Identifier of the meeting, conference, or client for which virtual meeting is permitted."
+    }
+  },
+  "external_reviewers": {
+    "table_meaning": "Stores records of reviewers who are external to the organization and the internal reviewer who assigned them to a review task.",
+    "columns": {
+      "id": "Primary key that uniquely identifies each external reviewer entry.",
+      "assigned_by_reviewer": "Reference (typically a foreign key) to the internal reviewer who assigned this external reviewer."
+    }
+  },
+  "finalize_paper_assignment": {
+    "table_meaning": "Stores the finalized mapping of papers to their assigned reviewers (or committees) after the assignment process is locked.",
+    "columns": {
+      "aid": "Unique identifier for each assignment record (Assignment ID).",
+      "cid": "Identifier of the paper (or conference) that is being assigned (Paper/Conference ID)."
+    }
+  },
+  "hardcopy_mailing_manifests_p": {
+    "table_meaning": "Stores the association between a mailing campaign and the physical addresses that are included in its hard\u2011copy mailing manifest.",
+    "columns": {
+      "cid": "Identifier of the mailing campaign (e.g., campaign ID).",
+      "aid": "Identifier of the address or recipient record to be mailed (e.g., address ID)."
+    }
+  },
+  "mark_conflict_interests": {
+    "table_meaning": "Records which conference members have a declared conflict of interest with which submitted papers, used to prevent them from reviewing those papers.",
+    "columns": {
+      "conference_member": "Identifier (e.g., user ID or name) of the conference participant (reviewer, committee member, etc.) who has a conflict.",
+      "paper": "Identifier (e.g., paper ID or title) of the submitted paper that the conference member is conflicted with."
+    }
+  },
+  "meta_reviewers": {
+    "table_meaning": "Stores the unique identifiers of meta reviewers (reviewers who evaluate other reviewers) in the system.",
+    "columns": {
+      "id": "Primary key; unique identifier for each meta reviewer, typically referencing a user record."
+    }
+  },
+  "meta_reviews": {
+    "table_meaning": "Stores metadata or summary information about individual reviews, with each row representing a distinct meta review record.",
+    "columns": {
+      "id": "Primary key identifier for the meta review entry."
+    }
+  },
+  "paper_abstracts": {
+    "table_meaning": "Stores a unique identifier for each paper abstract, linking to the full abstract text stored elsewhere or in a related table.",
+    "columns": {
+      "id": "Primary key (or foreign key) that uniquely identifies a paper abstract record."
+    }
+  },
+  "paper_assignment_tools_run": {
+    "table_meaning": "Tracks each execution of the paper\u2011assignment tool for a conference, linking a conference to a specific assignment run.",
+    "columns": {
+      "cid": "Identifier of the conference (or call for papers) the assignment run belongs to.",
+      "aid": "Identifier of the specific assignment tool run (e.g., a particular execution of the reviewer\u2011paper matching algorithm)."
+    }
+  },
+  "paper_author": {
+    "table_meaning": "A junction table that records which authors contributed to which papers, representing a many-to-many relationship between papers and authors.",
+    "columns": {
+      "aid": "Foreign key referencing the unique identifier of an author in the authors table.",
+      "pid": "Foreign key referencing the unique identifier of a paper in the papers table."
+    }
+  },
+  "paper_full_versions": {
+    "table_meaning": "Stores identifiers of papers that have a complete/full version available, typically referencing entries in a main papers table.",
+    "columns": {
+      "id": "Primary key or foreign key referencing the unique identifier of a paper that has a full version."
+    }
+  },
+  "paper_reviewer": {
+    "table_meaning": "Maps each paper to the reviewers assigned to evaluate it, representing a many\u2011to\u2011many relationship between papers and reviewers.",
+    "columns": {
+      "pid": "Identifier of the paper (foreign key to a papers table).",
+      "rid": "Identifier of the reviewer (foreign key to a reviewers table)."
+    }
+  },
+  "paper_subject_area": {
+    "table_meaning": "A junction table linking research papers to their subject areas, representing a many\u2011to\u2011many relationship between papers and topics.",
+    "columns": {
+      "pid": "Foreign key referencing the unique identifier of a paper in the papers table.",
+      "sid": "Foreign key referencing the unique identifier of a subject area in the subject_areas table."
+    }
+  },
+  "papers": {
+    "table_meaning": "Tracks submissions (papers) to a conference or journal, recording their identifiers, author, title, and the review/decision status.",
+    "columns": {
+      "id": "Internal primary\u2011key for the record in this table.",
+      "paper_id": "External or public identifier for the submitted paper (e.g., submission number).",
+      "rejected": "Boolean flag (or nullable) indicating whether the paper was rejected.",
+      "read_by_meta_reviewer": "Boolean flag (or nullable) showing if a meta\u2011reviewer has opened/read the submission.",
+      "author": "Identifier (likely a user or author ID) of the person who submitted the paper.",
+      "title": "The title of the submitted paper.",
+      "decision": "Text or code representing the final decision (e.g., \"accept\", \"reject\", \"revise\").",
+      "accepted": "Boolean flag (or nullable) indicating whether the paper was accepted."
+    }
+  },
+  "pc_members": {
+    "table_meaning": "Stores information about program committee (PC) members for a conference or journal management system, tracking each member's identity and review capacity.",
+    "columns": {
+      "id": "Unique identifier for the PC member (e.g., user or reviewer ID).",
+      "max_papers": "The maximum number of papers the member is allowed to review or be assigned.",
+      "added": "Timestamp (or date) indicating when the member was added to the PC list."
+    }
+  },
+  "person_document": {
+    "table_meaning": "A junction table that records which documents are associated with which persons, representing a many\u2011to\u2011many relationship between people and documents.",
+    "columns": {
+      "pid": "Foreign key referencing the primary key of the person table; identifies the person.",
+      "did": "Foreign key referencing the primary key of the document table; identifies the document."
+    }
+  },
+  "persons": {
+    "table_meaning": "The table stores basic contact information for individual persons, likely members or employees of an organization.",
+    "columns": {
+      "id": "A unique identifier for each person, typically used as the primary key.",
+      "name": "The full name of the person.",
+      "email": "The person's email address, used for communication."
+    }
+  },
+  "preferences": {
+    "table_meaning": "Stores individual preference records, each uniquely identified by an ID, likely used to reference specific user or system preferences.",
+    "columns": {
+      "id": "Primary key identifier for each preference entry, typically an auto-increment integer."
+    }
+  },
+  "program_committee_chair_review": {
+    "table_meaning": "Associative table linking a program (e.g., a paper or submission) to the review performed by the program committee chair.",
+    "columns": {
+      "pid": "Identifier of the program, paper, or submission.",
+      "rid": "Identifier of the review record created by the program committee chair."
+    }
+  },
+  "program_committee_chairs": {
+    "table_meaning": "Contains the identifiers of people who act as chairs of program committees, linking each chair to program committee records stored in other tables.",
+    "columns": {
+      "id": "Unique identifier (usually a foreign key) for a person or user who serves as a program committee chair."
+    }
+  },
+  "program_committee_members": {
+    "table_meaning": "Maps each program committee to the individuals who serve as its members, representing a many\u2011to\u2011many relationship between committees and members.",
+    "columns": {
+      "program_committee": "Identifier (likely a foreign key) of a specific program committee.",
+      "program_committee_member": "Identifier (likely a foreign key) of a person or entity that is a member of the referenced program committee."
+    }
+  },
+  "program_committees": {
+    "table_meaning": "Stores distinct program committee groups, typically identified by conference/workshop acronym and year, used to associate reviewers, papers, or other data with a specific committee.",
+    "columns": {
+      "id": "Unique numeric identifier (primary key) for each program committee record.",
+      "label": "Descriptive name of the committee, usually combining the conference/workshop acronym and the year (e.g., \"XSWC 2015 Program Committee\")."
+    }
+  },
+  "read_by_reviewer": {
+    "table_meaning": "Tracks which reviewers have read which papers, indicating a read status for each reviewer-paper pair.",
+    "columns": {
+      "pid": "Identifier of the paper (or submission) that may have been read.",
+      "rid": "Identifier of the reviewer who has read the paper."
+    }
+  },
+  "rejections": {
+    "table_meaning": "Stores a list of rejection records, typically used to reference items (e.g., applications, orders, or transactions) that have been denied or marked as invalid.",
+    "columns": {
+      "id": "Primary key that uniquely identifies each rejection entry."
+    }
+  },
+  "reviewer_administrator": {
+    "table_meaning": "Associative table linking reviewers to administrators, indicating which administrator is assigned to which reviewer.",
+    "columns": {
+      "aid": "Foreign key referencing the unique identifier of an administrator.",
+      "rid": "Foreign key referencing the unique identifier of a reviewer."
+    }
+  },
+  "reviewers": {
+    "table_meaning": "Stores the unique identifiers of individuals who act as reviewers in a review or approval workflow.",
+    "columns": {
+      "id": "A primary key that uniquely identifies each reviewer."
+    }
+  },
+  "reviews": {
+    "table_meaning": "Stores individual peer\u2011review comments for academic papers, linking each review to a unique identifier and the reviewer who wrote it.",
+    "columns": {
+      "id": "Primary key for the review record (unique identifier for each review).",
+      "written": "Identifier of the reviewer (foreign key to a users/reviewers table).",
+      "comment": "The full text of the review, including references to the paper being evaluated."
+    }
+  },
+  "set_max_papers": {
+    "table_meaning": "Maps which administrators are authorized to set the maximum number of papers for each program committee member.",
+    "columns": {
+      "administrator": "Identifier (e.g., user ID) of the administrator who can configure paper limits.",
+      "program_committee_member": "Identifier (e.g., user ID) of the program committee member whose paper limit can be set."
+    }
+  },
+  "subject_areas": {
+    "table_meaning": "Stores unique identifiers for each subject area, used as a reference in other tables to categorize content by academic or topical subject.",
+    "columns": {
+      "id": "Primary key that uniquely identifies a subject area."
+    }
+  },
+  "users": {
+    "table_meaning": "Stores a list of user accounts, each identified by a unique identifier.",
+    "columns": {
+      "id": "A unique identifier (primary key) for each user."
+    }
+  }
+}

@@ -18,11 +18,11 @@ Asks the LLM to revise the TTL for:
 The LLM must return ONLY valid Turtle/R2RML — no explanation, no markdown,
 no commentary.  Any wrapping (```turtle … ```) is stripped automatically.
 
-Reads  : src2/outputs/mappings/mappings_r2rml.ttl        (required)
-         src2/inputs/ontology/ontology.owl                (required)
-         src2/outputs/DB_as_json/tables_structure.json    (required)
-         src2/inputs/database/dump.sql                    (optional — for samples)
-Writes : src2/outputs/mappings/mappings_r2rml_final.ttl
+Reads  : src/outputs/mappings/mappings_r2rml.ttl        (required)
+         src/inputs/ontology/ontology.owl                (required)
+         src/outputs/DB_as_json/tables_structure.json    (required)
+         src/inputs/database/dump.sql                    (optional — for samples)
+Writes : src/outputs/mappings/mappings_r2rml_final.ttl
 """
 
 import json
@@ -47,11 +47,11 @@ def log(msg: str, *, warn: bool = False):
         print(msg)
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-OUTPUT_DIR          = "src2/outputs"
+OUTPUT_DIR          = "src/outputs"
 MAPPINGS_DIR        = os.path.join(OUTPUT_DIR, "mappings")
 DB_JSON_DIR         = os.path.join(OUTPUT_DIR, "DB_as_json")
-ONTOLOGY_FILE       = "src2/inputs/ontology/ontology.owl"
-DUMP_FILE           = "src2/inputs/database/dump.sql"
+ONTOLOGY_FILE       = "src/inputs/ontology/ontology.owl"
+DUMP_FILE           = "src/inputs/database/dump.sql"
 TABLES_STRUCT_FILE  = os.path.join(DB_JSON_DIR, "tables_structure.json")
 R2RML_INPUT_FILE    = os.path.join(MAPPINGS_DIR, "mappings_r2rml.ttl")
 R2RML_OUTPUT_FILE   = os.path.join(MAPPINGS_DIR, "mappings_r2rml_final.ttl")

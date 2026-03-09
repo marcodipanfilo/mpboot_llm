@@ -5,9 +5,9 @@ For each table it produces:
   - a plain-English meaning of the table
   - a plain-English meaning of every column
 
-Reads  : src2/outputs/DB_as_json/tables_structure.json
-         src2/inputs/database/dump.sql   (for sample rows)
-Writes : src2/memory/understanding.json
+Reads  : src/outputs/DB_as_json/tables_structure.json
+         src/inputs/database/dump.sql   (for sample rows)
+Writes : src/memory/understanding.json
 
 Output shape (simple flat JSON):
 {
@@ -34,9 +34,9 @@ from config.llm_config import LLMConfig
 from config.llm_config import SELECTED_PROVIDER
 
 # ===== PATHS =====
-TABLES_STRUCTURE_FILE = "src2/outputs/DB_as_json/tables_structure.json"
-DUMP_FILE             = "src2/inputs/database/dump.sql"
-OUTPUT_DIR            = "src2/memory"
+TABLES_STRUCTURE_FILE = "src/outputs/DB_as_json/tables_structure.json"
+DUMP_FILE             = "src/inputs/database/dump.sql"
+OUTPUT_DIR            = "src/memory"
 OUTPUT_FILE           = os.path.join(OUTPUT_DIR, "understanding.json")
 
 

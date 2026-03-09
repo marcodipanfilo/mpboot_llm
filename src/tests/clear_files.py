@@ -2,9 +2,9 @@
 clear_mappings.py — Reset all generated mapping files before a new schema run.
 
 Deletes all JSON files in:
-  - src2/outputs/DB_as_json/
-  - src2/outputs/mappings/
-  - src2/outputs/
+  - src/outputs/DB_as_json/
+  - src/outputs/mappings/
+  - src/outputs/
 Deletes specific non-JSON files (e.g. .ttl) and empties memory files.
 
 Usage:
@@ -19,17 +19,17 @@ import sys
 
 DRY_RUN = "--confirm" not in sys.argv
 
-MAPPINGS_DIR   = "src2/outputs/mappings"
-OUTPUTS_DIR    = "src2/outputs"
-DB_AS_JSON_DIR = "src2/outputs/DB_as_json"
-MEMORY_DIR     = "src2/memory"
+MAPPINGS_DIR   = "src/outputs/mappings"
+OUTPUTS_DIR    = "src/outputs"
+DB_AS_JSON_DIR = "src/outputs/DB_as_json"
+MEMORY_DIR     = "src/memory"
 
 # Non-JSON files that also need deletion
 EXTRA_DELETE_FILES = [
     os.path.join(MAPPINGS_DIR, "mappings_r2rml.ttl"),
 ]
 
-# Memory files in src2/memory/ (these get emptied, not deleted)
+# Memory files in src/memory/ (these get emptied, not deleted)
 MEMORY_FILES = [
     "enrichment.json",
     "understanding.json",

@@ -83,14 +83,14 @@ JSON input structures expected per phase:
       ]
     }
 
-Reads  : src2/outputs/mappings/SE_mappings.json          (required)
-         src2/outputs/mappings/SH_mappings.json           (optional)
-         src2/outputs/mappings/SEw_mappings.json          (optional)
-         src2/outputs/mappings/SRR_mappings.json          (optional)
-         src2/outputs/mappings/SR_mappings.json           (optional)
-         src2/outputs/mappings/HIDDEN_mappings.json       (optional)
-         src2/inputs/ontology/ontology.owl
-Writes : src2/outputs/mappings/mappings_r2rml.ttl
+Reads  : src/outputs/mappings/SE_mappings.json          (required)
+         src/outputs/mappings/SH_mappings.json           (optional)
+         src/outputs/mappings/SEw_mappings.json          (optional)
+         src/outputs/mappings/SRR_mappings.json          (optional)
+         src/outputs/mappings/SR_mappings.json           (optional)
+         src/outputs/mappings/HIDDEN_mappings.json       (optional)
+         src/inputs/ontology/ontology.owl
+Writes : src/outputs/mappings/mappings_r2rml.ttl
 """
 
 import json
@@ -104,9 +104,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from parsers.ontology_explorer import ontology_explorer
 
 # ===== PATHS =====
-OUTPUT_DIR    = "src2/outputs"
+OUTPUT_DIR    = "src/outputs"
 MAPPINGS_DIR  = os.path.join(OUTPUT_DIR, "mappings")
-ONTOLOGY_FILE = "src2/inputs/ontology/ontology.owl"
+ONTOLOGY_FILE = "src/inputs/ontology/ontology.owl"
 SE_FILE       = os.path.join(MAPPINGS_DIR, "SE_mappings.json")
 SH_FILE       = os.path.join(MAPPINGS_DIR, "SH_mappings.json")
 SEW_FILE      = os.path.join(MAPPINGS_DIR, "SEw_mappings.json")

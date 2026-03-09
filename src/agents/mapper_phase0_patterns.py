@@ -19,12 +19,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.llm_config import LLMConfig
 from config.llm_config import SELECTED_PROVIDER
 # ===== PATHS =====
-DB_JSON_FOLDER        = "src2/outputs/DB_as_json"
-MEMORY_FOLDER         = "src2/memory"
+DB_JSON_FOLDER        = "src/outputs/DB_as_json"
+MEMORY_FOLDER         = "src/memory"
 
-TABLE_RELATIONSHIPS_FILE  = os.path.join("src2/outputs/DB_as_json", "table_relationships.json")
-TABLES_STRUCTURE_FILE     = os.path.join("src2/outputs/DB_as_json", "tables_structure.json")
-RELATIONSHIP_SUMMARY_FILE = os.path.join("src2/outputs/DB_as_json", "relationship_summary.json")
+TABLE_RELATIONSHIPS_FILE  = os.path.join("src/outputs/DB_as_json", "table_relationships.json")
+TABLES_STRUCTURE_FILE     = os.path.join("src/outputs/DB_as_json", "tables_structure.json")
+RELATIONSHIP_SUMMARY_FILE = os.path.join("src/outputs/DB_as_json", "relationship_summary.json")
 PATTERNS_FILE             = os.path.join(MEMORY_FOLDER, "patterns.json")
 OUTPUT_FILE               = os.path.join(MEMORY_FOLDER, "patterns_final.json")
 

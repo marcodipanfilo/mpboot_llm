@@ -8,7 +8,7 @@ Fixed issues vs previous version:
   2. FK regex: same constraint-name issue.
   3. Column type: "character varying(N)" was collapsed to "character(N)".
      Fix: normalise "character varying" → "varchar" during column parse.
-  4. Output path: updated to src2/outputs/DB_as_json/ to match project layout.
+  4. Output path: updated to src/outputs/DB_as_json/ to match project layout.
   5. [NEW] CREATE TABLE / ALTER TABLE: quoted table names like "Abstract",
      "has_a_committee_co-chair" were silently skipped because the regex used
      \w+ which does not match quoted identifiers or hyphens.
@@ -58,7 +58,7 @@ class SQLDumpParser:
             pk_count = sum(1 for col in table_data['columns'] if col['is_primary_key'])
             print(f"  {table_name}: {len(table_data['columns'])} cols, {pk_count} PKs, {fk_count} FKs")
 
-    def generate_json_outputs(self, output_dir: str = "src2/outputs/DB_as_json"):
+    def generate_json_outputs(self, output_dir: str = "src/outputs/DB_as_json"):
         """Write the four JSON output files."""
         os.makedirs(output_dir, exist_ok=True)
 
@@ -345,8 +345,8 @@ class SQLDumpParser:
 # ------------------------------------------------------------------
 
 def main():
-    dump_file  = "src2/inputs/database/dump.sql"
-    output_dir = "src2/outputs/DB_as_json"
+    dump_file  = "src/inputs/database/dump.sql"
+    output_dir = "src/outputs/DB_as_json"
 
     if not os.path.exists(dump_file):
         print(f"Error: dump file not found: {dump_file}")

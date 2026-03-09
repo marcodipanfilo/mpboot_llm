@@ -8,7 +8,7 @@ import os
 from typing import Dict, Any, List, Optional
 
 
-def load_patterns(patterns_file: str = "src2/memory/patterns.json") -> Dict[str, Any]:
+def load_patterns(patterns_file: str = "src/memory/patterns.json") -> Dict[str, Any]:
     """
     Load patterns from JSON file
     
@@ -81,7 +81,7 @@ def get_sh_relation_info(table_name: str, patterns: Dict[str, Any]) -> Optional[
 
 def discover_table_patterns(
     table_name: str,
-    patterns_file: str = "src2/memory/patterns.json"
+    patterns_file: str = "src/memory/patterns.json"
 ) -> Dict[str, Any]:
     """
     Discover all pattern information for a specific table
@@ -150,7 +150,7 @@ def discover_table_patterns(
 
 def get_all_tables_by_pattern(
     pattern_type: str,
-    patterns_file: str = "src2/memory/patterns.json"
+    patterns_file: str = "src/memory/patterns.json"
 ) -> List[str]:
     """
     Get all tables of a specific pattern type

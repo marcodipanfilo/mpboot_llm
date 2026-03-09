@@ -42,17 +42,17 @@ Three OntologyIndex fixes vs the naive version:
   FIX 2 — Cardinality restriction implied domains
   FIX 3 — domain_matches checks union membership
 
-Reads  : src2/outputs/mappings/SE_mappings.json   (required)
-         src2/outputs/mappings/SH_mappings.json    (optional)
-         src2/outputs/mappings/SEw_mappings.json   (optional)
-         src2/outputs/mappings/SRR_mappings.json   (optional)
-         src2/outputs/mappings/SR_mappings.json    (optional)
-         src2/memory/understanding.json            (optional, for table_meaning)
-         src2/inputs/ontology/ontology.owl
+Reads  : src/outputs/mappings/SE_mappings.json   (required)
+         src/outputs/mappings/SH_mappings.json    (optional)
+         src/outputs/mappings/SEw_mappings.json   (optional)
+         src/outputs/mappings/SRR_mappings.json   (optional)
+         src/outputs/mappings/SR_mappings.json    (optional)
+         src/memory/understanding.json            (optional, for table_meaning)
+         src/inputs/ontology/ontology.owl
 Writes : All input mapping files back in-place with corrected predicates
          and resolved class assignments.
-         src2/outputs/mappings/correction_report.json
-         src2/outputs/mappings/collision_report.json
+         src/outputs/mappings/correction_report.json
+         src/outputs/mappings/collision_report.json
 """
 
 import json
@@ -70,9 +70,9 @@ from config.llm_config import LLMConfig
 from config.llm_config import SELECTED_PROVIDER
 
 # ===== PATHS =====
-MAPPINGS_DIR       = "src2/outputs/mappings"
-ONTOLOGY_FILE      = "src2/inputs/ontology/ontology.owl"
-UNDERSTANDING_FILE = "src2/memory/understanding.json"
+MAPPINGS_DIR       = "src/outputs/mappings"
+ONTOLOGY_FILE      = "src/inputs/ontology/ontology.owl"
+UNDERSTANDING_FILE = "src/memory/understanding.json"
 SE_FILE            = os.path.join(MAPPINGS_DIR, "SE_mappings.json")
 SH_FILE            = os.path.join(MAPPINGS_DIR, "SH_mappings.json")
 SEW_FILE           = os.path.join(MAPPINGS_DIR, "SEw_mappings.json")

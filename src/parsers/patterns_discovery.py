@@ -14,8 +14,8 @@ from typing import Any, Dict, List, Set
 
 
 def discover_db_patterns(
-    tables_structure_file: str = "src2/outputs/DB_as_json/tables_structure.json",
-    relationships_file: str = "src2/outputs/DB_as_json/table_relationships.json"
+    tables_structure_file: str = "src/outputs/DB_as_json/tables_structure.json",
+    relationships_file: str = "src/outputs/DB_as_json/table_relationships.json"
 ) -> Dict[str, str]:
     """
     Discover structural patterns in the database.
@@ -131,7 +131,7 @@ def discover_db_patterns(
     return table_patterns
 
 
-def save_patterns(table_patterns: Dict[str, str], output_dir: str = "src2/memory/"):
+def save_patterns(table_patterns: Dict[str, str], output_dir: str = "src/memory/"):
     """Save the flat pattern map to patterns.json"""
     os.makedirs(output_dir, exist_ok=True)
     output_file = os.path.join(output_dir, "patterns.json")

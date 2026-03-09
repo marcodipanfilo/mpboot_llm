@@ -36,20 +36,20 @@ from typing import List, Optional
 # ============================================================
 
 STEPS = [
-    {"id": "dump_explorer",     "label": "DB Dump Explorer",         "script": "src2/parsers/dump_explorer.py"},
-    {"id": "patterns_discovery","label": "Pattern Discovery",         "script": "src2/parsers/patterns_discovery.py"},
-    {"id": "understanding",     "label": "Schema Understanding",      "script": "src2/agents/understanding.py"},
-    {"id": "enrichment",        "label": "Schema Enrichment",         "script": "src2/agents/enrichment.py"},
-    {"id": "phase0",            "label": "Phase 0 — Patterns",        "script": "src2/agents/mapper_phase0_patterns.py"},
-    {"id": "phase1",            "label": "Phase 1 — SE",              "script": "src2/agents/mapper_phase1_SE.py"},
-    {"id": "phase2",            "label": "Phase 2 — SH",              "script": "src2/agents/mapper_phase2_SH.py"},
-    {"id": "phase3",            "label": "Phase 3 — SEw",             "script": "src2/agents/mapper_phase3_SEw.py"},
-    {"id": "phase4",            "label": "Phase 4 — SRR",             "script": "src2/agents/mapper_phase4_SRR.py"},
-    {"id": "phase5",            "label": "Phase 5 — SR",              "script": "src2/agents/mapper_phase5_SR.py"},
-    {"id": "phase6",            "label": "Phase 6 — Filters/HIDDEN",  "script": "src2/agents/mapper_phase6_filters.py"},
-    {"id": "phase7",            "label": "Phase 7 — Verifier",        "script": "src2/agents/mapper_phase7_verifier.py"},
-    {"id": "phase8",            "label": "Phase 8 — R2RML Generator", "script": "src2/agents/mapper_phase8_R2RML.py"},
-    {"id": "phase_final",  "label": "Phase Final",  "script": "src2/agents/mapper_phase_final.py"},
+    {"id": "dump_explorer",     "label": "DB Dump Explorer",         "script": "src/parsers/dump_explorer.py"},
+    {"id": "patterns_discovery","label": "Pattern Discovery",         "script": "src/parsers/patterns_discovery.py"},
+    {"id": "understanding",     "label": "Schema Understanding",      "script": "src/agents/understanding.py"},
+    {"id": "enrichment",        "label": "Schema Enrichment",         "script": "src/agents/enrichment.py"},
+    {"id": "phase0",            "label": "Phase 0 — Patterns",        "script": "src/agents/mapper_phase0_patterns.py"},
+    {"id": "phase1",            "label": "Phase 1 — SE",              "script": "src/agents/mapper_phase1_SE.py"},
+    {"id": "phase2",            "label": "Phase 2 — SH",              "script": "src/agents/mapper_phase2_SH.py"},
+    {"id": "phase3",            "label": "Phase 3 — SEw",             "script": "src/agents/mapper_phase3_SEw.py"},
+    {"id": "phase4",            "label": "Phase 4 — SRR",             "script": "src/agents/mapper_phase4_SRR.py"},
+    {"id": "phase5",            "label": "Phase 5 — SR",              "script": "src/agents/mapper_phase5_SR.py"},
+    {"id": "phase6",            "label": "Phase 6 — Filters/HIDDEN",  "script": "src/agents/mapper_phase6_filters.py"},
+    {"id": "phase7",            "label": "Phase 7 — Verifier",        "script": "src/agents/mapper_phase7_verifier.py"},
+    {"id": "phase8",            "label": "Phase 8 — R2RML Generator", "script": "src/agents/mapper_phase8_R2RML.py"},
+    {"id": "phase_final",  "label": "Phase Final",  "script": "src/agents/mapper_phase_final.py"},
 ]
 
 # ============================================================

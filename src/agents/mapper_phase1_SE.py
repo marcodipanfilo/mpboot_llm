@@ -9,13 +9,13 @@ Key improvement over original:
   :title being assigned to a 'name' column, or :siteUrl instead of :siteURL.
   Falls back to camelCase only when no ontology property matches.
 
-Reads  : src2/memory/patterns_final.json
-         src2/memory/understanding.json
-         src2/memory/enrichment.json
-         src2/outputs/DB_as_json/tables_structure.json
-         src2/inputs/ontology/ontology.owl
-Writes : src2/outputs/mappings_process.json         (LLM results cache, resumable)
-         src2/outputs/mappings/SE_mappings.json     (final structured mapping)
+Reads  : src/memory/patterns_final.json
+         src/memory/understanding.json
+         src/memory/enrichment.json
+         src/outputs/DB_as_json/tables_structure.json
+         src/inputs/ontology/ontology.owl
+Writes : src/outputs/mappings_process.json         (LLM results cache, resumable)
+         src/outputs/mappings/SE_mappings.json     (final structured mapping)
 """
 
 import json
@@ -33,14 +33,14 @@ from config.llm_config import SELECTED_PROVIDER
 from parsers.ontology_explorer import ontology_explorer
 
 # ===== PATHS =====
-MEMORY_FOLDER         = "src2/memory"
-DB_JSON_FOLDER        = "src2/outputs/DB_as_json"
+MEMORY_FOLDER         = "src/memory"
+DB_JSON_FOLDER        = "src/outputs/DB_as_json"
 PATTERNS_FILE         = os.path.join(MEMORY_FOLDER, "patterns_final.json")
 UNDERSTANDING_FILE    = os.path.join(MEMORY_FOLDER, "understanding.json")
 ENRICHMENT_FILE       = os.path.join(MEMORY_FOLDER, "enrichment.json")
 TABLES_STRUCTURE_FILE = os.path.join(DB_JSON_FOLDER, "tables_structure.json")
-ONTOLOGY_FILE         = "src2/inputs/ontology/ontology.owl"
-OUTPUT_DIR            = "src2/outputs"
+ONTOLOGY_FILE         = "src/inputs/ontology/ontology.owl"
+OUTPUT_DIR            = "src/outputs"
 MAPPINGS_DIR          = os.path.join(OUTPUT_DIR, "mappings")
 PROCESS_FILE          = os.path.join(OUTPUT_DIR, "mappings_process.json")
 SE_MAPPINGS_FILE      = os.path.join(MAPPINGS_DIR, "SE_mappings.json")
