@@ -234,8 +234,10 @@ class SQLDumpParser:
           ALTER TABLE ONLY plain_table  ADD CONSTRAINT PlainPK      PRIMARY KEY (id);
         """
         pattern = (
-            r'ALTER\s+TABLE\s+(?:ONLY\s+)?(?:"([^"]+)"|(\w+))'  # table name
-            r'\s+ADD\s+CONSTRAINT\s+(?:"([^"]+)"|(\w+))'         # constraint name
+            r'ALTER\s+TABLE\s+(?:ONLY\s+)?'
+            r'(?:(?:"[^"]+"|[\w$]+)\s*\.\s*)?'                   # optional schema. prefix
+            r'(?:"([^"]+)"|([\w$]+))'                            # table name: quoted OR unquoted
+            r'\s+ADD\s+CONSTRAINT\s+(?:"([^"]+)"|([\w$-]+))'     # constraint name
             r'\s+PRIMARY\s+KEY\s*\(([^)]+)\)'                    # column list
         )
         for match in re.finditer(pattern, content, re.IGNORECASE | re.DOTALL):
@@ -266,10 +268,14 @@ class SQLDumpParser:
               ADD CONSTRAINT "AbstractFK1" FOREIGN KEY (col) REFERENCES "Paper"("ID");
         """
         pattern = (
-            r'ALTER\s+TABLE\s+(?:ONLY\s+)?(?:"([^"]+)"|(\w+))'   # source table
-            r'\s+ADD\s+CONSTRAINT\s+(?:"([^"]+)"|(\w+))'          # constraint name
+            r'ALTER\s+TABLE\s+(?:ONLY\s+)?'
+            r'(?:(?:"[^"]+"|[\w$]+)\s*\.\s*)?'                    # optional schema. prefix (source)
+            r'(?:"([^"]+)"|([\w$]+))'                             # source table: quoted OR unquoted
+            r'\s+ADD\s+CONSTRAINT\s+(?:"([^"]+)"|([\w$-]+))'      # constraint name
             r'\s+FOREIGN\s+KEY\s*\(([^)]+)\)'                     # FK column(s)
-            r'\s+REFERENCES\s+(?:"([^"]+)"|(\w+))\s*\(([^)]+)\)'  # ref table + col(s)
+            r'\s+REFERENCES\s+'
+            r'(?:(?:"[^"]+"|[\w$]+)\s*\.\s*)?'                    # optional schema. prefix (ref)
+            r'(?:"([^"]+)"|([\w$]+))\s*\(([^)]+)\)'              # ref table + col(s)
             r'(?:\s+(?:ON\s+(?:DELETE|UPDATE))\s+'
             r'(?:CASCADE|SET\s+NULL|SET\s+DEFAULT|RESTRICT|NO\s+ACTION))*'
         )
@@ -345,7 +351,7 @@ class SQLDumpParser:
 # ------------------------------------------------------------------
 
 def main():
-    dump_file  = "src/inputs/database/dump.sql"
+    dump_file  = "src/inputs/database/dump_new.sql"
     output_dir = "src/outputs/DB_as_json"
 
     if not os.path.exists(dump_file):
