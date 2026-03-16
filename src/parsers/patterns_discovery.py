@@ -134,7 +134,7 @@ def discover_db_patterns(
 def save_patterns(table_patterns: Dict[str, str], output_dir: str = "src/memory/"):
     """Save the flat pattern map to patterns.json"""
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, "patterns.json")
+    output_file = os.path.join(output_dir, "patterns_final.json")
     with open(output_file, 'w') as f:
         json.dump(table_patterns, f, indent=2)
     print(f"✓ Patterns saved to: {output_file}")
