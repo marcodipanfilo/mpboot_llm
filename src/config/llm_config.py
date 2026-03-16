@@ -11,7 +11,7 @@ load_dotenv()
 
 
 # ===== CHANGE PROVIDER HERE =====
-SELECTED_PROVIDER = "groq" # or "gpt4o-mini", "claude", "gpt4o" etc.
+SELECTED_PROVIDER = "gpt4o" # or "gpt4o-mini", "claude", "gpt4o" etc.
 # ================================
 
 
@@ -21,7 +21,7 @@ class LLMConfig:
     # API Endpoints
     ENDPOINTS = {
         "gpt4o-mini": "https://api2.aigcbest.top/v1/chat/completions",
-        "gpt4o":      "https://api.openai.com/v1/chat/completions",
+        "gpt4o":      "https://api2.aigcbest.top/v1/chat/completions",
         "groq":       "https://api.groq.com/openai/v1/chat/completions",
         "claude":     "https://api.anthropic.com/v1/messages",
         "gemini":     "https://generativelanguage.googleapis.com/v1beta/models"
@@ -30,7 +30,7 @@ class LLMConfig:
     # API Keys (can be overridden by environment variables)
     API_KEYS = {
         "gpt4o-mini": os.getenv("GPT4O_MINI_API_KEY", ""),
-        "gpt4o":      os.getenv("OPENAI_API_KEY", ""),
+        "gpt4o":      os.getenv("GPT4O_API_KEY", ""),
         "groq":       os.getenv("GROQ_API_KEY", ""),
         "claude":     os.getenv("ANTHROPIC_API_KEY", ""),
         "gemini":     os.getenv("GEMINI_API_KEY", "")
