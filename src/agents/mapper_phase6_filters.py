@@ -825,19 +825,113 @@ def build_hidden_sh_entry(
     """
     Build HIDDEN_SH entry for a FK-based hidden subclass.
     Filter: column IS NOT NULL (the ONLY pattern that uses IS NOT NULL).
+
+    Subject template selection:
+      There are two distinct semantic cases for FK-based hidden subclasses:
+
+      CASE A — "this source row IS ALSO an instance of the target class"
+        Example: papers.abstract → abstracts.id
+        The FK value (col_name) IS the id of an existing :Abstract instance.
+        → Subject template: use the FK TARGET table's template, substituting
+          {fk_col_in_target} with {col_name} (the FK column).
+          e.g. conference_documents/{abstract}  (NOT conference_documents/{id})
+        This produces the SAME IRI as the canonical SE/SH map for abstracts,
+        so rdf:type :Abstract is added to the correct existing resource.
+
+      CASE B — "this source row itself belongs to an additional class"
+        Example: persons.is_reviewer = true  (bool_flag, handled separately)
+        Or: a row in a table that IS the entity (no FK redirect needed).
+        → Subject template: use the source table's own base_subject ({id}).
+
+      Decision rule:
+        If assigned_class matches the FK target table's mapped class → CASE A.
+        Otherwise → CASE B (use source table template).
     """
     col_name       = suggestion["column"]
     assigned_class = suggestion["assigned_class"]
     base_subject   = get_base_subject(table_name, se_mappings, sh_mappings)
     base_tm        = get_base_triple_map(table_name, se_mappings, sh_mappings)
 
-    # FK reference target (may be embedded in suggestion from evidence)
+    # FK reference target
     fk_ref_table   = suggestion.get("fk_ref_table", "")
+    fk_ref_col     = suggestion.get("fk_ref_col", "id")
     ref_tm         = (get_base_triple_map(fk_ref_table, se_mappings, sh_mappings)
                       if fk_ref_table else None)
     ref_resolved   = ref_tm is not None
     if not ref_tm:
         ref_tm = f"urn:r2rml:SE_{fk_ref_table}" if fk_ref_table else None
+
+    # ── Subject template: CASE A vs CASE B vs CASE C ─────────────────────
+    # CASE A: assigned_class matches the FK target's class exactly
+    #   → use the target table's template with {col_name} replacing the PK placeholder
+    #   e.g. papers.abstract → conference_documents/{abstract}
+    #
+    # CASE B: source row itself gains the new class (no FK redirect needed)
+    #   → use the source table's own base_subject ({id})
+    #
+    # CASE C: assigned_class is a specialisation of the FK target's class
+    #   (e.g. committee.has_a_committee_chair → FK points to person table, class=Person,
+    #    but assigned_class=Chair which IS-A Person via Active_conference_participant)
+    #   → use the FK target's template with {col_name} as PK placeholder
+    #   This ensures Chair/Co-chair/etc. get person/{col_name} IRI, not committee/{id}
+    #
+    # Decision: use the target template whenever the FK target table's template
+    # pattern semantically matches the assigned class (same base path).
+    target_class = get_base_class(fk_ref_table, se_mappings, sh_mappings) if fk_ref_table else None
+    target_subject = get_base_subject(fk_ref_table, se_mappings, sh_mappings) if fk_ref_table else None
+
+    import re as _re
+
+    # Detect CASE A (exact match) or CASE C (FK target is a person/entity table)
+    use_target_template = False
+    if target_class and target_subject:
+        # CASE A: exact class match
+        if target_class.lstrip(":").lower() == assigned_class.lstrip(":").lower():
+            use_target_template = True
+        # CASE C: the FK column value references an entity that gains the assigned_class.
+        # Only trigger when the FK column name suggests a forward reference to a person
+        # or entity (e.g. "committee_chair", "invited_by") — NOT a back-reference
+        # (e.g. "hascommittee_inv", "iscommitteeof" which point BACK to a conference).
+        # Back-reference columns contain "inv", "ispartof", "iscommitteeof" etc.
+        # Forward FK columns point FROM this table TO the entity that gets the class.
+        elif target_subject:
+            col_lc = col_name.lower()
+            # Skip back-references — these should NOT redirect the typing IRI
+            back_ref_hints = ("_inv", "inv", "ispartof", "iscommitteeof",
+                              "isreviewof", "submittedto", "belongsto")
+            is_back_ref = any(col_lc.endswith(h) or col_lc == h
+                              for h in back_ref_hints)
+            if not is_back_ref and fk_ref_table != table_name:
+                use_target_template = True
+
+    if use_target_template and target_subject:
+        # Replace the PK placeholder ({id} or whatever the target uses) with
+        # the FK column name so the IRI resolves to the target entity's IRI.
+        pk_placeholder = _re.search(r"\{([^}]+)\}", target_subject)
+        if pk_placeholder:
+            subject_template = target_subject.replace(
+                "{" + pk_placeholder.group(1) + "}",
+                "{" + col_name + "}"
+            )
+        else:
+            subject_template = target_subject
+    else:
+        # CASE B: source row itself gains the new class — use source template
+        subject_template = base_subject or f"{base_iri}{table_name}/{{id}}"
+
+    # Guard: if CASE A triggered (assigned_class == FK target class), the FK target
+    # entity is already typed by its own SE/SE_SH map. Creating another HIDDEN_SH
+    # that types conference/{col} as :Conference produces redundant duplicate triples.
+    # Drop these — the join relationship is handled by phase 5b as an object property.
+    if use_target_template and target_class and             target_class.lstrip(":").lower() == assigned_class.lstrip(":").lower():
+        # Check if target class has a canonical SE/SE_SH map
+        target_has_canonical = (
+            fk_ref_table in se_mappings or fk_ref_table in sh_mappings
+        )
+        if target_has_canonical:
+            print(f"  [SKIP] HIDDEN_SH {table_name}.{col_name} → :{assigned_class} "
+                  f"dropped: FK target already typed by canonical SE/SE_SH map")
+            return None
 
     return {
         "hidden_pattern":  "HIDDEN_SH",
@@ -847,7 +941,7 @@ def build_hidden_sh_entry(
         "sql_filter":      f"{col_name} IS NOT NULL",
         "base_triple_map": base_tm,
         "subject": {
-            "template":        base_subject or f"{base_iri}{table_name}/{{id}}",
+            "template":        subject_template,
             "class":           f":{assigned_class}",
             "reuses_iri_from": base_tm,
         },
@@ -859,7 +953,7 @@ def build_hidden_sh_entry(
                 "resolved":           ref_resolved,
                 "join_condition": {
                     "child":  col_name,
-                    "parent": suggestion.get("fk_ref_col", "id"),
+                    "parent": fk_ref_col,
                 }
             }
         }] if ref_tm else []),
