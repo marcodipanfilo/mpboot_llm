@@ -235,18 +235,40 @@ def fix_iri(ref_iri: str, defined_iris: Set[str], iri_index: Dict[str, str]) -> 
 # Universal SQL identifier quoting & aliasing helpers
 # ============================================================
 
-def _needs_sql_query(name: str, template_cols: list = None) -> bool:
+# PostgreSQL reserved words that cannot be used as unquoted table names
+# in rr:tableName — RODI passes them to the DB without quoting.
+_PG_RESERVED = {
+    "user", "order", "table", "select", "where", "group", "limit",
+    "offset", "check", "column", "constraint", "default", "end",
+    "from", "grant", "index", "into", "join", "like", "not", "null",
+    "on", "only", "primary", "references", "set", "unique", "using",
+    "values", "with", "all", "any", "as", "asc", "authorization",
+    "between", "by", "case", "cast", "collate", "cross", "current_date",
+    "current_time", "current_timestamp", "desc", "distinct", "else",
+    "except", "exists", "fetch", "for", "foreign", "full", "having",
+    "inner", "intersect", "interval", "is", "leading", "left", "local",
+    "natural", "no", "outer", "over", "partition", "placing",
+    "returning", "right", "row", "similar", "some", "symmetric",
+    "then", "to", "trailing", "union", "verbose", "when", "window",
+    "in", "and", "or", "true", "false",
+}
+
+
+def _needs_sql_query(name: str, template_cols: list = None,
+                     extra_cols: list = None) -> bool:
     """
     True when rr:sqlQuery is required instead of rr:tableName:
-    1. Table name is mixed-case or contains a hyphen.
-    2. Any template column (PK) is mixed-case or contains a hyphen.
+    1. Table name is a PostgreSQL reserved word (RODI passes it unquoted).
+    2. Table name is mixed-case or contains a hyphen.
+    3. Any template column or extra column is mixed-case or contains a hyphen.
     """
+    if name.lower() in _PG_RESERVED:
+        return True
     if "-" in name or name != name.lower():
         return True
-    if template_cols:
-        for col in template_cols:
-            if col != col.lower() or "-" in col:
-                return True
+    for col in (template_cols or []) + (extra_cols or []):
+        if col != col.lower() or "-" in col:
+            return True
     return False
 
 
@@ -279,23 +301,57 @@ def _quote_filter(sql_filter: str) -> str:
     return re.sub(r'(?<!")\b([A-Za-z_][A-Za-z0-9_-]*)\b(?!\s*")', _quoter, sql_filter)
 
 
-def _build_safe_sql(table_name: str,
-                    select_cols: list,
+def _build_star_sql(table_name: str,
+                    hyphen_cols: list = None,
                     where_clause: str = None) -> str:
     """
-    Build a SELECT with every identifier double-quoted and every column
-    aliased to lowercase. select_cols is a list of (original_name, alias) pairs.
+    Build a SELECT * query, with explicit aliases ONLY for columns whose
+    original name contains a hyphen (e.g. "col-name" AS col_name).
+    PostgreSQL treats '-' as subtraction, so those columns must be aliased
+    so that R2RML templates using {col_name} (underscore form) resolve correctly.
+
+    hyphen_cols : list of original column names that contain '-'
+    where_clause: optional WHERE clause string (already quoted/safe)
     """
-    parts = [f'"{orig}" AS {alias}' for orig, alias in select_cols]
-    sql   = f'SELECT {", ".join(parts)} FROM "{table_name}"'
+    if hyphen_cols:
+        alias_parts = ', '.join(
+            f'"{c}" AS {_safe_alias(c)}' for c in hyphen_cols
+        )
+        select_clause = f'*, {alias_parts}'
+    else:
+        select_clause = '*'
+
+    sql = f'SELECT {select_clause} FROM "{table_name}"'
     if where_clause:
         sql += f" WHERE {where_clause}"
     return sql
 
 
+def _collect_hyphen_cols(names: list) -> list:
+    """Return only the names from the list that contain a hyphen."""
+    return [n for n in names if '-' in n]
+
+
 # ============================================================
 # TTL building blocks
 # ============================================================
+
+# Datatypes that must be explicitly declared.
+# xsd:string is intentionally EXCLUDED — plain literals match SQL strings correctly.
+# Adding xsd:string causes "foo"^^xsd:string != "foo" mismatches in RODI comparison.
+_EMIT_DATATYPE = {
+    "xsd:integer", "xsd:int", "xsd:long", "xsd:short",
+    "xsd:decimal", "xsd:float", "xsd:double",
+    "xsd:boolean", "xsd:bool",
+    # xsd:date and xsd:dateTime intentionally excluded:
+    # some R2RML engines crash when casting NULL or non-standard
+    # date strings to xsd:date even with IS NOT NULL filter.
+    # Plain literals work correctly for date comparison in RODI.
+    "xsd:anyURI",
+    "xsd:byte", "xsd:nonNegativeInteger", "xsd:positiveInteger",
+    "xsd:unsignedLong", "xsd:unsignedInt",
+}
+
 
 def _pom_literal(pred: str, col: str, datatype: str) -> List[str]:
     if datatype in ("xsd:anyURI", "http://www.w3.org/2001/XMLSchema#anyURI"):
@@ -307,19 +363,29 @@ def _pom_literal(pred: str, col: str, datatype: str) -> List[str]:
             f"            rr:termType  rr:IRI ;",
             f"        ] ;",
             f"    ] ;",
-            "",
+            f"",
         ]
+    if datatype in _EMIT_DATATYPE:
+        return [
+            f"    rr:predicateObjectMap [",
+            f"        rr:predicate {pred} ;",
+            f"        rr:objectMap  [",
+            f"            rr:column   \"{_safe_alias(col)}\" ;",
+            f"            rr:datatype {datatype} ;",
+            f"        ] ;",
+            f"    ] ;",
+            f"",
+        ]
+    # Plain literal — no rr:datatype (xsd:string and unknowns)
     return [
         f"    rr:predicateObjectMap [",
         f"        rr:predicate {pred} ;",
         f"        rr:objectMap  [",
         f"            rr:column   \"{_safe_alias(col)}\" ;",
-        f"            rr:datatype {datatype} ;",
         f"        ] ;",
         f"    ] ;",
-        "",
+        f"",
     ]
-
 
 def _pom_join(pred: str, parent_iri: str,
               child_col: str, parent_col: str) -> List[str]:
@@ -351,7 +417,8 @@ def _close(lines: List[str]) -> str:
 
 def _resolve_poms(poms: List[Dict],
                   defined_iris: Set[str],
-                  iri_index: Dict[str, str]) -> List[str]:
+                  iri_index: Dict[str, str],
+                  owner_iri: str = "") -> List[str]:
     """Build TTL lines for all predicate-object maps."""
     lines = []
     for pom in poms:
@@ -373,114 +440,210 @@ def _resolve_poms(poms: List[Dict],
     return lines
 
 
+def _make_table_line(table_name: str, all_col_names: list,
+                     entry: Dict, sql_filter: Optional[str] = None) -> str:
+    """Compute the rr:logicalTable line for a given table/entry/filter combo."""
+    _q3 = "'''"
+    if sql_filter:
+        safe_filter = _quote_filter(sql_filter)
+        hyphen_cols = _collect_hyphen_cols(list(dict.fromkeys(all_col_names)))
+        sql         = _build_star_sql(table_name, hyphen_cols, safe_filter)
+        return f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql}{_q3} ] ;"
+    elif entry.get("logical_table_sql"):
+        sql = entry["logical_table_sql"]
+        return f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql}{_q3} ] ;"
+    elif (entry.get("pattern") == "SE_SH"
+          and entry.get("parent_table")
+          and not entry.get("predicate_object_maps")):
+        parent = entry["parent_table"]
+        sql    = f'SELECT p.* FROM "{table_name}" t JOIN "{parent}" p ON t.id = p.id'
+        return f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql}{_q3} ] ;"
+    elif _needs_sql_query(table_name, all_col_names):
+        hyphen_cols = _collect_hyphen_cols(list(dict.fromkeys(all_col_names)))
+        sql         = _build_star_sql(table_name, hyphen_cols)
+        return f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql}{_q3} ] ;"
+    else:
+        return f'    rr:logicalTable [ rr:tableName "{table_name}" ] ;'
+
+
 def build_entity_block(table_name: str, entry: Dict,
                        defined_iris: Set[str], iri_index: Dict[str, str],
-                       sql_filter: Optional[str] = None) -> str:
+                       sql_filter: Optional[str] = None,
+                       tables_structure: Dict = None) -> str:
     """
     Generic TTL block builder for SE, SE_SH, SEw, SRR, and HIDDEN patterns.
 
-    Logical table source priority:
-      1. sql_filter argument          → HIDDEN pattern (WHERE clause)
-      2. entry["logical_table_sql"]   → explicit SQL override from phase 7
-      3. SE_SH + parent_table + no POMs → JOIN to parent for inheritance
-      4. mixed-case / hyphenated name → rr:sqlQuery with aliased SELECT
-      5. default                      → rr:tableName
+    Splitting rule (non-HIDDEN only):
+      When a TriplesMap has BOTH rr:class AND any join-type POM (direct join
+      or junction_join), it is split into two TriplesMap blocks:
+
+        <iri>         typing map  -- rr:class + literal POMs, full table scan
+        <iri>_joins   join map    -- join POMs only, no rr:class, same template
+
+      This prevents R2RML engines that skip NULL-FK rows from also dropping
+      the rdf:type triple, which causes CLASS COUNT queries to return 0.
+
+      HIDDEN entries (sql_filter is not None) are never split -- they already
+      have a WHERE clause guaranteeing the FK is NOT NULL.
     """
     iri  = entry["triple_map_iri"]
     cls  = entry["subject"].get("class")
     pat  = entry.get("pattern", "")
+    _q3  = "'''"
 
-    _q3 = "'''"
-
-    # Warn about unresolved collisions but still emit the block
     collision_note = entry.get("_collision_note", "")
-
     tmpl = _lower_template(entry["subject"]["template"])
 
-    poms         = entry.get("predicate_object_maps", [])
-    literal_cols = [(p["object"]["column"], _safe_alias(p["object"]["column"]))
-                    for p in poms
+    # Deduplicate predicate_object_maps: remove exact-duplicate POMs that
+    # accumulate in the JSON from multiple phase 5b runs on the same file.
+    # Two POMs are duplicates if they share the same predicate AND the same
+    # object definition (type, parent_triples_map, join_condition, column).
+    raw_poms = entry.get("predicate_object_maps", [])
+    seen_pom_keys = set()
+    poms = []
+    for p in raw_poms:
+        obj  = p.get("object", {})
+        otype = obj.get("type", "")
+        if otype == "literal":
+            key = (p.get("predicate",""), otype, obj.get("column",""), obj.get("datatype",""))
+        elif otype in ("join", "junction_join"):
+            jc  = obj.get("join_condition", {})
+            key = (p.get("predicate",""), otype,
+                   obj.get("parent_triples_map",""),
+                   jc.get("child",""), jc.get("parent",""))
+        else:
+            key = (p.get("predicate",""), otype, obj.get("parent_triples_map",""))
+        if key not in seen_pom_keys:
+            seen_pom_keys.add(key)
+            poms.append(p)
+
+    # Collect all referenced column names for sqlQuery / hyphen-alias decisions
+    all_col_names = _extract_template_cols(entry["subject"]["template"])
+    for p in poms:
+        obj = p.get("object", {})
+        if obj.get("type") == "literal":
+            all_col_names.append(obj["column"])
+        elif obj.get("type") == "join":
+            jc = obj.get("join_condition", {})
+            if jc.get("child"):
+                all_col_names.append(jc["child"])
+
+    # Classify POMs
+    join_poms    = [p for p in poms
+                    if p.get("object", {}).get("type") in ("join", "junction_join")
+                    and p.get("object", {}).get("resolved", True)]
+    literal_poms = [p for p in poms
                     if p.get("object", {}).get("type") == "literal"]
+    other_poms   = [p for p in poms
+                    if p.get("object", {}).get("type")
+                    not in ("literal", "join", "junction_join")]
 
-    if sql_filter:
-        safe_filter   = _quote_filter(sql_filter)
-        raw_tmpl_cols = _extract_template_cols(entry["subject"]["template"])
+    # Split rule: only split when join POMs are present.
+    # Literal POMs stay in the typing map — they are safe as plain literals
+    # (xsd:date and xsd:dateTime are excluded from _EMIT_DATATYPE so they
+    # always emit as plain literals, no engine cast crash).
+    # Keeping literals in the typing map avoids the old problem where the
+    # typing map had zero POMs but a separate prop map crashed on xsd:date,
+    # aborting the entire engine run and killing the rdf:type triples too.
+    needs_split = (
+        bool(cls)                                      # has a class declaration
+        and (bool(join_poms) or bool(literal_poms))   # split when any POMs exist
+        and sql_filter is None                         # not a HIDDEN entry
+    )
 
-        fc_match = re.match(r'(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_-]*))', sql_filter.strip())
-        filter_col_orig = (fc_match.group(1) or fc_match.group(2)) if fc_match else None
+    sep = chr(9472) * max(0, 48 - len(pat) - len(table_name))
 
-        seen = set()
-        select_cols = []
-        for orig in raw_tmpl_cols:
-            alias = _safe_alias(orig)
-            if alias not in seen:
-                seen.add(alias)
-                select_cols.append((orig, alias))
-        if filter_col_orig:
-            alias = _safe_alias(filter_col_orig)
-            if alias not in seen:
-                seen.add(alias)
-                select_cols.append((filter_col_orig, alias))
+    # ── Inner helper: build one TriplesMap block ─────────────────────────
+    def _block(block_iri, block_cls, block_poms, block_table_line, label):
+        lines = []
+        if collision_note:
+            lines.append(f"# \u26a0 COLLISION WARNING: {collision_note}")
+        lines += [
+            f"# \u2500\u2500 {label} {sep}",
+            f"<{block_iri}>",
+            f"    a rr:TriplesMap ;",
+            f"",
+            block_table_line,
+            f"",
+            f"    rr:subjectMap [",
+            f'        rr:template "{tmpl}" ;',
+        ]
+        if block_cls:
+            lines.append(f"        rr:class     {block_cls} ;")
+        lines += [f"    ] ;", f""]
+        lines += _resolve_poms(block_poms, defined_iris, iri_index, owner_iri=block_iri)
+        return _close(lines)
 
-        sql        = _build_safe_sql(table_name, select_cols, safe_filter)
-        table_line = f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql}{_q3} ] ;"
+    if needs_split:
+        result_blocks = []
 
-    elif entry.get("logical_table_sql"):
-        sql        = entry["logical_table_sql"]
-        table_line = f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql}{_q3} ] ;"
+        # ── Typing map: class + literals (stay together for RODI compatibility)
+        # Literal POMs stay with the typing block — RODI needs class and data
+        # properties in the same TriplesMap to satisfy queries like:
+        # ?s rdf:type :C; :prop ?v  (without cross-TriplesMap SPARQL joins)
+        # Only columns that exist in the real table are included.
+        _own_col_set = None
+        if tables_structure:
+            _raw_cols = {
+                c["name"].lower()
+                for c in tables_structure.get(table_name, {}).get("columns", [])
+            }
+            if _raw_cols:
+                _own_col_set = _raw_cols
 
-    elif (entry.get("pattern") == "SE_SH"
-          and entry.get("parent_table")
-          and not entry.get("predicate_object_maps")):
-        parent     = entry["parent_table"]
-        sql        = f'SELECT p.* FROM "{table_name}" t JOIN "{parent}" p ON t.id = p.id'
-        table_line = f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql}{_q3} ] ;"
+        safe_literal_poms = []
+        for p in literal_poms + other_poms:
+            col_name = p.get("object", {}).get("column", "")
+            if not col_name:
+                continue
+            if _own_col_set and col_name.lower() not in _own_col_set:
+                print(f"  [SKIP-prop] {table_name}.{col_name} — not in table schema, came from JOIN")
+                continue
+            safe_literal_poms.append(p)
 
-    elif _needs_sql_query(table_name, _extract_template_cols(entry["subject"]["template"])):
-        raw_tmpl_cols = _extract_template_cols(entry["subject"]["template"])
-        seen_aliases  = set()
-        select_cols   = []
-        for orig in raw_tmpl_cols:
-            alias = _safe_alias(orig)
-            if alias not in seen_aliases:
-                seen_aliases.add(alias)
-                select_cols.append((orig, alias))
-        for orig, alias in literal_cols:
-            if alias not in seen_aliases:
-                seen_aliases.add(alias)
-                select_cols.append((orig, alias))
-        sql        = _build_safe_sql(table_name, select_cols)
-        table_line = f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql}{_q3} ] ;"
+        typing_col_names = _extract_template_cols(entry["subject"]["template"])
+        for p in safe_literal_poms:
+            typing_col_names.append(p["object"]["column"])
+        typing_table_line = _make_table_line(table_name, typing_col_names, entry)
+        typing_block = _block(
+            iri, cls,
+            safe_literal_poms,
+            typing_table_line,
+            f"{pat}_{table_name} [typing]",
+        )
+        result_blocks.append(typing_block)
+
+        # ── Join map: joins only, no class ────────────────────────────────
+        # ALWAYS use sqlQuery for join maps — RODI rebuilds child subquery
+        # from declared columns only, so rr:tableName hides FK child columns.
+        if join_poms:
+            join_col_names = _extract_template_cols(entry["subject"]["template"])
+            for p in join_poms:
+                obj = p.get("object", {})
+                if obj.get("type") == "join":
+                    jc = obj.get("join_condition", {})
+                    if jc.get("child"):
+                        join_col_names.append(jc["child"])
+            hyphen_cols     = _collect_hyphen_cols(list(dict.fromkeys(join_col_names)))
+            join_sql        = _build_star_sql(table_name, hyphen_cols)
+            # ALWAYS use sqlQuery for join maps
+            _q3j            = "\'\'\'"
+            join_table_line = f"    rr:logicalTable [ rr:sqlQuery {_q3j}{join_sql}{_q3j} ] ;"
+            join_iri        = iri + "_joins"
+            join_block = _block(
+                join_iri, None,
+                join_poms,
+                join_table_line,
+                f"{pat}_{table_name} [joins]",
+            )
+            result_blocks.append(join_block)
+
+        return "\n".join(result_blocks)
 
     else:
-        table_line = f'    rr:logicalTable [ rr:tableName "{table_name}" ] ;'
-
-    sep   = "─" * max(0, 48 - len(pat) - len(table_name))
-    lines = []
-    if collision_note:
-        lines.append(f"# ⚠ COLLISION WARNING: {collision_note}")
-    lines += [
-        f"# ── {pat}_{table_name} {sep}",
-        f"<{iri}>",
-        f"    a rr:TriplesMap ;",
-        f"",
-        table_line,
-        f"",
-        f"    rr:subjectMap [",
-        f'        rr:template "{tmpl}" ;',
-    ]
-
-    if cls:
-        lines.append(f"        rr:class     {cls} ;")
-
-    lines += [f"    ] ;", f""]
-
-    pom_lines = _resolve_poms(
-        entry.get("predicate_object_maps", []), defined_iris, iri_index
-    )
-    lines += pom_lines
-
-    return _close(lines)
+        # ── No split needed: single block (HIDDEN or no POMs) ────────────
+        table_line = _make_table_line(table_name, all_col_names, entry, sql_filter)
+        return _block(iri, cls, poms, table_line, f"{pat}_{table_name}")
 
 
 def _get_subject_template(triple_map_iri: str,
@@ -551,13 +714,14 @@ def build_sr_section(sr_raw: Dict, entity_entries: Dict,
             sr_iri   = f"{entry['triple_map_iri']}_{subj_tag}_{obj_tag}"
 
             _q3b = "'''"
-            s_child         = s_join.get("child", "id")
-            o_child_col     = o_join.get("child", "id")
-            bridge_cols_needed = list(dict.fromkeys([s_child, o_child_col]))
-            bridge_select   = ", ".join(
-                f'"{c}" AS {_safe_alias(c)}' for c in bridge_cols_needed
+            s_child     = s_join.get("child", "id")
+            o_child_col = o_join.get("child", "id")
+            # SR: SELECT * so all bridge columns are available.
+            # Aliases only for hyphenated FK column names.
+            hyphen_cols = _collect_hyphen_cols(
+                list(dict.fromkeys([s_child, o_child_col]))
             )
-            _br_sql  = f'SELECT {bridge_select} FROM "{bridge_table}"'
+            _br_sql   = _build_star_sql(bridge_table, hyphen_cols)
             subj_tmpl = _lower_template(subj_tmpl)
 
             lines = [
@@ -796,6 +960,29 @@ def run_r2rml_generation():
     for t, e in srr_raw.items():
         entity_entries[t] = {**e, "pattern": e.get("pattern", "SRR")}
 
+    # ── Step 3b: canonical_class_owner sanity check ──────────
+    # Build SE/SE_SH class→table map. Clear class on any SEw/SRR entry
+    # that was wrongly assigned a class already owned by SE/SE_SH
+    # (phase 7 collision error, e.g. SEw_emails typed :Abstract).
+    canonical_class_owner: Dict[str, str] = {}
+    for t, e in se_raw.items():
+        cls = e.get("subject", {}).get("class", "").lstrip(":")
+        if cls:
+            canonical_class_owner[cls] = t
+    for t, e in sh_raw.items():
+        cls = e.get("subject", {}).get("class", "").lstrip(":")
+        if cls:
+            canonical_class_owner[cls] = t
+    for t in list(sew_raw.keys()) + list(srr_raw.keys()):
+        if t not in entity_entries:
+            continue
+        e   = entity_entries[t]
+        cls = e.get("subject", {}).get("class", "").lstrip(":")
+        if cls and cls in canonical_class_owner and canonical_class_owner[cls] != t:
+            owner = canonical_class_owner[cls]
+            print(f"  [WARN] Class collision: :{cls} on '{t}' already owned by '{owner}' — clearing")
+            entity_entries[t] = {**e, "subject": {**e["subject"], "class": ""}}
+
     # ── Step 4: Build IRI index for reference fixing ────────
     iri_index    = build_iri_index(entity_entries, sr_raw)
     defined_iris = {e["triple_map_iri"] for e in entity_entries.values()}
@@ -812,7 +999,8 @@ def run_r2rml_generation():
     sections.append(section_header("SE — Strong Entities"))
     for t in se_raw:
         sections.append(
-            build_entity_block(t, entity_entries[t], defined_iris, iri_index)
+            build_entity_block(t, entity_entries[t], defined_iris, iri_index,
+                               tables_structure=tables_structure)
         )
 
     # SE_SH
@@ -820,16 +1008,199 @@ def run_r2rml_generation():
         sections.append(section_header("SE_SH — Subclass Entities"))
         for t in sh_raw:
             sections.append(
-                build_entity_block(t, entity_entries[t], defined_iris, iri_index)
+                build_entity_block(t, entity_entries[t], defined_iris, iri_index,
+                                   tables_structure=tables_structure)
             )
 
     # SEw
     if sew_raw:
         sections.append(section_header("SEw — Weak Entities"))
         for t in sew_raw:
+            entry = entity_entries[t]
+            # Skip attribute-like SEw tables — they are fully represented
+            # by the rescued property TriplesMap below. Emitting a standalone
+            # entity block with composite-PK IRI and wrong class produces
+            # spurious triples that confuse SPARQL engines.
+            if entry.get("sew_type") == "property_of_owner":
+                print(f"  [SEw] Skipping entity block for attribute-like table {t!r} "
+                      f"(sew_type=property_of_owner — rescue map covers it)")
+                continue
+            # Also skip entries rescued by phase7 (pattern=SEw_rescued)
+            if entry.get("pattern") == "SEw_rescued" or entry.get("_rescued_as_property"):
+                continue
             sections.append(
-                build_entity_block(t, entity_entries[t], defined_iris, iri_index)
+                build_entity_block(t, entry, defined_iris, iri_index)
             )
+
+        # ── SEw property rescue ──────────────────────────────────────────
+        # Two paths:
+        #
+        # PATH A — sew_type=property_of_owner (set by phase 3):
+        #   Phase 3 already identified this as an attribute-like SEw and stored
+        #   all needed fields directly: owner_template, owner_fk_col,
+        #   owner_data_col, owner_predicate, owner_table.
+        #   Generate ONE TriplesMap: owner subject + property predicate + data literal.
+        #
+        # PATH B — composite PK detected here (fallback for entries phase 3
+        #   processed before this fix or loaded from old cache):
+        #   Detect from template placeholders + join POMs and derive predicate
+        #   from stored owner_predicate or capitalise table name.
+        import re as _re
+        _q3 = "\'\'\'"
+
+        for t, entry in sew_raw.items():
+
+            # ── PATH A: clean phase3 attribute-like entry ─────────────────
+            if entry.get("sew_type") == "property_of_owner":
+                owner_tmpl   = entry.get("owner_template", "")
+                owner_fk_col = entry.get("owner_fk_col", "")
+                data_col     = entry.get("owner_data_col", "")
+                predicate    = entry.get("owner_predicate", "")
+                owner_tbl    = entry.get("owner_table", "")
+
+                if not owner_tmpl:
+                    # Try to recover owner_template from entity_entries
+                    owner_iri = entry.get("owner_iri", "")
+                    for oe in entity_entries.values():
+                        if oe.get("triple_map_iri") == owner_iri:
+                            owner_tmpl = oe.get("subject", {}).get("template", "")
+                            break
+
+                if not (owner_tmpl and owner_fk_col and data_col and predicate and owner_tbl):
+                    print(f"  [SEw-rescue PATH-A] {t!r}: missing fields, skipping")
+                    continue
+
+                owner_pk_cols = _re.findall(r'\{([^}]+)\}', owner_tmpl)
+                owner_pk      = owner_pk_cols[0] if owner_pk_cols else "id"
+                rescue_iri    = f"urn:r2rml:SEw_{t}_prop_{data_col}"
+                # Use rr:tableName directly on the SEw table.
+                # Subject template uses the FK column {owner_fk_col} which holds
+                # the owner PK value — resolves to the same IRI as the owner entity.
+                # This avoids SQL JOINs, aliases, and reserved-word issues entirely.
+                owner_tmpl_fk = owner_tmpl.replace(
+                    f"{{{owner_pk}}}", f"{{{owner_fk_col}}}"
+                )
+                # Use plain SELECT col1, col2 WHERE col IS NOT NULL — no aliases.
+                # Aliases cause reserved-word errors (e.g. AS value in PostgreSQL).
+                # Only use hyphen-quoting when column names or table names contain hyphens.
+                has_hyphen = "-" in owner_fk_col or "-" in data_col or "-" in t
+                if has_hyphen:
+                    hyphen_cols = _collect_hyphen_cols([owner_fk_col, data_col])
+                    sql_q       = _build_star_sql(t, hyphen_cols,
+                                                  f'"{data_col}" IS NOT NULL')
+                else:
+                    sql_q = (f'SELECT {owner_fk_col}, {data_col} '
+                             f'FROM "{t}" '
+                             f'WHERE {data_col} IS NOT NULL')
+                table_line = f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql_q}{_q3} ] ;"
+                rescue_block = "\n".join([
+                    f"# ── SEw_{t} [property of {owner_tbl}: {data_col}] ────────────────────",
+                    f"<{rescue_iri}>",
+                    f"    a rr:TriplesMap ;",
+                    f"",
+                    table_line,
+                    f"",
+                    f"    rr:subjectMap [",
+                    f'        rr:template "{owner_tmpl_fk}" ;',
+                    f"    ] ;",
+                    f"",
+                    f"    rr:predicateObjectMap [",
+                    f"        rr:predicate {predicate} ;",
+                    f"        rr:objectMap  [",
+                    f'            rr:column   "{_safe_alias(data_col)}" ;',
+                    f"        ] ;",
+                    f"    ]  .",
+                    f"",
+                ])
+                sections.append(rescue_block)
+                print(f"  [SEw-rescue PATH-A] {t}.{data_col} → {predicate} on {owner_tmpl}")
+                continue
+
+            # ── PATH B: fallback composite-PK detection ───────────────────
+            tmpl      = entry.get("subject", {}).get("template", "")
+            tmpl_cols = _re.findall(r'\{([^}]+)\}', tmpl)
+            if len(tmpl_cols) < 2:
+                continue
+
+            poms      = entry.get("predicate_object_maps", [])
+            join_poms = [p for p in poms if p.get("object", {}).get("type") == "join"]
+            if not join_poms:
+                continue
+
+            fk_cols  = {p["object"]["join_condition"]["child"]
+                        for p in join_poms
+                        if p.get("object", {}).get("join_condition", {}).get("child")}
+            data_cols = [c for c in tmpl_cols if c not in fk_cols]
+            if not data_cols:
+                continue
+
+            owner_iri = join_poms[0]["object"].get("parent_triples_map", "")
+            if not owner_iri:
+                continue
+
+            owner_tmpl = None
+            for oe in entity_entries.values():
+                if oe.get("triple_map_iri") == owner_iri:
+                    owner_tmpl = oe.get("subject", {}).get("template", "")
+                    break
+            if not owner_tmpl:
+                continue
+
+            owner_pk_cols = _re.findall(r'\{([^}]+)\}', owner_tmpl)
+            owner_pk  = owner_pk_cols[0] if owner_pk_cols else "id"
+            fk_col    = next(iter(fk_cols)) if fk_cols else None
+            if not fk_col:
+                continue
+
+            # Prefer stored predicate from phase3/phase7, else capitalise table name
+            phase3_pred = entry.get("owner_predicate") or entry.get("_rescue_property")
+            if phase3_pred:
+                predicate = phase3_pred if phase3_pred.startswith(":") else f":{phase3_pred}"
+            else:
+                raw_name  = t.replace("_", "-").replace(" ", "-")
+                parts     = raw_name.split("-")
+                # Capitalise only first segment: "e-mail" → "E-mail" not "E-Mail"
+                predicate = ":" + "-".join(
+                    [parts[0].capitalize()] + [p.lower() for p in parts[1:]]
+                    if parts else [])
+
+            owner_table = owner_iri.replace("urn:r2rml:SE_", "").replace("urn:r2rml:SE_SH_", "")
+
+            for col in data_cols:
+                rescue_iri = f"urn:r2rml:SEw_{t}_prop_{col}"
+                # Use FK column in subject template to match owner IRI directly.
+                # No JOIN or aliases needed — avoids reserved word issues.
+                owner_tmpl_fk = owner_tmpl.replace(
+                    f"{{{owner_pk}}}", f"{{{fk_col}}}"
+                ) if owner_tmpl else f"{base_iri}{owner_table}/{{{fk_col}}}"
+                needs_sql_b   = _needs_sql_query(t, [fk_col, col])
+                if needs_sql_b:
+                    hcols_b       = _collect_hyphen_cols([fk_col, col])
+                    sql_b         = _build_star_sql(t, hcols_b, f'"{col}" IS NOT NULL')
+                    table_line_b  = f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql_b}{_q3} ] ;"
+                else:
+                    table_line_b  = f'    rr:logicalTable [ rr:tableName "{t}" ] ;'
+                rescue_block = "\n".join([
+                    f"# ── SEw_{t} [rescued property: {col}] {'─'*20}",
+                    f"<{rescue_iri}>",
+                    f"    a rr:TriplesMap ;",
+                    f"",
+                    table_line_b,
+                    f"",
+                    f"    rr:subjectMap [",
+                    f'        rr:template "{owner_tmpl_fk}" ;',
+                    f"    ] ;",
+                    f"",
+                    f"    rr:predicateObjectMap [",
+                    f"        rr:predicate {predicate} ;",
+                    f"        rr:objectMap  [",
+                    f'            rr:column   "{_safe_alias(col)}" ;',
+                    f"        ] ;",
+                    f"    ]  .",
+                    f"",
+                ])
+                sections.append(rescue_block)
+                print(f"  [SEw-rescue PATH-B] {t}.{col} → {predicate} on {owner_tmpl}")
 
     # SRR
     if srr_raw:
