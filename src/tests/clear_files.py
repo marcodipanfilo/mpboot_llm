@@ -5,7 +5,7 @@ Deletes all JSON files in:
   - src/outputs/DB_as_json/
   - src/outputs/mappings/
   - src/outputs/
-Deletes specific non-JSON files (e.g. .ttl).
+Deletes specific non-JSON files (e.g. .ttl, .sql).
 Deletes memory files in src/memory/.
 
 Usage:
@@ -29,6 +29,7 @@ MEMORY_DIR     = "src/memory"
 EXTRA_DELETE_FILES = [
     os.path.join(MAPPINGS_DIR, "mappings_r2rml.ttl"),
     os.path.join(MAPPINGS_DIR, "mappings_r2rml_final.ttl"),
+    os.path.join("src/inputs/database", "dump_new.sql"),
 ]
 
 # Memory files in src/memory/ (these get DELETED, not emptied)
@@ -89,7 +90,7 @@ def process_named_deletes(file_list: list, base_dir: str):
 
 
 def process_extra_deletes():
-    """Delete non-JSON files that need full removal (e.g. .ttl)."""
+    """Delete non-JSON files that need full removal (e.g. .ttl, .sql)."""
     deleted = 0
     skipped = 0
     for path in EXTRA_DELETE_FILES:
@@ -130,7 +131,7 @@ def main():
     total_deleted += d
     total_found += f
 
-    print(f"\n── {MAPPINGS_DIR} (non-JSON extras) ──")
+    print(f"\n── {MAPPINGS_DIR} + src/inputs/database (non-JSON extras) ──")
     d, s = process_extra_deletes()
     total_deleted += d
     total_skipped += s
