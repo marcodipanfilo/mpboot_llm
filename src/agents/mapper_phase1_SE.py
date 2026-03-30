@@ -386,6 +386,64 @@ class OntologyPropertyIndex:
                             and not self.data_props[prop_name]["domain"]):
                         self.data_props[prop_name]["domain"] = class_name
 
+        # ── RDF/XML fallback ──────────────────────────────────
+        # If no Declaration tags were found, parse RDF/XML format instead.
+        if not self.data_props and not self.obj_props:
+            print("  [OntologyPropertyIndex] No Declaration tags — trying RDF/XML parsing")
+            OWL  = "http://www.w3.org/2002/07/owl#"
+            RDF  = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+            RDFS = "http://www.w3.org/2000/01/rdf-schema#"
+
+            for elem in root.iter(f"{{{OWL}}}Class"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if iri and "owl#" not in iri:
+                    cls_name = self._local(iri)
+                    for sub in elem.findall(f"{{{RDFS}}}subClassOf"):
+                        parent_iri = sub.get(f"{{{RDF}}}resource", "")
+                        if parent_iri:
+                            parent = self._local(parent_iri)
+                            if parent and parent != "Thing":
+                                self.subclass_of[cls_name].add(parent)
+
+            for elem in root.iter(f"{{{OWL}}}DatatypeProperty"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if not iri:
+                    continue
+                name = self._local(iri)
+                info = {"domain": None, "domain_union": None, "range": None}
+                dom = elem.find(f"{{{RDFS}}}domain")
+                if dom is not None:
+                    d = dom.get(f"{{{RDF}}}resource", "")
+                    if d:
+                        info["domain"] = self._local(d)
+                rng = elem.find(f"{{{RDFS}}}range")
+                if rng is not None:
+                    r = rng.get(f"{{{RDF}}}resource", "")
+                    if r:
+                        info["range"] = r
+                self.data_props[name] = info
+
+            for elem in root.iter(f"{{{OWL}}}ObjectProperty"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if not iri:
+                    continue
+                name = self._local(iri)
+                info = {"domain": None, "range": None}
+                dom = elem.find(f"{{{RDFS}}}domain")
+                if dom is not None:
+                    d = dom.get(f"{{{RDF}}}resource", "")
+                    if d:
+                        info["domain"] = self._local(d)
+                rng = elem.find(f"{{{RDFS}}}range")
+                if rng is not None:
+                    r = rng.get(f"{{{RDF}}}resource", "")
+                    if r:
+                        info["range"] = self._local(r)
+                self.obj_props[name] = info
+
+            print(f"  [OntologyPropertyIndex] RDF/XML: {len(self.data_props)} data props, "
+                  f"{len(self.obj_props)} obj props")
+
     def _close_subclass(self):
         changed = True
         while changed:
@@ -420,7 +478,7 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
         if "" not in prefixes:
             base = root.get("{http://www.w3.org/XML/1998/namespace}base") or root.get("ontologyIRI", "")
             if base:
-                prefixes[""] = base.rstrip("/") + "#"
+                prefixes[""] = base if base.endswith("#") else base.rstrip("/") + "#"
     except ET.ParseError:
         with open(owl_file, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
@@ -429,7 +487,7 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
         if "" not in prefixes:
             m = re.search(r'ontologyIRI="([^"]+)"', content)
             if m:
-                prefixes[""] = m.group(1).rstrip("/") + "#"
+                prefixes[""] = m.group(1) if m.group(1).endswith("#") else m.group(1).rstrip("/") + "#"
     except FileNotFoundError:
         print(f"  [WARN] Ontology file not found: {owl_file}")
 
@@ -722,6 +780,12 @@ def _fetch_class_properties(ontology_class: str) -> Tuple[List[str], List[str]]:
     print(f"\n    ┌── ontology_explorer — class_properties({ontology_class!r}) ──┐")
     print(f"    │  raw keys: {list(result.keys()) if isinstance(result, dict) else type(result)}")
 
+    # If ontology_explorer returned an error, the class doesn't exist in the ontology
+    if isinstance(result, dict) and "error" in result:
+        print(f"    │  [ERROR] Class not found in ontology: {result['error']}")
+        print(f"    └────────────────────────────────────────────────────────\n")
+        return [], [], False   # (data_props, obj_props, class_valid=False)
+
     data_props: List[str] = []
     obj_props:  List[str] = []
 
@@ -761,8 +825,17 @@ def _fetch_class_properties(ontology_class: str) -> Tuple[List[str], List[str]]:
             if isinstance(entry, str):
                 return entry.split("#")[-1] if "#" in entry else entry.split("/")[-1]
             if isinstance(entry, dict):
-                n = entry.get("name") or entry.get("local_name") or entry.get("iri", "")
-                return n.split("#")[-1] if "#" in n else n.split("/")[-1]
+                # ontology_explorer returns "property_name" and "property_iri"
+                # also handle legacy keys "name", "local_name", "iri"
+                n = (entry.get("property_name")
+                     or entry.get("name")
+                     or entry.get("local_name")
+                     or "")
+                if n:
+                    return n.split("#")[-1] if "#" in n else n.split("/")[-1]
+                # fallback: derive from IRI
+                iri = entry.get("property_iri") or entry.get("iri", "")
+                return iri.split("#")[-1] if "#" in iri else iri.split("/")[-1]
             return str(entry)
 
         data_props = [_to_local(e) for e in dp_raw if e]
@@ -772,7 +845,7 @@ def _fetch_class_properties(ontology_class: str) -> Tuple[List[str], List[str]]:
     print(f"    │  object_properties ({len(obj_props)}): {obj_props}")
     print(f"    └────────────────────────────────────────────────────────\n")
 
-    return data_props, obj_props
+    return data_props, obj_props, True  # class_valid=True
 
 
 # ============================================================
@@ -922,7 +995,6 @@ def build_se_json_mapping(
     attributes:     List[Dict],
     base_iri:       str,
     all_se_tables:  set,
-    prop_index:     OntologyPropertyIndex,
     mapper:         "OntologyMapper",
     col_meanings:   Dict[str, str],
     table_meaning:  str,
@@ -962,10 +1034,13 @@ def build_se_json_mapping(
     attr_cols = [a for a in attributes if a["role"] == "attribute"]
     fk_cols   = [a for a in attributes if a["role"] == "fk"]
 
-    pk_template = (
-        "/".join(f"{{{c['name']}}}" for c in pk_cols)
-        if pk_cols else "{id}"
-    )
+    if pk_cols:
+        pk_template = "/".join(f"{{{c['name']}}}" for c in pk_cols)
+    else:
+        # No declared PK — use all non-FK columns as natural composite key.
+        # Never fall back to a synthetic {id} that doesn't exist in the DB.
+        non_fk = [a for a in attributes if a["role"] != "fk"]
+        pk_template = "/".join(f"{{{c['name']}}}" for c in non_fk) if non_fk else "/".join(f"{{{c['name']}}}" for c in attributes)
 
     print(f"\n    [BUILD] table={table_name!r}  class={ontology_class!r}")
     print(f"            pk  : {[c['name'] for c in pk_cols]}")
@@ -981,7 +1056,10 @@ def build_se_json_mapping(
               f"{sorted(used_predicates)}")
 
     # ── Step 2: fetch class properties from ontology_explorer ─────────────────
-    data_prop_names, obj_prop_names = _fetch_class_properties(ontology_class)
+    data_prop_names, obj_prop_names, class_valid = _fetch_class_properties(ontology_class)
+    if not class_valid:
+        print(f"    [WARN] Class {ontology_class!r} not found in ontology — "
+              f"all columns will use camelCase fallback predicates")
 
     # ── Step 3: LLM decides which attribute columns → rdfs:label ──────────────
     # Pass used_predicates so it knows if rdfs:label is already taken.
@@ -1300,10 +1378,8 @@ class OntologyMapper:
 
         has_explicit_pk   = len(pk_set) > 0
         implicit_pk_cols: set = set()
-        if not has_explicit_pk:
-            for col in columns:
-                if col["name"] == "id" and col.get("is_foreign_key"):
-                    implicit_pk_cols.add("id")
+        # No implicit PK inference — if the schema has no PK declared,
+        # pk_cols will be empty and the template builder uses non-FK columns.
 
         result = []
         for col in columns:
@@ -1363,6 +1439,13 @@ class OntologyMapper:
         available = [c for c in ontology_classes
                      if not (used_classes and c in used_classes)]
 
+        # If all classes already used, send full list — re-use is better than hallucination
+        if not available:
+            available = list(ontology_classes)
+            extra_note = "\nNOTE: All classes are already assigned. Pick the CLOSEST semantic match from the list above even if it was used. Do NOT invent class names not in this list."
+        else:
+            extra_note = ""
+
         return f"""You are an ontology mapping expert. Find the SINGLE best matching ontology class for this database table. Prefer a match that is very high both syntactically AND semantically. Prefer the class whose local name most directly matches the table name — do NOT pick a subclass when the parent class name is a better syntactic match.
 
 TABLE: {table_name}
@@ -1378,7 +1461,7 @@ AVAILABLE ONTOLOGY CLASSES (classes already assigned to other tables are exclude
 IMPORTANT: If the table name closely matches a class name (e.g. 'persons' → 'Person',
 'committees' → 'Committee'), prefer that class even if a subclass seems more specific.
 Subclasses should only be chosen if the table name directly suggests them.
-
+{extra_note}
 Return ONLY a JSON object, no markdown, no extra text:
 
 {{
@@ -1487,6 +1570,18 @@ Return ONLY a JSON object, no markdown, no extra text:
             )
 
             if mapping:
+                chosen_cls = mapping['ontology_class']
+                if chosen_cls not in ontology_classes:
+                    # LLM hallucinated a non-existent class — pick closest real one
+                    print(f"  ⚠ LLM returned non-existent class {chosen_cls!r} — finding closest match")
+                    norm = lambda s: s.lower().replace("_","").replace("-","")
+                    best = min(ontology_classes, key=lambda c: (
+                        0 if norm(c) == norm(chosen_cls) else
+                        1 if norm(chosen_cls) in norm(c) or norm(c) in norm(chosen_cls) else 2
+                    ))
+                    print(f"  ✓ Remapped {chosen_cls!r} → {best!r}")
+                    mapping['ontology_class'] = best
+                    mapping['why'] = f"LLM chose non-existent '{chosen_cls}', remapped to closest: '{best}'"
                 print(f"  ✓ → {mapping['ontology_class']}  (score {mapping.get('score')}/5)")
             else:
                 print(f"  ✗ mapping failed")
@@ -1597,7 +1692,7 @@ def run_se_mapping():
                 )
                 # Track newly assigned class
                 assigned = record.get("ontology_mapping", {}).get("ontology_class")
-                if assigned:
+                if assigned and assigned in set(ontology_classes):
                     used_classes.add(assigned)
                 mappings_process[table_name] = record
                 success += 1
@@ -1634,7 +1729,6 @@ def run_se_mapping():
                 attributes     = attributes,
                 base_iri       = base_iri,
                 all_se_tables  = all_se_tables,
-                prop_index     = prop_index,
                 mapper         = mapper,
                 col_meanings   = col_meanings,
                 table_meaning  = table_meaning,
