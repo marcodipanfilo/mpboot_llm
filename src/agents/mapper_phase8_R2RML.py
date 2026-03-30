@@ -166,7 +166,7 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
             base = (root.get("{http://www.w3.org/XML/1998/namespace}base")
                     or root.get("ontologyIRI", ""))
             if base:
-                prefixes[""] = base.rstrip("/") + "#"
+                prefixes[""] = base if base.endswith("#") else base.rstrip("/") + "#"
     except ET.ParseError:
         with open(owl_file, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
@@ -175,7 +175,7 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
         if "" not in prefixes:
             m = re.search(r'ontologyIRI="([^"]+)"', content)
             if m:
-                prefixes[""] = m.group(1).rstrip("/") + "#"
+                prefixes[""] = m.group(1) if m.group(1).endswith("#") else m.group(1).rstrip("/") + "#"
     except FileNotFoundError:
         print(f"  [WARN] Ontology file not found: {owl_file}")
     return prefixes
@@ -292,14 +292,18 @@ _SQL_KEYWORDS = {"IS", "NOT", "NULL", "TRUE", "FALSE", "AND", "OR",
 
 
 def _quote_filter(sql_filter: str) -> str:
-    """Quote only column identifiers in a WHERE clause, not SQL keywords."""
+    """Quote only the column identifier in a WHERE clause (left side of = or IS).
+    Never quotes words inside the right-hand side value.
+    """
     def _quoter(m):
         ident = m.group(1)
         if ident.upper() in _SQL_KEYWORDS:
             return m.group(0)
-        return f'"{ident}"' + m.group(0)[len(ident):]
-    return re.sub(r'(?<!")\b([A-Za-z_][A-Za-z0-9_-]*)\b(?!\s*")', _quoter, sql_filter)
-
+        return '"' + ident + '"' + m.group(0)[len(ident):]
+    # Only match identifiers immediately followed by = or IS (column names only)
+    # Pattern built from parts to avoid escape corruption during file writes
+    pattern = r'(?<!")\b([A-Za-z_][A-Za-z0-9_-]*)\b(?=\s*(=|IS[\s$]))'
+    return re.sub(pattern, _quoter, sql_filter)
 
 def _build_star_sql(table_name: str,
                     hyphen_cols: list = None,
@@ -339,9 +343,17 @@ def _collect_hyphen_cols(names: list) -> list:
 # Datatypes that must be explicitly declared.
 # xsd:string is intentionally EXCLUDED — plain literals match SQL strings correctly.
 # Adding xsd:string causes "foo"^^xsd:string != "foo" mismatches in RODI comparison.
+# xsd:decimal → xsd:double mapping:
+# The ontology declares rdfs:range xsd:decimal for many properties. When RODI's
+# reasoner infers types, DB values like 4.0E-4 get typed as xsd:decimal which
+# Sesame rejects (xsd:decimal does not allow scientific notation).
+# Solution: emit xsd:double explicitly for decimal columns — xsd:double accepts
+# scientific notation and is semantically equivalent for petroleum measurements.
+_DECIMAL_TO_DOUBLE = {"xsd:decimal", "xsd:numeric"}
+
 _EMIT_DATATYPE = {
     "xsd:integer", "xsd:int", "xsd:long", "xsd:short",
-    "xsd:decimal", "xsd:float", "xsd:double",
+    "xsd:float", "xsd:double",
     "xsd:boolean", "xsd:bool",
     # xsd:date and xsd:dateTime intentionally excluded:
     # some R2RML engines crash when casting NULL or non-standard
@@ -354,6 +366,9 @@ _EMIT_DATATYPE = {
 
 
 def _pom_literal(pred: str, col: str, datatype: str) -> List[str]:
+    # Remap xsd:decimal → xsd:double to avoid Sesame rejecting scientific notation
+    if datatype in _DECIMAL_TO_DOUBLE:
+        datatype = "xsd:double"
     if datatype in ("xsd:anyURI", "http://www.w3.org/2001/XMLSchema#anyURI"):
         return [
             f"    rr:predicateObjectMap [",
@@ -434,15 +449,31 @@ def _resolve_poms(poms: List[Dict],
             fixed   = fix_iri(raw_ref, defined_iris, iri_index)
             if fixed != raw_ref:
                 lines.append(f"    # [auto-fixed] {raw_ref} → {fixed}")
-            jc = obj.get("join_condition", {})
-            lines += _pom_join(pred, fixed,
-                               jc.get("child", "id"), jc.get("parent", "id"))
+            jc        = obj.get("join_condition", {})
+            child_col = jc.get("child", "")
+            parent_col = jc.get("parent", "")
+            if not child_col or not parent_col:
+                lines.append(
+                    f"    # [SKIPPED JOIN] {pred}: missing child/parent in join_condition "
+                    f"(child={child_col!r}, parent={parent_col!r}) — "
+                    f"would have emitted 'id' fallback causing unknown column error"
+                )
+                print(f"  [WARN] Skipping join POM for {pred!r}: "
+                      f"join_condition missing child={child_col!r} parent={parent_col!r} "
+                      f"in {owner_iri!r}")
+                continue
+            lines += _pom_join(pred, fixed, child_col, parent_col)
     return lines
 
 
 def _make_table_line(table_name: str, all_col_names: list,
                      entry: Dict, sql_filter: Optional[str] = None) -> str:
-    """Compute the rr:logicalTable line for a given table/entry/filter combo."""
+    """Compute the rr:logicalTable line for a given table/entry/filter combo.
+
+    IMPORTANT: always use triple-double-quote (\"\"\" ... \"\"\") as the Turtle
+    long-string delimiter for rr:sqlQuery.  Triple-single-quote conflicts with
+    SQL string literals that contain single quotes (e.g. WHERE col = 'value').
+    """
     _q3 = "'''"
     if sql_filter:
         safe_filter = _quote_filter(sql_filter)
@@ -456,7 +487,10 @@ def _make_table_line(table_name: str, all_col_names: list,
           and entry.get("parent_table")
           and not entry.get("predicate_object_maps")):
         parent = entry["parent_table"]
-        sql    = f'SELECT p.* FROM "{table_name}" t JOIN "{parent}" p ON t.id = p.id'
+        # Use the actual PK columns from the entry template instead of hardcoded "id"
+        tmpl_cols = _extract_template_cols(entry.get("subject", {}).get("template", ""))
+        pk_col    = tmpl_cols[0] if tmpl_cols else "id"
+        sql = f'SELECT p.* FROM "{table_name}" t JOIN "{parent}" p ON t.{pk_col} = p.{pk_col}'
         return f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql}{_q3} ] ;"
     elif _needs_sql_query(table_name, all_col_names):
         hyphen_cols = _collect_hyphen_cols(list(dict.fromkeys(all_col_names)))
@@ -627,7 +661,7 @@ def build_entity_block(table_name: str, entry: Dict,
             hyphen_cols     = _collect_hyphen_cols(list(dict.fromkeys(join_col_names)))
             join_sql        = _build_star_sql(table_name, hyphen_cols)
             # ALWAYS use sqlQuery for join maps
-            _q3j            = "\'\'\'"
+            _q3j            = "'''"
             join_table_line = f"    rr:logicalTable [ rr:sqlQuery {_q3j}{join_sql}{_q3j} ] ;"
             join_iri        = iri + "_joins"
             join_block = _block(
@@ -661,10 +695,12 @@ def _adapt_template_for_bridge(tmpl: str, s_join: Dict) -> str:
     The bridge table only has FK columns, not the entity's own PK.
     """
     fk_col    = s_join.get("child", "")
-    entity_pk = s_join.get("parent", "id")
-    if fk_col and entity_pk:
-        tmpl = tmpl.replace(f"{{{entity_pk}}}", f"{{{fk_col}}}")
-    return tmpl
+    entity_pk = s_join.get("parent", "")
+    if not fk_col or not entity_pk:
+        print(f"  [WARN] _adapt_template_for_bridge: missing child={fk_col!r} "
+              f"or parent={entity_pk!r} in join — template left unchanged: {tmpl!r}")
+        return tmpl
+    return tmpl.replace(f"{{{entity_pk}}}", f"{{{fk_col}}}")
 
 
 def build_sr_section(sr_raw: Dict, entity_entries: Dict,
@@ -714,8 +750,17 @@ def build_sr_section(sr_raw: Dict, entity_entries: Dict,
             sr_iri   = f"{entry['triple_map_iri']}_{subj_tag}_{obj_tag}"
 
             _q3b = "'''"
-            s_child     = s_join.get("child", "id")
-            o_child_col = o_join.get("child", "id")
+            s_child     = s_join.get("child", "")
+            o_child_col = o_join.get("child", "")
+            if not s_child or not o_child_col:
+                blocks.append(
+                    f"# SKIPPED SR_{bridge_table} ({subj_tag}→{obj_tag}): "
+                    f"missing FK child column in join (s_child={s_child!r}, "
+                    f"o_child={o_child_col!r})\n"
+                )
+                print(f"  [WARN] Skipping SR_{bridge_table}: "
+                      f"s_child={s_child!r} o_child={o_child_col!r}")
+                continue
             # SR: SELECT * so all bridge columns are available.
             # Aliases only for hyphenated FK column names.
             hyphen_cols = _collect_hyphen_cols(
@@ -737,8 +782,8 @@ def build_sr_section(sr_raw: Dict, entity_entries: Dict,
                 f"",
             ]
             lines += _pom_join(pred, obj_iri,
-                               _safe_alias(o_join.get("child", "id")),
-                               _safe_alias(o_join.get("parent", "id")))
+                               _safe_alias(o_child_col),
+                               _safe_alias(o_join.get("parent", "")))
             bridge_name_blocks.append(_close(lines))
 
         if bridge_name_blocks:
@@ -783,7 +828,9 @@ def _make_filter_from_schema(col_name: str, filter_value: str,
         return f"{col_name} = {iv}"
 
     if dt in _STR_TYPES_P8:
-        return f"{col_name} = '{fv}'"
+        # Escape every ' with \' so value is safe inside Turtle '''...''' delimiter
+        fv = fv.replace("'", "\\'")
+        return f"{col_name} = \\'{fv}\\'"
 
     return f"{col_name} = {fv}"
 
@@ -920,6 +967,32 @@ def build_prefix_block(base_iri: str) -> str:
     ])
 
 
+def _fix_id_templates(entity_entries: Dict, tables_structure: Dict) -> int:
+    """
+    Repair subject templates that use the generic {id} placeholder.
+    The SH mapper sometimes falls back to {id} when it cannot determine the PK.
+    This function replaces {id} with the actual PK columns from tables_structure.json.
+
+    Returns the number of templates fixed.
+    """
+    fixed = 0
+    for table_name, entry in entity_entries.items():
+        subj = entry.get("subject", {})
+        tmpl = subj.get("template", "")
+        if "{id}" not in tmpl:
+            continue
+        pks = tables_structure.get(table_name, {}).get("primary_keys", [])
+        if not pks:
+            print(f"  [WARN] {table_name}: has {{id}} template but no PKs in tables_structure — leaving as-is")
+            continue
+        base = tmpl.replace("/{id}", "")
+        new_tmpl = base + "/" + "/".join(f"{{{pk}}}" for pk in pks)
+        entry["subject"] = {**subj, "template": new_tmpl}
+        print(f"  [fix-id] {table_name}: {{id}} → {'/'.join('{'+pk+'}' for pk in pks)}")
+        fixed += 1
+    return fixed
+
+
 # ============================================================
 # Main entry point
 # ============================================================
@@ -982,6 +1055,11 @@ def run_r2rml_generation():
             owner = canonical_class_owner[cls]
             print(f"  [WARN] Class collision: :{cls} on '{t}' already owned by '{owner}' — clearing")
             entity_entries[t] = {**e, "subject": {**e["subject"], "class": ""}}
+
+    # ── Step 3c: Repair {id} templates using actual PKs from tables_structure ──
+    id_fixed = _fix_id_templates(entity_entries, tables_structure)
+    if id_fixed:
+        print(f"  [fix-id] Repaired {{id}} templates: {id_fixed} tables")
 
     # ── Step 4: Build IRI index for reference fixing ────────
     iri_index    = build_iri_index(entity_entries, sr_raw)
@@ -1046,7 +1124,7 @@ def run_r2rml_generation():
         #   Detect from template placeholders + join POMs and derive predicate
         #   from stored owner_predicate or capitalise table name.
         import re as _re
-        _q3 = "\'\'\'"
+        _q3 = "'''"
 
         for t, entry in sew_raw.items():
 
