@@ -2,7 +2,7 @@
 Ontology Mapper Agent — Phase 5 (SR tables only)
 Maps SR (Simple Relationship / bridge) tables to an ontology object property.
 
-SR mapping rules:
+SR mapping rules: 
   - No new class is created — SR is a pure relationship between two entities.
   - The table is mapped as a predicate linking participant A to participant B.
   - Subject: instances of the first participant entity (reuses its TriplesMap).
@@ -50,7 +50,7 @@ import json
 import requests
 import re
 import xml.etree.ElementTree as ET
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import sys
 import os
 
@@ -96,7 +96,7 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
         if "" not in prefixes:
             base = root.get("{http://www.w3.org/XML/1998/namespace}base") or root.get("ontologyIRI", "")
             if base:
-                prefixes[""] = base.rstrip("/") + "#"
+                prefixes[""] = base if base.endswith("#") else base.rstrip("/") + "#"
     except ET.ParseError:
         with open(owl_file, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
@@ -105,7 +105,7 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
         if "" not in prefixes:
             m = re.search(r'ontologyIRI="([^"]+)"', content)
             if m:
-                prefixes[""] = m.group(1).rstrip("/") + "#"
+                prefixes[""] = m.group(1) if m.group(1).endswith("#") else m.group(1).rstrip("/") + "#"
     except FileNotFoundError:
         print(f"  [WARN] Ontology file not found: {owl_file}")
     return prefixes
@@ -201,77 +201,107 @@ def resolve_participant(
 # ============================================================
 
 def build_sr_json_mapping(
-    table_name: str,
-    object_property: str,
-    attributes: List[Dict],
+    table_name:        str,
+    direction_mappings: List[Dict],   # [{"subject_table": ..., "object_table": ..., "property": ...}, ...]
+    attributes:        List[Dict],
     all_phase_mappings: List[Dict],
 ) -> Dict:
     """
     Build the structured JSON mapping for one SR table.
 
-    For a 2-participant SR table (the common case):
-      - Subject side  : first participant's TriplesMap
-      - Predicate     : ontology object property chosen by LLM
-      - Object side   : second participant's TriplesMap via join
+    direction_mappings is a list of per-direction predicate assignments, each:
+      { "subject_table": "authors", "object_table": "papers", "property": "submit" }
 
-    For N-participant SR tables (3+ entities):
-      - One mapping entry per participant pair is generated,
-        using each participant as subject in turn.
+    For each entry we emit one rr:TriplesMap query + predicateObjectMap that
+    selects from the SR junction table and joins subject → object.
 
-    The SR table itself has no subject template — it is dissolved
-    into predicate links between the participant entities.
+    For any participant pair not covered by direction_mappings a camelCase
+    fallback predicate is generated so no direction is ever silently dropped.
     """
     triple_map_iri = f"urn:r2rml:SR_{table_name}"
     pk_fk_cols     = [a for a in attributes if a["role"] == "pk+fk"]
 
-    # Build participants list with resolution
+    # Build participant info with IRI resolution
     participants = []
     for col in pk_fk_cols:
         ref_table = col["fk_references"]["table"]
         ref_col   = col["fk_references"]["column"]
         iri, resolved = resolve_participant(ref_table, all_phase_mappings)
         participants.append({
-            "column":           col["name"],
-            "ref_table":        ref_table,
-            "ref_col":          ref_col,
-            "triple_map_iri":   iri,
-            "resolved":         resolved
+            "column":         col["name"],
+            "ref_table":      ref_table,
+            "ref_col":        ref_col,
+            "triple_map_iri": iri,
+            "resolved":       resolved,
         })
 
-    # Generate one mapping per ordered pair (A→B)
-    # For 2 participants: one mapping A→B
-    # For N participants: N*(N-1) directed pairs — but typically just 2
+    # Index participants by ref_table for fast lookup
+    part_by_table = {p["ref_table"]: p for p in participants}
+
+    # Build a lookup: (subject_table, object_table) → property
+    dir_lookup: Dict[Tuple[str, str], str] = {}
+    for dm in direction_mappings:
+        subj_t = dm.get("subject_table", "")
+        obj_t  = dm.get("object_table",  "")
+        prop   = dm.get("property", "")
+        if subj_t and obj_t and prop:
+            dir_lookup[(subj_t, obj_t)] = prop
+
+    # Generate one mapping entry per ordered participant pair (A→B)
     mappings = []
+    seen_mappings: set = set()  # dedup: (subj_iri, obj_iri, predicate)
     for i, subj in enumerate(participants):
         for j, obj in enumerate(participants):
             if i == j:
                 continue
+            pair_key = (subj["ref_table"], obj["ref_table"])
+            # Use the LLM-chosen property for this direction, or camelCase fallback
+            prop = dir_lookup.get(pair_key)
+            if prop:
+                predicate = f":{prop}"
+            else:
+                # Fallback: derive from the two table names
+                predicate = f":{_to_camel_case(subj['ref_table'])}_{_to_camel_case(obj['ref_table'])}"
+                print(f"  [WARN] No property found for direction "
+                      f"{subj['ref_table']!r}→{obj['ref_table']!r} — using fallback {predicate!r}")
+
+            dedup_key = (subj["triple_map_iri"], obj["triple_map_iri"], predicate)
+            if dedup_key in seen_mappings:
+                print(f"  [DEDUP] Skipping duplicate mapping: {subj['ref_table']}→{obj['ref_table']} {predicate}")
+                continue
+            seen_mappings.add(dedup_key)
+
             mappings.append({
                 "subject_triples_map": subj["triple_map_iri"],
                 "subject_resolved":    subj["resolved"],
                 "subject_join": {
                     "child":  subj["column"],
-                    "parent": subj["ref_col"]
+                    "parent": subj["ref_col"],
                 },
-                "predicate":           f":{object_property}",
-                "object_triples_map":  obj["triple_map_iri"],
-                "object_resolved":     obj["resolved"],
+                "predicate":          predicate,
+                "object_triples_map": obj["triple_map_iri"],
+                "object_resolved":    obj["resolved"],
                 "object_join": {
                     "child":  obj["column"],
-                    "parent": obj["ref_col"]
-                }
+                    "parent": obj["ref_col"],
+                },
             })
 
     return {
-        "pattern":       "SR",
+        "pattern":        "SR",
         "triple_map_iri": triple_map_iri,
-        "logical_table": table_name,
-        "participants":  [
+        "logical_table":  table_name,
+        "participants": [
             {"column": p["column"], "ref_table": p["ref_table"], "ref_col": p["ref_col"]}
             for p in participants
         ],
-        "mappings": mappings
+        "mappings": mappings,
     }
+
+
+def _to_camel_case(name: str) -> str:
+    parts = name.split("_")
+    return parts[0] + "".join(p.capitalize() for p in parts[1:])
 
 
 
@@ -303,28 +333,74 @@ def get_participant_classes(
 
 def fetch_properties_for_participants(
     participant_classes: Dict[str, str],
-) -> List[str]:
+) -> List[Dict]:
     """
-    Fetch ontology object properties that link the participant classes.
-    Uses class_properties mode for each class and collects the union,
-    then filters to keep only properties that appear in at least one class.
-    If only one class is resolved, fetches its properties alone.
-    If no classes resolved, returns empty list.
+    Fetch ontology object properties that connect the participant classes,
+    including direction (domain → range).
+
+    Returns a list of dicts:
+      { "property": str, "domain": str, "range": str }
+
+    where domain and range are local class names (without colon prefix).
+    Properties are returned for both directions so the prompt can show
+    which predicates go which way between the two entities.
+    If domain/range info is unavailable for a property, it is included
+    with domain/range set to None so the LLM can still consider it.
     """
     classes = list(participant_classes.values())
     if not classes:
         return []
 
-    properties_set: set = set()
+    seen: Dict[str, Dict] = {}   # property_name → best dict we have so far
+
     for cls in classes:
         try:
             result = ontology_explorer(mode="class_properties", class_name=cls)
-            for prop in result.get("properties", []):
-                properties_set.add(prop["property"])
         except Exception:
-            pass
+            continue
 
-    return sorted(properties_set)
+        # Handle different response shapes
+        op_raw = (
+            result.get("object_properties")
+            or result.get("objectProperties")
+            or result.get("object_props")
+            or []
+        )
+        if not op_raw and isinstance(result.get("properties"), list):
+            for item in result["properties"]:
+                if isinstance(item, dict) and "object" in item.get("type", "").lower():
+                    op_raw.append(item)
+        if not op_raw and isinstance(result.get("properties"), dict):
+            op_raw = result["properties"].get("object", [])
+
+        for item in op_raw:
+            if isinstance(item, str):
+                name = item.split("#")[-1].split("/")[-1]
+                if name not in seen:
+                    seen[name] = {"property": name, "domain": None, "range": None}
+            elif isinstance(item, dict):
+                name = (item.get("property_name") or item.get("name")
+                        or item.get("local_name") or "")
+                if not name:
+                    # fallback: derive from IRI
+                    name = (item.get("property_iri") or item.get("iri", ""))
+                name = name.split("#")[-1].split("/")[-1] if name else ""
+                if not name:
+                    continue
+                rng = item.get("range") or item.get("range_class") or item.get("rangeClass") or ""
+                if isinstance(rng, dict):
+                    rng = rng.get("name") or rng.get("local_name") or rng.get("iri", "")
+                rng = str(rng).split("#")[-1].split("/")[-1] if rng else None
+
+                dom = item.get("domain") or item.get("domain_class") or ""
+                if isinstance(dom, dict):
+                    dom = dom.get("name") or dom.get("local_name") or dom.get("iri", "")
+                dom = str(dom).split("#")[-1].split("/")[-1] if dom else None
+
+                if name not in seen or (rng and seen[name].get("range") is None):
+                    seen[name] = {"property": name, "domain": dom, "range": rng}
+
+    return list(seen.values())
 
 
 # ============================================================
@@ -439,7 +515,7 @@ class OntologyMapper:
         participants: List[str],
         column_meanings: Dict[str, str],
         column_enrichment: Dict[str, Dict],
-        ontology_properties: List[str],
+        ontology_properties: List[Dict],
         participant_classes: Dict[str, str] = None,
     ) -> str:
         col_lines = []
@@ -452,15 +528,32 @@ class OntologyMapper:
         columns_block = "\n".join(col_lines) if col_lines else "  (none)"
 
         participants_str = " ↔ ".join(participants) if participants else "unknown"
-        classes_str = "  \n".join(
+        classes_str = "\n".join(
             f"  {tbl} → :{cls}" for tbl, cls in (participant_classes or {}).items()
         )
 
-        prop_list = ', '.join(ontology_properties) if ontology_properties                     else "(no direct properties found between these classes — pick the closest available)"
+        # Format property list with direction info where available
+        if ontology_properties:
+            prop_lines = []
+            for p in ontology_properties:
+                name = p["property"] if isinstance(p, dict) else str(p)
+                dom  = p.get("domain") or "?" if isinstance(p, dict) else "?"
+                rng  = p.get("range")  or "?" if isinstance(p, dict) else "?"
+                prop_lines.append(f"  - :{name}  (domain=:{dom} → range=:{rng})")
+            prop_block = "\n".join(prop_lines)
+        else:
+            prop_block = "  (no direct properties found — pick the closest from ontology knowledge)"
 
-        return f"""You are an ontology mapping expert. Find the SINGLE best matching object property for this bridge table.
-This is a SIMPLE RELATIONSHIP table — it connects entities with no attributes of its own.
-No new class should be created. You must pick an existing object property from the ontology.
+        # Build the ordered direction pairs the LLM must fill
+        part_list = participants if len(participants) >= 2 else (participants * 2)[:2]
+        directions_block = "\n".join(
+            f"  - subject={part_list[i]!r}  object={part_list[j]!r}"
+            for i in range(len(part_list))
+            for j in range(len(part_list))
+            if i != j
+        )
+
+        return f"""You are an ontology mapping expert. This is a SIMPLE RELATIONSHIP (bridge) table — it has no identity of its own and connects entities via object properties.
 
 TABLE: {table_name}
 TABLE MEANING: {table_meaning}
@@ -471,18 +564,41 @@ MAPPED ONTOLOGY CLASSES:
 COLUMNS (FK links to participant entities):
 {columns_block}
 
-AVAILABLE ONTOLOGY OBJECT PROPERTIES (between these classes):
-{prop_list}
+AVAILABLE ONTOLOGY OBJECT PROPERTIES (with domain→range where known):
+{prop_block}
+
+TASK:
+For EACH directed pair below, pick the single best object property.
+Each direction may use a DIFFERENT property (e.g. :submit for A→B, :submittedBy for B→A).
+If the ontology defines an inverse property, use it for the reverse direction.
+If no property fits a direction, use the closest available.
+
+DIRECTIONS TO FILL:
+{directions_block}
 
 Return ONLY a JSON object, no markdown, no extra text:
 
 {{
-  "object_property": "bestMatchPropertyName",
-  "score": <integer 1-5>,
-  "why": "One concise sentence explaining the match."
+  "mappings": [
+    {{
+      "subject_table": "<subject entity table name>",
+      "object_table":  "<object entity table name>",
+      "property":      "chosenPropertyLocalName",
+      "score":         <integer 1-5>,
+      "why":           "One concise sentence."
+    }}
+  ]
 }}"""
 
-    def _parse_mapping_response(self, response: str) -> Optional[Dict]:
+    def _parse_mapping_response(self, response: str) -> Optional[List[Dict]]:
+        """
+        Parse LLM response into a list of direction mappings.
+        Returns List[{"subject_table", "object_table", "property", "score", "why"}]
+        or None on total failure.
+
+        Also accepts the legacy single-property format for backward compatibility:
+        {"object_property": "..."} → converted to a one-entry list.
+        """
         try:
             cleaned = re.sub(r'```json\s*', '', response)
             cleaned = re.sub(r'```\s*', '', cleaned).strip()
@@ -490,21 +606,48 @@ Return ONLY a JSON object, no markdown, no extra text:
             j_end   = cleaned.rfind("}") + 1
             if j_start != -1 and j_end > 0:
                 obj = json.loads(cleaned[j_start:j_end])
+
+                # New format: {"mappings": [...]}
+                if "mappings" in obj and isinstance(obj["mappings"], list):
+                    valid = [
+                        m for m in obj["mappings"]
+                        if m.get("subject_table") and m.get("object_table") and m.get("property")
+                    ]
+                    if valid:
+                        return valid
+
+                # Legacy single-property format
                 if "object_property" in obj:
-                    return obj
+                    print(f"  [INFO] Legacy single-property response — wrapping")
+                    return [{"subject_table": None, "object_table": None,
+                             "property": obj["object_property"],
+                             "score": obj.get("score"), "why": obj.get("why", "")}]
         except (json.JSONDecodeError, ValueError):
             pass
 
-        prop_match  = re.search(r'"object_property"\s*:\s*"([^"]+)"', response)
-        score_match = re.search(r'"score"\s*:\s*(\d)', response)
-        why_match   = re.search(r'"why"\s*:\s*"([^"]*)"', response)
-        if prop_match:
-            print(f"  [INFO] Mapping recovered via regex fallback")
-            return {
-                "object_property": prop_match.group(1),
-                "score": int(score_match.group(1)) if score_match else None,
-                "why":   why_match.group(1) if why_match else "extracted via regex fallback"
-            }
+        # Regex fallback — extract all "property" occurrences
+        entries = []
+        for m in re.finditer(
+            r'"subject_table"\s*:\s*"([^"]+)".*?"object_table"\s*:\s*"([^"]+)".*?"property"\s*:\s*"([^"]+)"',
+            response, re.DOTALL
+        ):
+            entries.append({
+                "subject_table": m.group(1),
+                "object_table":  m.group(2),
+                "property":      m.group(3),
+                "score":         None,
+                "why":           "regex fallback",
+            })
+        if entries:
+            print(f"  [INFO] Mapping recovered via regex fallback ({len(entries)} entries)")
+            return entries
+
+        # Last resort: single property_name anywhere
+        m = re.search(r'"(?:object_property|property)"\s*:\s*"([^"]+)"', response)
+        if m:
+            print(f"  [INFO] Mapping recovered via last-resort regex")
+            return [{"subject_table": None, "object_table": None,
+                     "property": m.group(1), "score": None, "why": "last-resort regex"}]
 
         print(f"  [WARN] Could not parse mapping response")
         print(f"  [WARN] Raw: {response[:400]}")
@@ -529,8 +672,10 @@ Return ONLY a JSON object, no markdown, no extra text:
 
         attributes = build_attributes(table_name, tables_structure)
 
-        # Fetch object properties linking the participant classes
+        # Fetch object properties linking the participant classes (with domain/range)
         ontology_properties = fetch_properties_for_participants(participant_classes)
+        # Build a set of valid property names for post-validation
+        valid_obj_props = {p["property"] for p in ontology_properties if p.get("property")}
 
         prompt   = self._build_mapping_prompt(
             table_name, table_meaning, participants,
@@ -538,24 +683,33 @@ Return ONLY a JSON object, no markdown, no extra text:
             ontology_properties, participant_classes
         )
         response = self.get_llm_response(prompt)
-        mapping  = self._parse_mapping_response(response)
+        mappings = self._parse_mapping_response(response)
 
-        if mapping:
-            print(f"  ✓ → {mapping['object_property']}  (score {mapping.get('score')}/5)")
+        # Validate LLM output: reject properties not in ontology
+        if mappings and valid_obj_props:
+            validated = []
+            for m in mappings:
+                prop = m.get("property", "")
+                if prop in valid_obj_props:
+                    validated.append(m)
+                else:
+                    print(f"  [REJECT-LLM] property '{prop}' not in ontology — skipping")
+            mappings = validated if validated else mappings  # keep originals if all rejected
+
+        if mappings:
+            for m in mappings:
+                print(f"  ✓ → {m.get('subject_table','?')}→{m.get('object_table','?')} "
+                      f": :{m['property']}  (score {m.get('score')})")
         else:
             print(f"  ✗ mapping failed")
 
         return {
-            "table":            table_name,
-            "pattern":          "SR",
-            "participants":     participants,
-            "table_meaning":    table_meaning,
-            "attributes":       attributes,
-            "ontology_mapping": {
-                "object_property": mapping["object_property"] if mapping else None,
-                "score":           mapping.get("score")       if mapping else None,
-                "why":             mapping.get("why")         if mapping else "mapping failed"
-            }
+            "table":             table_name,
+            "pattern":           "SR",
+            "participants":      participants,
+            "table_meaning":     table_meaning,
+            "attributes":        attributes,
+            "direction_mappings": mappings or [],
         }
 
 
@@ -658,13 +812,26 @@ def run_sr_mapping():
             print(f"  → already mapped, skipping LLM call")
 
         # Build SR JSON mapping entry
-        record      = mappings_process[table_name]
-        obj_prop    = record.get("ontology_mapping", {}).get("object_property")
-        attributes  = record.get("attributes", [])
+        record     = mappings_process[table_name]
+        attributes = record.get("attributes", [])
 
-        if obj_prop:
+        # Support both new format (direction_mappings) and legacy (ontology_mapping)
+        direction_mappings = record.get("direction_mappings")
+        if not direction_mappings:
+            # Legacy cache record: convert single object_property to a direction list
+            legacy_prop = record.get("ontology_mapping", {}).get("object_property")
+            if legacy_prop and len(participants) >= 2:
+                direction_mappings = [
+                    {"subject_table": participants[0], "object_table": participants[1],
+                     "property": legacy_prop, "score": None, "why": "legacy cache"},
+                    {"subject_table": participants[1], "object_table": participants[0],
+                     "property": legacy_prop, "score": None, "why": "legacy cache — same prop reverse"},
+                ]
+                print(f"  [INFO] Legacy cache entry converted: :{legacy_prop} for both directions")
+
+        if direction_mappings:
             sr_mappings[table_name] = build_sr_json_mapping(
-                table_name, obj_prop, attributes, all_phase_mappings
+                table_name, direction_mappings, attributes, all_phase_mappings
             )
             with open(SR_MAPPINGS_FILE, "w", encoding="utf-8") as f:
                 json.dump(sr_mappings, f, indent=2)
@@ -673,10 +840,13 @@ def run_sr_mapping():
                 m["subject_resolved"] and m["object_resolved"]
                 for m in sr_mappings[table_name]["mappings"]
             )
-            status = "✓ all resolved" if all_resolved else "⚠ some placeholders"
-            print(f"  ✓ JSON mapping built → :{obj_prop}  ({status})")
+            status    = "✓ all resolved" if all_resolved else "⚠ some placeholders"
+            props_str = ", ".join(
+                f":{m.get('property', '?')}" for m in direction_mappings
+            )
+            print(f"  ✓ JSON mapping built → {props_str}  ({status})")
         else:
-            print(f"  ⚠ No object property, skipping JSON mapping for this table")
+            print(f"  ⚠ No direction mappings produced, skipping JSON mapping for this table")
 
     # Summary
     fully_resolved   = sum(
