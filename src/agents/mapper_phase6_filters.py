@@ -97,6 +97,52 @@ DISCRIMINATOR_TYPES   = {"integer", "int", "smallint", "bigint", "tinyint",
                          "boolean", "bool", "varchar", "text", "char", "character"}
 
 
+def _is_metadata_table(table_name: str, se_mappings: Dict,
+                        understanding: Dict) -> bool:
+    """
+    Heuristic: detect internal metadata/config/catalog tables that should
+    NOT get hidden sub-entity mappings.  These are tables that:
+      a) Have no meaningful ontology class match (the SE class mapping is
+         clearly forced — e.g. table 'subcl' mapped to 'GeographicalThing'),  OR
+      b) The table's understanding.json description mentions metadata, config,
+         schema management, RDF conversion, class hierarchies, etc.
+
+    This prevents Phase 6 from creating type-dispatch entries like
+    HIDDEN_TD_subcl_subclass_City which assign domain classes (City, River…)
+    to rows in internal schema-management tables, causing R2RML engine crashes
+    and polluted evaluation results.
+    """
+    tname_lower = table_name.lower()
+
+    # ── Hard-coded known metadata table prefixes / names ──────────
+    METADATA_PREFIXES = ("top_", "rdf2sql")
+    METADATA_NAMES = {
+        "allcl", "subcl", "inv", "nmj", "nmtables", "md", "mdlastchanged",
+        "ocdict", "proptablemap", "rctab", "rdf2sqlconf", "toptables",
+        "x1", "x2", "y1", "y2", "u", "v",
+    }
+    if tname_lower in METADATA_NAMES:
+        return True
+    if any(tname_lower.startswith(p) for p in METADATA_PREFIXES):
+        return True
+
+    # ── Soft heuristic: description mentions metadata/config keywords ──
+    meaning = understanding.get(table_name, {}).get("table_meaning", "")
+    if meaning:
+        meaning_lower = meaning.lower()
+        META_KEYWORDS = [
+            "metadata", "configuration", "config setting", "schema",
+            "rdf to sql", "rdf2sql", "class hierarch", "subclass",
+            "property mapping", "column dictionary", "catalog",
+            "stores relationships between tables",
+            "stores metadata about",
+        ]
+        if any(kw in meaning_lower for kw in META_KEYWORDS):
+            return True
+
+    return False
+
+
 # ============================================================
 # Ontology helpers
 # ============================================================
@@ -117,7 +163,7 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
             base = (root.get("{http://www.w3.org/XML/1998/namespace}base")
                     or root.get("ontologyIRI", ""))
             if base:
-                prefixes[""] = base.rstrip("/") + "#"
+                prefixes[""] = base if base.endswith("#") else base.rstrip("/") + "#"
     except ET.ParseError:
         with open(owl_file, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
@@ -126,7 +172,7 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
         if "" not in prefixes:
             m = re.search(r'ontologyIRI="([^"]+)"', content)
             if m:
-                prefixes[""] = m.group(1).rstrip("/") + "#"
+                prefixes[""] = m.group(1) if m.group(1).endswith("#") else m.group(1).rstrip("/") + "#"
     except FileNotFoundError:
         print(f"  [WARN] Ontology file not found: {owl_file}")
     return prefixes
@@ -249,10 +295,39 @@ def profile_table_columns(table_name: str, columns: List[Dict],
 # ============================================================
 
 def get_base_subject(table_name: str, se_mappings: Dict,
-                     sh_mappings: Dict) -> Optional[str]:
+                     sh_mappings: Dict,
+                     tables_structure: Dict = None) -> Optional[str]:
+    """Return the subject template for a table.
+    Validates that the template uses this table's own columns and IRI path.
+    If not (e.g. phase 2 copied a parent template), rebuilds from actual PKs.
+    """
+    import re as _re
     for phase in (se_mappings, sh_mappings):
         if table_name in phase:
-            return phase[table_name]["subject"]["template"]
+            tmpl = phase[table_name]["subject"]["template"]
+            if not tables_structure:
+                return tmpl
+            own_cols     = {c["name"] for c in tables_structure.get(table_name, {}).get("columns", [])}
+            placeholders = _re.findall(r'\{([^}]+)\}', tmpl)
+            base_path    = _re.sub(r'/\{[^}]+\}', '', tmpl)
+            needs_rebuild = (
+                (placeholders and not all(p in own_cols for p in placeholders))
+                or (f"#{table_name}" not in base_path and f"/{table_name}" not in base_path)
+            )
+            if needs_rebuild:
+                pks = tables_structure.get(table_name, {}).get("primary_keys", [])
+                iri_base = _re.match(r'(https?://[^#]+#)', tmpl)
+                prefix = iri_base.group(1) if iri_base else ""
+                if pks:
+                    tmpl = f"{prefix}{table_name}/" + "/".join(f"{{{pk}}}" for pk in pks)
+                else:
+                    # No declared PK — use all non-FK columns as composite key
+                    cols = tables_structure.get(table_name, {}).get("columns", [])
+                    fk_names = {c["name"] for c in cols if c.get("is_foreign_key")}
+                    non_fk = [c["name"] for c in cols if c["name"] not in fk_names]
+                    key_cols = non_fk if non_fk else [c["name"] for c in cols]
+                    tmpl = f"{prefix}{table_name}/" + "/".join(f"{{{c}}}" for c in key_cols)
+            return tmpl
     return None
 
 
@@ -288,6 +363,27 @@ def _to_camel_case(name: str) -> str:
     return parts[0] + "".join(p.capitalize() for p in parts[1:])
 
 
+def _sanitize_filter_value(value: Any) -> str:
+    """
+    Clean a filter value coming from the LLM before using it in a SQL clause.
+
+    The LLM sometimes wraps values in quotes or splits multi-word values into
+    separate quoted tokens, e.g.:
+      '"geological"'      -> 'geological'
+      '"shut" "down"'     -> 'shut down'
+      '"SLIDING SCALE"'   -> 'SLIDING SCALE'
+
+    Steps:
+      1. Strip leading/trailing whitespace.
+      2. Remove all double-quote characters (LLM identifier-style quoting).
+      3. Collapse multiple spaces to one and strip again.
+    """
+    v = str(value).strip()
+    v = v.replace('"', '')   # remove all double quotes
+    v = ' '.join(v.split())   # collapse multiple spaces
+    return v
+
+
 def _make_sql_filter(column_name: str, value: Any, data_type: str,
                      force_boolean: bool = False) -> str:
     """
@@ -302,26 +398,29 @@ def _make_sql_filter(column_name: str, value: Any, data_type: str,
       Integer / numeric columns (force_boolean=False):
         → col = <number>
       String columns (varchar/text/char):
-        → col = '<value>'
+        → col = 'value'  (single quotes, with internal single quotes escaped as \')
     """
     dt = data_type.lower().split("(")[0].strip()
+    clean = _sanitize_filter_value(value)
 
     if dt in BOOL_TYPES:
         # Real SQL boolean column — use boolean literals
-        bool_val = "true" if str(value).lower() in ("1", "true", "t", "yes") else "false"
+        bool_val = "true" if clean.lower() in ("1", "true", "t", "yes") else "false"
         return f"{column_name} = {bool_val}"
 
     if force_boolean:
         # Integer column storing 0/1 — use INTEGER comparison (not boolean literal)
         # PostgreSQL raises "operator does not exist: integer = boolean" for = true/false
-        int_val = 1 if str(value).lower() in ("1", "true", "t", "yes") else 0
+        int_val = 1 if clean.lower() in ("1", "true", "t", "yes") else 0
         return f"{column_name} = {int_val}"
 
     if dt in ("varchar", "text", "char", "character", "character varying"):
-        return f"{column_name} = '{value}'"
+        # Escape internal single quotes so the value is safe inside Turtle '''...'''
+        escaped = clean.replace("'", "\\'")
+        return f"{column_name} = '{escaped}'"
 
     # integer / bigint / smallint / numeric — emit raw value
-    return f"{column_name} = {value}"
+    return f"{column_name} = {clean}"
 
 
 # ============================================================
@@ -727,10 +826,17 @@ If all proposals are fine, return all of them with action="keep"."""
         evidence: Dict,
         ontology_classes: List[str],
         already_mapped: set,
+        col_profiles: Dict[str, Dict] = None,
+        tables_structure: Dict = None,
     ) -> List[Dict]:
         """
         Call the discovery prompt for one table.
         Returns list of accepted suggestion dicts (confidence >= MIN_CONFIDENCE).
+
+        Confidence bypass: for columns that deterministically qualify as
+        type_dispatch or bool_flag (via _col_kind), the LLM confidence is
+        not used as a gate — the column is accepted regardless of score.
+        The LLM still assigns the class names and value_class_map.
         """
         prompt   = self.prompt_discover_subentities(evidence, ontology_classes, already_mapped)
         raw      = self._call(prompt, max_tokens=1500)
@@ -740,6 +846,13 @@ If all proposals are fine, return all of them with action="keep"."""
             print(f"  [WARN] Could not parse LLM response for {evidence['table_name']}")
             print(f"  [WARN] Raw[:300]: {raw[:300]}")
             return []
+
+        table_name = evidence.get("table_name", "")
+        # Build col_def lookup for deterministic kind check
+        col_defs: Dict[str, Dict] = {}
+        if tables_structure and table_name:
+            for c in tables_structure.get(table_name, {}).get("columns", []):
+                col_defs[c["name"]] = c
 
         suggestions = result.get("suggestions", [])
         accepted    = []
@@ -755,7 +868,22 @@ If all proposals are fine, return all of them with action="keep"."""
             except (ValueError, TypeError):
                 conf = 0
 
-            if conf < MIN_CONFIDENCE:
+            # Deterministic bypass: if _col_kind confirms type_dispatch or bool_flag,
+            # accept regardless of LLM confidence — the 4 schema conditions already
+            # prove the column qualifies. LLM confidence only reflects uncertainty
+            # about class assignment, not column qualification.
+            deterministic_kind = None
+            if col_defs and col_profiles is not None:
+                col_def = col_defs.get(col)
+                if col_def:
+                    profile = col_profiles.get(col, {})
+                    deterministic_kind = _col_kind(col_def, profile)
+
+            if deterministic_kind in ("type_dispatch", "bool_flag"):
+                if conf < MIN_CONFIDENCE:
+                    print(f"  [bypass-conf] {col} -> :{cls}  conf={conf} "
+                          f"(kind={deterministic_kind} — deterministic, bypassing threshold)")
+            elif conf < MIN_CONFIDENCE:
                 print(f"  [skip] {col} -> :{cls}  conf={conf} < {MIN_CONFIDENCE}")
                 continue
 
@@ -766,6 +894,35 @@ If all proposals are fine, return all of them with action="keep"."""
             # kind is derived from DB schema in apply_suggestion_to_entry
             s.pop("kind",        None)
             s.pop("filter_type", None)
+
+            # ── Validate assigned classes against ontology ─────
+            # For single-class assignments: check assigned_class
+            assigned = s["assigned_class"]
+            if assigned not in ontology_classes:
+                print(f"  [reject-class] {col} -> :{assigned}  "
+                      f"(not in ontology — skipping)")
+                continue
+
+            # For type_dispatch value_class_map: validate every class
+            vcm = s.get("value_class_map")
+            if vcm and isinstance(vcm, dict):
+                cleaned_vcm = {}
+                for val, vcls in vcm.items():
+                    if not vcls or str(vcls).lower() == "null":
+                        cleaned_vcm[val] = None
+                        continue
+                    vcls_clean = str(vcls).lstrip(":")
+                    if vcls_clean in ontology_classes:
+                        cleaned_vcm[val] = vcls_clean
+                    else:
+                        print(f"  [reject-vcm] {col} value={val!r} -> :{vcls_clean}  "
+                              f"(not in ontology — dropped from map)")
+                s["value_class_map"] = cleaned_vcm
+                # If all classes were dropped, skip the whole suggestion
+                if not any(v for v in cleaned_vcm.values()):
+                    print(f"  [reject-vcm-empty] {col} — no valid classes remain")
+                    continue
+
             accepted.append(s)
 
         return accepted
@@ -821,6 +978,7 @@ def build_hidden_sh_entry(
     base_iri: str,
     se_mappings: Dict,
     sh_mappings: Dict,
+    tables_structure: Dict = None,
 ) -> Optional[Dict]:
     """
     Build HIDDEN_SH entry for a FK-based hidden subclass.
@@ -849,7 +1007,7 @@ def build_hidden_sh_entry(
     """
     col_name       = suggestion["column"]
     assigned_class = suggestion["assigned_class"]
-    base_subject   = get_base_subject(table_name, se_mappings, sh_mappings)
+    base_subject   = get_base_subject(table_name, se_mappings, sh_mappings, tables_structure)
     base_tm        = get_base_triple_map(table_name, se_mappings, sh_mappings)
 
     # FK reference target
@@ -878,7 +1036,7 @@ def build_hidden_sh_entry(
     # Decision: use the target template whenever the FK target table's template
     # pattern semantically matches the assigned class (same base path).
     target_class = get_base_class(fk_ref_table, se_mappings, sh_mappings) if fk_ref_table else None
-    target_subject = get_base_subject(fk_ref_table, se_mappings, sh_mappings) if fk_ref_table else None
+    target_subject = get_base_subject(fk_ref_table, se_mappings, sh_mappings, tables_structure) if fk_ref_table else None
 
     import re as _re
 
@@ -917,7 +1075,22 @@ def build_hidden_sh_entry(
             subject_template = target_subject
     else:
         # CASE B: source row itself gains the new class — use source template
-        subject_template = base_subject or f"{base_iri}{table_name}/{{id}}"
+        if not base_subject:
+            # base_subject is None — table not in SE/SH mappings.
+            # Try to derive a template from tables_structure PK instead of "id".
+            print(f"  [WARN] build_hidden_sh_entry: no base_subject for '{table_name}' — "
+                  f"falling back to raw PK lookup")
+        if not base_subject and tables_structure:
+            pks = tables_structure.get(table_name, {}).get("primary_keys", [])
+            if pks:
+                base_subject = f"{base_iri}{table_name}/" + "/".join(f"{{{pk}}}" for pk in pks)
+            else:
+                cols = tables_structure.get(table_name, {}).get("columns", [])
+                fk_names = {c["name"] for c in cols if c.get("is_foreign_key")}
+                non_fk = [c["name"] for c in cols if c["name"] not in fk_names]
+                key_cols = non_fk if non_fk else [c["name"] for c in cols]
+                base_subject = f"{base_iri}{table_name}/" + "/".join(f"{{{c}}}" for c in key_cols)
+        subject_template = base_subject or f"{base_iri}{table_name}/{{UNKNOWN_PK}}"
 
     # Guard: if CASE A triggered (assigned_class == FK target class), the FK target
     # entity is already typed by its own SE/SE_SH map. Creating another HIDDEN_SH
@@ -968,6 +1141,7 @@ def build_bool_flag_entry(
     base_iri: str,
     se_mappings: Dict,
     sh_mappings: Dict,
+    tables_structure: Dict = None,
 ) -> Optional[Dict]:
     """
     Build BOOL_FLAG entry.
@@ -978,7 +1152,7 @@ def build_bool_flag_entry(
     """
     col_name       = suggestion["column"]
     assigned_class = suggestion["assigned_class"]
-    base_subject   = get_base_subject(table_name, se_mappings, sh_mappings)
+    base_subject   = get_base_subject(table_name, se_mappings, sh_mappings, tables_structure)
     base_tm        = get_base_triple_map(table_name, se_mappings, sh_mappings)
     # data_type is authoritative from tables_structure — default integer, never boolean
     data_type      = col.get("data_type") or "integer"
@@ -1004,7 +1178,7 @@ def build_bool_flag_entry(
         "sql_filter":           sql_filter,
         "base_triple_map": base_tm,
         "subject": {
-            "template":        base_subject or f"{base_iri}{table_name}/{{id}}",
+            "template":        base_subject or f"{base_iri}{table_name}/{{UNKNOWN_PK}}",
             "class":           f":{assigned_class}",
             "reuses_iri_from": base_tm,
         },
@@ -1020,6 +1194,7 @@ def build_type_dispatch_entry(
     base_iri: str,
     se_mappings: Dict,
     sh_mappings: Dict,
+    tables_structure: Dict = None,
 ) -> Optional[Dict]:
     """
     Build TYPE_DISPATCH entry.
@@ -1027,7 +1202,7 @@ def build_type_dispatch_entry(
     """
     col_name    = suggestion["column"]
     value_map   = suggestion.get("value_class_map", {})
-    base_subject = get_base_subject(table_name, se_mappings, sh_mappings)
+    base_subject = get_base_subject(table_name, se_mappings, sh_mappings, tables_structure)
     base_tm      = get_base_triple_map(table_name, se_mappings, sh_mappings)
     data_type    = col.get("data_type", "integer")
 
@@ -1035,17 +1210,20 @@ def build_type_dispatch_entry(
         return None
 
     dispatch = []
-    for val, cls in value_map.items():
+    for raw_val, cls in value_map.items():
         if not cls or str(cls).lower() == "null":
             continue
+        val = _sanitize_filter_value(raw_val)
         cls = str(cls).lstrip(":")
+        # Sanitize val for use in IRI: replace spaces/special chars with underscores
+        val_for_iri = re.sub(r'[^A-Za-z0-9_\-]', '_', val)
         dispatch.append({
-            "triple_map_iri":     f"urn:r2rml:HIDDEN_TD_{table_name}_{col_name}_{val}",
-            "filter_value":       str(val),
+            "triple_map_iri":     f"urn:r2rml:HIDDEN_TD_{table_name}_{col_name}_{val_for_iri}",
+            "filter_value":       val,
             "filter_column_type": data_type,   # authoritative — read by phase8
             "sql_filter":         _make_sql_filter(col_name, val, data_type),
             "subject": {
-                "template":        base_subject or f"{base_iri}{table_name}/{{id}}",
+                "template":        base_subject or f"{base_iri}{table_name}/{{UNKNOWN_PK}}",
                 "class":           f":{cls}",
                 "reuses_iri_from": base_tm,
             },
@@ -1060,7 +1238,6 @@ def build_type_dispatch_entry(
         "source_table":         table_name,
         "discriminator_column": col_name,
         "discriminator_type":   data_type,   # authoritative — read by phase8
-        "discriminator_type":   data_type,
         "base_triple_map":      base_tm,
         "dispatch":             dispatch,
         "llm_suggestion":       suggestion,
@@ -1117,30 +1294,38 @@ def apply_suggestion_to_entry(
         suggestion["fk_ref_table"] = ref.get("table", "")
         suggestion["fk_ref_col"]   = ref.get("column", "id")
         m = build_hidden_sh_entry(table_name, suggestion, base_iri,
-                                   se_mappings, sh_mappings)
+                                   se_mappings, sh_mappings, tables_structure)
         if m:
             entry["hidden_sh"].append(m)
             return True
 
     elif db_kind == "bool_flag":
         m = build_bool_flag_entry(table_name, suggestion, col_def, base_iri,
-                                   se_mappings, sh_mappings)
+                                   se_mappings, sh_mappings, tables_structure)
         if m:
             entry["hidden_sh"].append(m)
             return True
 
     elif db_kind == "type_dispatch":
-        # Validate value_class_map keys against real DB values
+        # Validate value_class_map keys against real DB values.
+        # Strip surrounding quotes that the LLM sometimes wraps around values
+        # (e.g. '"SLIDING SCALE"' → 'SLIDING SCALE') before matching against DB.
         raw_vcm   = suggestion.get("value_class_map") or {}
+        # Sanitize keys using _sanitize_filter_value (handles multi-word quoted tokens)
+        raw_vcm   = {_sanitize_filter_value(k): v for k, v in raw_vcm.items()}
         db_values = {str(v) for v in profile.get("values", [])}
         if db_values:
             clean_vcm = {k: v for k, v in raw_vcm.items() if str(k) in db_values}
             if not clean_vcm:
                 print(f"  [WARN] All value_class_map keys invalid for {table_name}.{col_name} — skipping")
+                print(f"  [WARN]   LLM keys : {list(raw_vcm.keys())}")
+                print(f"  [WARN]   DB values: {list(db_values)[:10]}")
                 return False
             suggestion["value_class_map"] = clean_vcm
+        else:
+            suggestion["value_class_map"] = raw_vcm
         m = build_type_dispatch_entry(table_name, suggestion, col_def, base_iri,
-                                       se_mappings, sh_mappings)
+                                       se_mappings, sh_mappings, tables_structure)
         if m:
             entry["type_dispatch"].append(m)
             return True
@@ -1190,6 +1375,20 @@ def run_hidden_mapping():
     target_tables    = {t: p for t, p in table_patterns.items()
                         if p in ("SE", "SE_SH")}
     print(f"\n  Target tables (SE + SE_SH) : {len(target_tables)}")
+
+    # ── Skip metadata / config tables ──────────────────────
+    skipped_meta = []
+    clean_targets = {}
+    for t, p in target_tables.items():
+        if _is_metadata_table(t, se_mappings, understanding):
+            skipped_meta.append(t)
+        else:
+            clean_targets[t] = p
+    if skipped_meta:
+        print(f"  Skipped metadata tables    : {len(skipped_meta)}")
+        for t in sorted(skipped_meta):
+            print(f"    - {t}")
+    target_tables = clean_targets
 
     # ── Load caches ─────────────────────────────────────────
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -1270,7 +1469,9 @@ def run_hidden_mapping():
 
                 try:
                     accepted = agent.discover_table(
-                        evidence, ontology_classes, already_mapped
+                        evidence, ontology_classes, already_mapped,
+                        col_profiles=col_profiles,
+                        tables_structure=tables_structure,
                     )
                     print(f"  -> {len(accepted)} suggestion(s) accepted (conf >= {MIN_CONFIDENCE})")
                     for s in accepted:
