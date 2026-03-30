@@ -611,6 +611,16 @@ RULES
 - If the schema looks complete, return exactly: -- NO MISSING CONSTRAINTS
 - Do NOT re-declare constraints that already exist.
 - Every referenced table MUST be an exact name from the ALL TABLES list.
+- CRITICAL FK RULE: Every FOREIGN KEY reference column MUST actually exist in
+  the referenced table. For example, if you write FK (class) REFERENCES subcl (subclass),
+  "subclass" must be an actual column in the "subcl" table. Never assume that
+  a column exists in the target table — check the schema above.
+- Do NOT add FK constraints where BOTH tables are metadata/config/catalog tables
+  (e.g. tables that store schema metadata, class hierarchies, property mappings,
+  column dictionaries, or RDF/OWL structural information rather than domain data).
+  These internal tables should not be cross-linked with inferred FKs.
+- Be CONSERVATIVE: only add a FK when you are very confident the relationship
+  is real and both the source column and target column exist. When in doubt, skip it.
 - Use the same quoting style as the dump (double-quotes for identifiers with
   capitals or reserved words, plain names otherwise).
 - Use this exact SQL dialect:
@@ -676,6 +686,130 @@ SCHEMA:
         raw = self.llm.call(prompt, max_tokens=4096)
         new_stmts = self.parse_response(raw)
         return new_stmts
+
+
+# =====================================================================
+#  Phase 2b – Post-Validation of LLM Constraints
+# =====================================================================
+def validate_constraints(new_stmts: List[str], tables: Dict) -> List[str]:
+    """
+    Validate every LLM-generated constraint before merging into the dump.
+
+    Drops any FK where:
+      - The source table doesn't exist
+      - The source column doesn't exist in the source table
+      - The referenced table doesn't exist
+      - The referenced column doesn't exist in the referenced table
+
+    This prevents downstream Phase 2/5/8 errors caused by hallucinated FKs.
+    """
+    # Build column index: table_name -> set of column names (lowercased)
+    col_index: Dict[str, set] = {}
+    for tname, info in tables.items():
+        col_index[tname.lower()] = {
+            c[0].lower().strip('"') for c in info["columns"]
+        }
+
+    valid: List[str] = []
+    fk_re = re.compile(
+        r"ALTER\s+TABLE\s+(?:ONLY\s+)?(?:[\w\"]+\s*\.\s*)?"
+        r"(?P<table>[\w\"]+)\s+"
+        r"ADD\s+CONSTRAINT\s+[\w\"]+\s+"
+        r"FOREIGN\s+KEY\s*\((?P<col>[^)]+)\)\s+"
+        r"REFERENCES\s+(?:[\w\"]+\s*\.\s*)?(?P<ref_table>[\w\"]+)"
+        r"\s*\((?P<ref_col>[^)]+)\)",
+        re.IGNORECASE,
+    )
+
+    for stmt in new_stmts:
+        m = fk_re.search(stmt)
+        if not m:
+            # Not an FK — PK or UNIQUE, keep it but validate table exists
+            valid.append(stmt)
+            continue
+
+        src_table  = m.group("table").strip('"').lower()
+        src_col    = m.group("col").strip().strip('"').lower()
+        ref_table  = m.group("ref_table").strip('"').lower()
+        ref_col    = m.group("ref_col").strip().strip('"').lower()
+
+        # Check source table and column
+        if src_table not in col_index:
+            print(f"    [DROP] Source table '{src_table}' not found")
+            continue
+        if src_col not in col_index[src_table]:
+            print(f"    [DROP] Column '{src_col}' not in table '{src_table}'")
+            continue
+
+        # Check referenced table and column
+        if ref_table not in col_index:
+            print(f"    [DROP] Referenced table '{ref_table}' not found")
+            continue
+        if ref_col not in col_index[ref_table]:
+            print(f"    [DROP] Referenced column '{ref_col}' not in table "
+                  f"'{ref_table}' (has: {sorted(col_index[ref_table])})")
+            continue
+
+        valid.append(stmt)
+
+    dropped = len(new_stmts) - len(valid)
+    if dropped:
+        print(f"\n  Post-validation: dropped {dropped} invalid constraint(s), "
+              f"kept {len(valid)}")
+    return valid
+
+
+def assess_schema_richness(tables: Dict, existing_constraints: List[str]) -> Dict:
+    """
+    Assess how "rich" the schema already is in terms of constraints.
+    Returns a dict with counts and a recommendation on whether Phase 0
+    should add constraints at all.
+    """
+    n_tables = len(tables)
+    if n_tables == 0:
+        return {"tables": 0, "skip": True, "reason": "no tables found"}
+
+    # Count tables that already have PKs
+    tables_with_pk = sum(
+        1 for info in tables.values() if info["inline_pks"]
+    )
+    # Count tables that already have FKs
+    tables_with_fk = sum(
+        1 for info in tables.values() if info["inline_fks"]
+    )
+    # Count ALTER TABLE constraints (PKs + FKs from outside CREATE TABLE)
+    alter_pks = sum(1 for c in existing_constraints if "PRIMARY KEY" in c.upper())
+    alter_fks = sum(1 for c in existing_constraints if "FOREIGN KEY" in c.upper())
+
+    total_pks = tables_with_pk + alter_pks
+    total_fks = tables_with_fk + alter_fks
+
+    pk_coverage = total_pks / n_tables if n_tables else 0
+    fk_coverage = total_fks / n_tables if n_tables else 0
+
+    # Schema is "rich enough" if a significant portion already has PKs and
+    # there are already meaningful FK relationships declared.
+    skip = False
+    reason = ""
+    if pk_coverage >= 0.5 and total_fks >= max(5, n_tables * 0.3):
+        skip = True
+        reason = (f"schema already has good constraint coverage: "
+                  f"{total_pks}/{n_tables} PKs ({pk_coverage:.0%}), "
+                  f"{total_fks} FKs — skipping LLM inference")
+
+    return {
+        "tables": n_tables,
+        "tables_with_inline_pk": tables_with_pk,
+        "tables_with_inline_fk": tables_with_fk,
+        "alter_pks": alter_pks,
+        "alter_fks": alter_fks,
+        "total_pks": total_pks,
+        "total_fks": total_fks,
+        "pk_coverage": pk_coverage,
+        "fk_coverage": fk_coverage,
+        "skip": skip,
+        "reason": reason,
+    }
 
 
 # =====================================================================
@@ -772,21 +906,38 @@ def run_phase0():
     print("  PHASE 2 : LLM Constraint Analysis")
     print("-" * 65)
 
-    llm   = LLMClient(provider=SELECTED_PROVIDER)
-    print(f"  Provider : {SELECTED_PROVIDER}")
-    print(f"  Model    : {llm.config['model_name']}")
+    # ── Schema richness assessment ──────────────────────────────
+    richness = assess_schema_richness(tables, ex_csts)
+    print(f"\n  Schema richness assessment:")
+    print(f"    Tables              : {richness['tables']}")
+    print(f"    PK coverage         : {richness['total_pks']}/{richness['tables']} "
+          f"({richness['pk_coverage']:.0%})")
+    print(f"    FK count            : {richness['total_fks']} "
+          f"({richness['fk_coverage']:.0%} of tables)")
 
-    agent     = ConstraintAnalysisAgent(llm)
-    new_stmts = agent.run(parsed)
+    if richness["skip"]:
+        print(f"\n  [SKIP] {richness['reason']}")
+        print("  Schema is sufficiently constrained — skipping LLM FK inference.")
+        new_stmts = []
+    else:
+        llm   = LLMClient(provider=SELECTED_PROVIDER)
+        print(f"\n  Provider : {SELECTED_PROVIDER}")
+        print(f"  Model    : {llm.config['model_name']}")
+
+        agent     = ConstraintAnalysisAgent(llm)
+        new_stmts = agent.run(parsed)
 
     if new_stmts:
         print(f"\n  LLM found {len(new_stmts)} missing constraint(s):")
         for stmt in new_stmts:
-            # Print a compact one-liner summary
             summary = re.sub(r"\s+", " ", stmt).strip()
             print(f"    + {summary[:120]}")
+
+        # ── Post-validation ─────────────────────────────────────
+        print("\n  Validating LLM constraints against actual schema...")
+        new_stmts = validate_constraints(new_stmts, tables)
     else:
-        print("\n  LLM: schema looks complete — no missing constraints found.")
+        print("\n  No missing constraints to add.")
 
     # ── Phase 3: Merge & Write ──────────────────────────────────────
     print("\n" + "-" * 65)
