@@ -98,7 +98,7 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
         if "" not in prefixes:
             base = root.get("{http://www.w3.org/XML/1998/namespace}base") or root.get("ontologyIRI", "")
             if base:
-                prefixes[""] = base.rstrip("/") + "#"
+                prefixes[""] = base if base.endswith("#") else base.rstrip("/") + "#"
     except ET.ParseError:
         with open(owl_file, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
@@ -107,7 +107,7 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
         if "" not in prefixes:
             m = re.search(r'ontologyIRI="([^"]+)"', content)
             if m:
-                prefixes[""] = m.group(1).rstrip("/") + "#"
+                prefixes[""] = m.group(1) if m.group(1).endswith("#") else m.group(1).rstrip("/") + "#"
     except FileNotFoundError:
         print(f"  [WARN] Ontology file not found: {owl_file}")
     return prefixes
@@ -182,16 +182,39 @@ def load_json_optional(path: str) -> Dict:
 
 def get_direct_parent(table_name: str, tables_structure: Dict):
     """
-    Return (parent_table, parent_pk_col) for a SE_SH table
-    by finding the 'id' column that is a FK.
-    Returns (None, None) if not found.
+    Return (parent_table, parent_pk_col) for a SE_SH table by finding
+    a FK column that references another table.
+
+    Priority:
+      1. Column literally named "id" that is a FK  (legacy pattern)
+      2. Any FK column whose name ends with "npdid" or "id"
+      3. First FK column found (fallback)
+    Returns (None, None) if no FK columns exist.
     """
-    info = tables_structure.get(table_name, {})
-    for col in info.get("columns", []):
-        if col["name"] == "id" and col.get("is_foreign_key"):
+    info    = tables_structure.get(table_name, {})
+    columns = info.get("columns", [])
+    fk_cols = [c for c in columns if c.get("is_foreign_key")]
+
+    if not fk_cols:
+        return None, None
+
+    # Priority 1: column literally named "id"
+    for col in fk_cols:
+        if col["name"] == "id":
             ref = col.get("foreign_key_reference", {})
-            return ref.get("table"), ref.get("column", "id")
-    return None, None
+            return ref.get("table"), ref.get("column")
+
+    # Priority 2: FK column whose name ends with "npdid" or "id"
+    for col in fk_cols:
+        n = col["name"].lower()
+        if n.endswith("npdid") or (n.endswith("id") and not n.startswith("is_")):
+            ref = col.get("foreign_key_reference", {})
+            if ref.get("table"):
+                return ref.get("table"), ref.get("column")
+
+    # Priority 3: first FK found
+    ref = fk_cols[0].get("foreign_key_reference", {})
+    return ref.get("table"), ref.get("column")
 
 
 def resolve_subject_template(
@@ -215,27 +238,71 @@ def resolve_subject_template(
     """
     parent_table, _ = get_direct_parent(table_name, tables_structure)
 
+    def _own_template(tname):
+        """Build subject template from actual PKs — never falls back to {id}."""
+        pks = tables_structure.get(tname, {}).get("primary_keys", [])
+        if pks:
+            return base_iri + tname + "/" + "/".join(f"{{{pk}}}" for pk in pks)
+        # Last resort: use non-nullable non-FK columns
+        cols = tables_structure.get(tname, {}).get("columns", [])
+        key_cols = [c["name"] for c in cols
+                    if not c.get("is_foreign_key") and not c.get("is_nullable", True)]
+        if key_cols:
+            return base_iri + tname + "/" + "/".join(f"{{{c}}}" for c in key_cols)
+        print(f"  [WARN] resolve_subject_template: no PKs found for '{tname}' "
+              f"— using first column as key")
+        first = cols[0]["name"] if cols else "unknown"
+        return base_iri + tname + f"/{{{first}}}"
+
     if parent_table is None:
-        # No parent found — fall back to own IRI
-        own_template = f"{base_iri}{table_name}/{{id}}"
-        return own_template, None, None, False
+        # No parent found via FK — build own IRI from actual PKs
+        return _own_template(table_name), None, None, False
+
+    # Determine if this table IS the same entity as the parent
+    # (all PKs are also FKs → shares parent identity → use parent template)
+    # or is a distinct entity with its own composite PK → use own template
+    info    = tables_structure.get(table_name, {})
+    pks     = set(info.get("primary_keys", []))
+    fk_cols = {c["name"] for c in info.get("columns", []) if c.get("is_foreign_key")}
+    same_entity_as_parent = bool(pks) and all(pk in fk_cols for pk in pks)
+
+    # Own columns — used to validate parent template placeholders
+    import re as _re
+    own_col_names = {c["name"] for c in tables_structure.get(table_name, {}).get("columns", [])}
+
+    def _validate_or_own(tmpl, parent_table_, parent_iri_):
+        """Use parent template only if ALL its placeholders exist in this table's columns."""
+        placeholders = _re.findall(r'\{([^}]+)\}', tmpl)
+        if placeholders and all(p in own_col_names for p in placeholders):
+            return tmpl, parent_table_, parent_iri_, True
+        # Placeholder mismatch — parent template references columns not in this table.
+        # Build own template from this table's actual columns instead.
+        print(f"  [WARN] resolve_subject_template: parent template {tmpl!r} "
+              f"has placeholders {placeholders} not in {table_name} columns {own_col_names} "
+              f"— using own template")
+        return _own_template(table_name), parent_table_, parent_iri_, True
 
     # Check Phase 1 SE mappings
     if parent_table in se_mappings:
-        parent_iri      = se_mappings[parent_table]["triple_map_iri"]
-        parent_template = se_mappings[parent_table]["subject"]["template"]
-        return parent_template, parent_table, parent_iri, True
+        parent_iri = se_mappings[parent_table]["triple_map_iri"]
+        if same_entity_as_parent:
+            parent_template = se_mappings[parent_table]["subject"]["template"]
+            return _validate_or_own(parent_template, parent_table, parent_iri)
+        else:
+            return _own_template(table_name), parent_table, parent_iri, True
 
     # Check Phase 2 SH mappings (already processed in this run)
     if parent_table in sh_mappings:
-        parent_iri      = sh_mappings[parent_table]["triple_map_iri"]
-        parent_template = sh_mappings[parent_table]["subject"]["template"]
-        return parent_template, parent_table, parent_iri, True
+        parent_iri = sh_mappings[parent_table]["triple_map_iri"]
+        if same_entity_as_parent:
+            parent_template = sh_mappings[parent_table]["subject"]["template"]
+            return _validate_or_own(parent_template, parent_table, parent_iri)
+        else:
+            return _own_template(table_name), parent_table, parent_iri, True
 
-    # Parent not yet mapped — use own IRI as placeholder
-    own_template    = f"{base_iri}{table_name}/{{id}}"
-    parent_iri      = f"urn:r2rml:SE_SH_{parent_table}"
-    return own_template, parent_table, parent_iri, False
+    # Parent not yet mapped — build own IRI from actual PKs (not {id})
+    parent_iri = f"urn:r2rml:SE_SH_{parent_table}"
+    return _own_template(table_name), parent_table, parent_iri, False
 
 
 # ============================================================
@@ -332,6 +399,63 @@ class OntologyPropertyIndex:
             sup = self._local(sup_iri)
             if sub and sup and sup not in ("Thing", ""):
                 self.subclass_of[sub].add(sup)
+
+        # ── RDF/XML fallback ──────────────────────────────────
+        if not self.data_props and not self.obj_props:
+            print("  [OntologyPropertyIndex] No Declaration tags — trying RDF/XML parsing")
+            OWL  = "http://www.w3.org/2002/07/owl#"
+            RDF  = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+            RDFS = "http://www.w3.org/2000/01/rdf-schema#"
+
+            for elem in root.iter(f"{{{OWL}}}Class"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if iri and "owl#" not in iri:
+                    cls_name = self._local(iri)
+                    for sub in elem.findall(f"{{{RDFS}}}subClassOf"):
+                        parent_iri = sub.get(f"{{{RDF}}}resource", "")
+                        if parent_iri:
+                            parent = self._local(parent_iri)
+                            if parent and parent != "Thing":
+                                self.subclass_of[cls_name].add(parent)
+
+            for elem in root.iter(f"{{{OWL}}}DatatypeProperty"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if not iri:
+                    continue
+                name = self._local(iri)
+                info = {"domain": None, "domain_union": None, "range": None}
+                dom = elem.find(f"{{{RDFS}}}domain")
+                if dom is not None:
+                    d = dom.get(f"{{{RDF}}}resource", "")
+                    if d:
+                        info["domain"] = self._local(d)
+                rng = elem.find(f"{{{RDFS}}}range")
+                if rng is not None:
+                    r = rng.get(f"{{{RDF}}}resource", "")
+                    if r:
+                        info["range"] = r
+                self.data_props[name] = info
+
+            for elem in root.iter(f"{{{OWL}}}ObjectProperty"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if not iri:
+                    continue
+                name = self._local(iri)
+                info = {"domain": None, "range": None}
+                dom = elem.find(f"{{{RDFS}}}domain")
+                if dom is not None:
+                    d = dom.get(f"{{{RDF}}}resource", "")
+                    if d:
+                        info["domain"] = self._local(d)
+                rng = elem.find(f"{{{RDFS}}}range")
+                if rng is not None:
+                    r = rng.get(f"{{{RDF}}}resource", "")
+                    if r:
+                        info["range"] = self._local(r)
+                self.obj_props[name] = info
+
+            print(f"  [OntologyPropertyIndex] RDF/XML: {len(self.data_props)} data props, "
+                  f"{len(self.obj_props)} obj props")
 
     def _close_subclass(self):
         changed = True
@@ -469,7 +593,11 @@ def _fetch_class_properties(ontology_class: str) -> Tuple[List[str], List[str]]:
                 for item in flat:
                     if isinstance(item, dict):
                         ptype = item.get("type", "").lower()
-                        pname = item.get("name") or item.get("iri", "")
+                        pname = (item.get("property_name") or item.get("name")
+                                 or item.get("local_name") or "")
+                        if not pname:
+                            iri = item.get("property_iri") or item.get("iri", "")
+                            pname = iri.split("#")[-1] if "#" in iri else iri.split("/")[-1]
                         pname = pname.split("#")[-1] if "#" in pname else pname.split("/")[-1]
                         if "object" in ptype:
                             op_raw.append(pname)
@@ -482,8 +610,17 @@ def _fetch_class_properties(ontology_class: str) -> Tuple[List[str], List[str]]:
             if isinstance(entry, str):
                 return entry.split("#")[-1] if "#" in entry else entry.split("/")[-1]
             if isinstance(entry, dict):
-                n = entry.get("name") or entry.get("local_name") or entry.get("iri", "")
-                return n.split("#")[-1] if "#" in n else n.split("/")[-1]
+                # ontology_explorer returns "property_name" and "property_iri"
+                # also handle legacy keys "name", "local_name", "iri"
+                n = (entry.get("property_name")
+                     or entry.get("name")
+                     or entry.get("local_name")
+                     or "")
+                if n:
+                    return n.split("#")[-1] if "#" in n else n.split("/")[-1]
+                # fallback: derive from IRI
+                iri = entry.get("property_iri") or entry.get("iri", "")
+                return iri.split("#")[-1] if "#" in iri else iri.split("/")[-1]
             return str(entry)
 
         data_props = [_to_local(e) for e in dp_raw if e]
