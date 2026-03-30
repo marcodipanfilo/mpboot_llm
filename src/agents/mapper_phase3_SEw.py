@@ -104,7 +104,7 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
         if "" not in prefixes:
             base = root.get("{http://www.w3.org/XML/1998/namespace}base") or root.get("ontologyIRI", "")
             if base:
-                prefixes[""] = base.rstrip("/") + "#"
+                prefixes[""] = base if base.endswith("#") else base.rstrip("/") + "#"
     except ET.ParseError:
         with open(owl_file, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
@@ -113,7 +113,7 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
         if "" not in prefixes:
             m = re.search(r'ontologyIRI="([^"]+)"', content)
             if m:
-                prefixes[""] = m.group(1).rstrip("/") + "#"
+                prefixes[""] = m.group(1) if m.group(1).endswith("#") else m.group(1).rstrip("/") + "#"
     except FileNotFoundError:
         print(f"  [WARN] Ontology file not found: {owl_file}")
     return prefixes
@@ -345,6 +345,63 @@ class OntologyPropertyIndex:
             if sub and sup and sup not in ("Thing", ""):
                 self.subclass_of[sub].add(sup)
 
+        # ── RDF/XML fallback ──────────────────────────────────
+        if not self.data_props and not self.obj_props:
+            print("  [OntologyPropertyIndex] No Declaration tags — trying RDF/XML parsing")
+            OWL  = "http://www.w3.org/2002/07/owl#"
+            RDF  = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+            RDFS = "http://www.w3.org/2000/01/rdf-schema#"
+
+            for elem in root.iter(f"{{{OWL}}}Class"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if iri and "owl#" not in iri:
+                    cls_name = self._local(iri)
+                    for sub in elem.findall(f"{{{RDFS}}}subClassOf"):
+                        parent_iri = sub.get(f"{{{RDF}}}resource", "")
+                        if parent_iri:
+                            parent = self._local(parent_iri)
+                            if parent and parent != "Thing":
+                                self.subclass_of[cls_name].add(parent)
+
+            for elem in root.iter(f"{{{OWL}}}DatatypeProperty"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if not iri:
+                    continue
+                name = self._local(iri)
+                info = {"domain": None, "domain_union": None, "range": None}
+                dom = elem.find(f"{{{RDFS}}}domain")
+                if dom is not None:
+                    d = dom.get(f"{{{RDF}}}resource", "")
+                    if d:
+                        info["domain"] = self._local(d)
+                rng = elem.find(f"{{{RDFS}}}range")
+                if rng is not None:
+                    r = rng.get(f"{{{RDF}}}resource", "")
+                    if r:
+                        info["range"] = r
+                self.data_props[name] = info
+
+            for elem in root.iter(f"{{{OWL}}}ObjectProperty"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if not iri:
+                    continue
+                name = self._local(iri)
+                info = {"domain": None, "range": None}
+                dom = elem.find(f"{{{RDFS}}}domain")
+                if dom is not None:
+                    d = dom.get(f"{{{RDF}}}resource", "")
+                    if d:
+                        info["domain"] = self._local(d)
+                rng = elem.find(f"{{{RDFS}}}range")
+                if rng is not None:
+                    r = rng.get(f"{{{RDF}}}resource", "")
+                    if r:
+                        info["range"] = self._local(r)
+                self.obj_props[name] = info
+
+            print(f"  [OntologyPropertyIndex] RDF/XML: {len(self.data_props)} data props, "
+                  f"{len(self.obj_props)} obj props")
+
     def _close_subclass(self):
         changed = True
         while changed:
@@ -502,8 +559,17 @@ def _fetch_class_properties(ontology_class: str) -> Tuple[List[str], List[str]]:
             if isinstance(entry, str):
                 return entry.split("#")[-1] if "#" in entry else entry.split("/")[-1]
             if isinstance(entry, dict):
-                n = entry.get("name") or entry.get("local_name") or entry.get("iri", "")
-                return n.split("#")[-1] if "#" in n else n.split("/")[-1]
+                # ontology_explorer returns "property_name" and "property_iri"
+                # also handle legacy keys "name", "local_name", "iri"
+                n = (entry.get("property_name")
+                     or entry.get("name")
+                     or entry.get("local_name")
+                     or "")
+                if n:
+                    return n.split("#")[-1] if "#" in n else n.split("/")[-1]
+                # fallback: derive from IRI
+                iri = entry.get("property_iri") or entry.get("iri", "")
+                return iri.split("#")[-1] if "#" in iri else iri.split("/")[-1]
             return str(entry)
 
         data_props = [_to_local(e) for e in dp_raw if e]
@@ -790,8 +856,15 @@ def build_sew_json_mapping(
 
     owner_parts = "/".join(f"{{{c['name']}}}" for c in pk_fk_cols)
     local_parts = "/".join(f"{{{c['name']}}}" for c in pk_own_cols)
-    pk_template = f"{owner_parts}/{local_parts}" if owner_parts and local_parts \
-                  else owner_parts or local_parts or "{id}"
+    if owner_parts and local_parts:
+        pk_template = f"{owner_parts}/{local_parts}"
+    elif owner_parts or local_parts:
+        pk_template = owner_parts or local_parts
+    else:
+        # No declared PK — use all non-FK columns as natural composite key.
+        # Never fall back to a synthetic {id} that doesn't exist in the DB.
+        non_fk = [a for a in attributes if a["role"] != "fk"]
+        pk_template = "/".join(f"{{{c['name']}}}" for c in non_fk) if non_fk else "/".join(f"{{{c['name']}}}" for c in attributes)
     subject_template = f"{base_iri}{table_name}/{pk_template}"
 
     print(f"\n    [BUILD] table={table_name!r}  class={ontology_class!r}")
