@@ -246,6 +246,73 @@ class OntologyIndex:
                         if self.data_props[prop_name]["domain"] is None:
                             self.data_props[prop_name]["domain"] = class_name
 
+        # ── RDF/XML fallback ──────────────────────────────────
+        # If we found nothing via OWL/XML <Declaration> tags, the ontology
+        # is likely in RDF/XML format.  Parse <owl:Class>, <owl:DatatypeProperty>,
+        # <owl:ObjectProperty> with rdf:about attributes instead.
+        if not self.data_props and not self.obj_props:
+            print("  [OntologyIndex] No Declaration tags found — trying RDF/XML parsing")
+            OWL  = "http://www.w3.org/2002/07/owl#"
+            RDF  = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+            RDFS = "http://www.w3.org/2000/01/rdf-schema#"
+
+            # ── Classes ──────────────────────────────────────
+            for elem in root.iter(f"{{{OWL}}}Class"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if iri and "owl#" not in iri and "rdf" not in iri:
+                    cls_name = self._local(iri)
+                    self.all_classes.add(cls_name)
+                    # subClassOf
+                    for sub in elem.findall(f"{{{RDFS}}}subClassOf"):
+                        parent_iri = sub.get(f"{{{RDF}}}resource", "")
+                        if parent_iri:
+                            parent = self._local(parent_iri)
+                            if parent and parent != "Thing":
+                                self.subclass_of[cls_name].add(parent)
+
+            # ── Data properties ──────────────────────────────
+            for elem in root.iter(f"{{{OWL}}}DatatypeProperty"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if not iri:
+                    continue
+                name = self._local(iri)
+                info = {"iri": iri, "domain": None, "domain_union": None, "range": None}
+                # domain
+                dom_elem = elem.find(f"{{{RDFS}}}domain")
+                if dom_elem is not None:
+                    d_iri = dom_elem.get(f"{{{RDF}}}resource", "")
+                    if d_iri:
+                        info["domain"] = self._local(d_iri)
+                # range
+                rng_elem = elem.find(f"{{{RDFS}}}range")
+                if rng_elem is not None:
+                    r_iri = rng_elem.get(f"{{{RDF}}}resource", "")
+                    if r_iri:
+                        info["range"] = r_iri
+                self.data_props[name] = info
+
+            # ── Object properties ────────────────────────────
+            for elem in root.iter(f"{{{OWL}}}ObjectProperty"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if not iri:
+                    continue
+                name = self._local(iri)
+                info = {"iri": iri, "domain": None, "range": None}
+                dom_elem = elem.find(f"{{{RDFS}}}domain")
+                if dom_elem is not None:
+                    d_iri = dom_elem.get(f"{{{RDF}}}resource", "")
+                    if d_iri:
+                        info["domain"] = self._local(d_iri)
+                rng_elem = elem.find(f"{{{RDFS}}}range")
+                if rng_elem is not None:
+                    r_iri = rng_elem.get(f"{{{RDF}}}resource", "")
+                    if r_iri:
+                        info["range"] = self._local(r_iri)
+                self.obj_props[name] = info
+
+            print(f"  [OntologyIndex] RDF/XML fallback: {len(self.all_classes)} classes, "
+                  f"{len(self.data_props)} data props, {len(self.obj_props)} obj props")
+
     def _build_pair_index(self):
         for name, info in self.obj_props.items():
             d = info["domain"]
@@ -332,9 +399,26 @@ class OntologyIndex:
         """
         Find the most specific object property for (subject_class → object_class).
         Returns the property with minimum (domain_depth + range_depth).
+
+        Fallback: if NO properties have domain+range declarations (common in
+        lightweight ontologies), skip domain/range filtering entirely and return
+        None — letting the caller keep the existing predicate or use column-name
+        matching instead. This prevents the LLM from inventing wrong replacements.
         """
         subj_anc = self.get_ancestors(subject_class)
         obj_anc  = self.get_ancestors(object_class)
+
+        # Check if any properties have both domain and range declared
+        has_domain_range = any(
+            info.get("domain") and info.get("range")
+            for info in self.obj_props.values()
+        )
+
+        if not has_domain_range:
+            # No properties have domain+range — can't do specificity matching.
+            # Return None and let the caller keep the original predicate.
+            return None
+
         best_prop, best_depth = None, 9999
         for prop_name, prop_info in self.obj_props.items():
             d = prop_info.get("domain")
@@ -459,22 +543,38 @@ class PredicateFixer:
     def resolve_data_predicate(self, table: str, column: str,
                                subject_class: str, current_pred: str,
                                all_data_props: List[str]) -> Optional[str]:
+        if not all_data_props:
+            return None
         prompt = f"""You are an ontology mapping expert.
 
 TABLE: {table}, COLUMN: {column}, SUBJECT CLASS: {subject_class}
-CURRENT (wrong) PREDICATE: {current_pred}
+CURRENT (possibly wrong) PREDICATE: {current_pred}
 
 Find the correct data property from this list that maps '{column}' for a '{subject_class}':
 {', '.join(all_data_props)}
 
+You MUST pick a property from the list above. Do NOT invent new property names.
+If none of the properties fit this column at all, return {{"property": null}}.
+
 Return ONLY JSON: {{"property": "exactPropertyName", "reasoning": "one sentence"}}"""
         raw    = self._call(prompt)
         result = self._parse(raw)
-        return result.get("property") if result else None
+        if not result:
+            return None
+        prop = result.get("property")
+        if not prop or str(prop).lower() == "null":
+            return None
+        # VALIDATE: property must exist in the ontology list
+        if prop not in all_data_props:
+            print(f"        [REJECT-LLM] data prop '{prop}' not in ontology — keeping original")
+            return None
+        return prop
 
     def resolve_obj_predicate(self, table: str, subject_class: str,
                               object_class: str, current_pred: str,
                               all_obj_props: List[str]) -> Optional[str]:
+        if not all_obj_props:
+            return None
         prompt = f"""You are an ontology mapping expert.
 
 TABLE: {table}, SUBJECT CLASS: {subject_class}, OBJECT CLASS: {object_class}
@@ -483,10 +583,22 @@ CURRENT (possibly wrong) PREDICATE: {current_pred}
 Find the correct object property linking '{subject_class}' → '{object_class}':
 {', '.join(all_obj_props)}
 
+You MUST pick a property from the list above. Do NOT invent new property names.
+If none of the properties fit, return {{"property": null}}.
+
 Return ONLY JSON: {{"property": "exactPropertyName", "reasoning": "one sentence"}}"""
         raw    = self._call(prompt)
         result = self._parse(raw)
-        return result.get("property") if result else None
+        if not result:
+            return None
+        prop = result.get("property")
+        if not prop or str(prop).lower() == "null":
+            return None
+        # VALIDATE: property must exist in the ontology list
+        if prop not in all_obj_props:
+            print(f"        [REJECT-LLM] obj prop '{prop}' not in ontology — keeping original")
+            return None
+        return prop
 
     def find_property_for_sew(
         self,
@@ -547,6 +659,11 @@ Return ONLY JSON, no markdown, no extra text."""
         raw    = self._call(prompt)
         result = self._parse(raw)
         if result and result.get("property") and str(result["property"]).lower() != "null":
+            prop = result["property"]
+            all_props_set = set(candidate_data_props + candidate_obj_props)
+            if prop not in all_props_set:
+                print(f"        [REJECT-LLM] SEw prop '{prop}' not in ontology — skipping")
+                return None
             return result
         return None
 
@@ -566,6 +683,8 @@ Return ONLY JSON, no markdown, no extra text."""
           { "property": "propName", "swap": True|False, "reasoning": "..." }
         or None if the LLM cannot find a match.
         """
+        if not all_obj_props:
+            return None
         prompt = f"""You are an ontology mapping expert correcting an SR bridge table.
 
 BRIDGE TABLE : {bridge_table}
@@ -581,6 +700,8 @@ TASK:
 2. Determine if the direction is correct ({subj_cls} → {obj_cls})
    or should be swapped ({obj_cls} → {subj_cls}).
 
+You MUST pick a property from the AVAILABLE list above. Do NOT invent new names.
+
 Return ONLY JSON:
 {{
   "property":  "exactPropertyLocalName",
@@ -589,9 +710,16 @@ Return ONLY JSON:
 }}"""
         raw    = self._call(prompt)
         result = self._parse(raw)
-        if result and result.get("property"):
-            return result
-        return None
+        if not result or not result.get("property"):
+            return None
+        prop = result["property"]
+        if str(prop).lower() == "null":
+            return None
+        # VALIDATE: property must exist in the ontology list
+        if prop not in all_obj_props:
+            print(f"        [REJECT-LLM] SR prop '{prop}' not in ontology — keeping original")
+            return None
+        return result
 
     def remap_loser(self, table_name: str, current_class: str,
                     table_meaning: str, used_classes: Set[str],
@@ -628,8 +756,12 @@ Return ONLY JSON:
         if result:
             nc = result.get("new_class")
             if nc and str(nc).lower() != "null":
-                # Strip any accidental leading colon the LLM added
-                return str(nc).lstrip(":"), result
+                nc_clean = str(nc).lstrip(":")
+                # VALIDATE: class must be in the available list
+                if nc_clean not in available:
+                    print(f"        [REJECT-LLM] class '{nc_clean}' not in available ontology classes")
+                    return None, result
+                return nc_clean, result
         return None, result
 
 
@@ -747,7 +879,7 @@ def correct_entry(table_name: str, entry: Dict,
             # that pollute Q24/Q25/Q27/Q28/Q30/Q31/Q33 results.
             DISCRIMINATOR_COL_NAMES = {"type", "kind", "category", "role", "status",
                                        "mode", "flag", "class", "subtype", "variant"}
-            if col_lc in DISCRIMINATOR_COL_NAMES:
+            if col_lc in DISCRIMINATOR_COL_NAMES and not idx.find_data_property(subj_cls, col):
                 _log(report, table_name, old_pred, "REMOVED_DISCRIMINATOR",
                      "data_prop_discriminator_removed",
                      f"column={col} is a type-discriminator, not a data property literal")
@@ -803,10 +935,15 @@ def correct_entry(table_name: str, entry: Dict,
                              f"{subj_cls} → {obj_cls}")
                         new_pom["predicate"] = new_pred
                 else:
-                    # Guard: if existing predicate is already valid, keep it
+                    # Guard: if existing predicate is already a known ontology
+                    # property (regardless of domain/range), keep it as-is.
+                    # This prevents the LLM from "correcting" correct predicates
+                    # when the ontology has no domain/range declarations.
                     existing_name = old_pred.lstrip(":")
-                    if _is_already_valid_obj_prop(existing_name, subj_cls, obj_cls, idx):
-                        pass  # already correct
+                    if existing_name in idx.obj_props:
+                        pass  # already a valid ontology property — keep it
+                    elif _is_already_valid_obj_prop(existing_name, subj_cls, obj_cls, idx):
+                        pass  # already correct via domain/range matching
                     else:
                         # Try column-name-based fallback before calling LLM.
                         # This handles cases where class_map resolves to a base class
