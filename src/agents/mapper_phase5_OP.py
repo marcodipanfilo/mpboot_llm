@@ -233,6 +233,50 @@ class OWLObjectPropertyIndex:
             if sub and sup and sup not in ("Thing", ""):
                 self.subclass_of[sub].add(sup)
 
+        # ── RDF/XML fallback ──────────────────────────────────
+        # If no Declaration tags were found (RDF/XML format), parse
+        # <owl:ObjectProperty>, <owl:Class>, and rdfs:subClassOf directly.
+        if not self.obj_props:
+            print("  [OWLObjectPropertyIndex] No Declaration tags — trying RDF/XML parsing")
+            OWL  = "http://www.w3.org/2002/07/owl#"
+            RDF  = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+            RDFS = "http://www.w3.org/2000/01/rdf-schema#"
+
+            # ── Classes + subClassOf ─────────────────────────
+            for elem in root.iter(f"{{{OWL}}}Class"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if not iri or "owl#" in iri:
+                    continue
+                cls_name = _local(iri)
+                for sub_elem in elem.findall(f"{{{RDFS}}}subClassOf"):
+                    parent_iri = sub_elem.get(f"{{{RDF}}}resource", "")
+                    if parent_iri:
+                        parent = _local(parent_iri)
+                        if parent and parent != "Thing":
+                            self.subclass_of[cls_name].add(parent)
+
+            # ── Object properties with domain/range ──────────
+            for elem in root.iter(f"{{{OWL}}}ObjectProperty"):
+                iri = elem.get(f"{{{RDF}}}about", "")
+                if not iri:
+                    continue
+                name = _local(iri)
+                # Ensure the defaultdict entry is created
+                entry = self.obj_props[name]
+                dom_elem = elem.find(f"{{{RDFS}}}domain")
+                if dom_elem is not None:
+                    d = dom_elem.get(f"{{{RDF}}}resource", "")
+                    if d:
+                        entry["domains"].add(_local(d))
+                rng_elem = elem.find(f"{{{RDFS}}}range")
+                if rng_elem is not None:
+                    r = rng_elem.get(f"{{{RDF}}}resource", "")
+                    if r:
+                        entry["ranges"].add(_local(r))
+
+            print(f"  [OWLObjectPropertyIndex] RDF/XML: {len(self.obj_props)} obj props, "
+                  f"{len(self.subclass_of)} subclass relations")
+
     def _close_subclass(self):
         changed = True
         while changed:
@@ -261,6 +305,11 @@ class OWLObjectPropertyIndex:
 
         Specificity is measured as the length of the subclass chain from cls to
         the domain: 0 = exact match (most specific), larger = further ancestor.
+
+        Fallback: if no properties have domain+range declarations, the method
+        cannot do specificity filtering. In that case, return all properties
+        that have at least a range declared, or return empty if nothing useful
+        can be inferred.
         """
         ancestors     = self.get_ancestors(cls)
         # Build depth map: how many steps from cls to each ancestor
@@ -273,6 +322,28 @@ class OWLObjectPropertyIndex:
                     if parent not in depth:
                         depth[parent] = d + 1
                         changed = True
+
+        # Check if ANY property has both domain and range
+        has_domain_range = any(
+            info["domains"] and info["ranges"]
+            for info in self.obj_props.values()
+        )
+
+        if not has_domain_range:
+            # No domain/range declarations in the ontology.
+            # Return all properties that have at least a range, so the
+            # injection loop can still try to match them via class_index.
+            # If no ranges either, return empty (can't determine targets).
+            result = []
+            seen = set()
+            for prop, info in self.obj_props.items():
+                if info["ranges"]:
+                    for rng in info["ranges"]:
+                        key = (prop, rng)
+                        if key not in seen:
+                            seen.add(key)
+                            result.append((prop, rng))
+            return result
 
         # Collect all candidate (prop, range) pairs with their best domain depth
         # best_depth[(prop, rng)] = minimum depth among matching domains
