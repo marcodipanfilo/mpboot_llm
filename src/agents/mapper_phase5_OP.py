@@ -66,6 +66,7 @@ SR_MAPPINGS_FILE     = os.path.join(MAPPINGS_DIR, "SR_mappings.json")
 HIDDEN_MAPPINGS_FILE = os.path.join(MAPPINGS_DIR, "HIDDEN_mappings.json")
 TABLES_STRUCTURE     = os.path.join(DB_JSON_DIR,  "tables_structure.json")
 PROCESS_CACHE_FILE   = os.path.join(OUTPUT_DIR,   "mappings_process_phase5b.json")
+CONSTRAINT_META_FILE = "src/inputs/database/constraint_metadata.json"
 
 PHASE_FILES: Dict[str, str] = {
     "SE":  os.path.join(MAPPINGS_DIR, "SE_mappings.json"),
@@ -291,36 +292,53 @@ class OWLObjectPropertyIndex:
     def get_ancestors(self, cls: str) -> Set[str]:
         return {cls} | self.subclass_of.get(cls, set())
 
+    def get_descendants(self, cls: str) -> Set[str]:
+        """Return cls plus all classes that are subclasses of cls (transitively)."""
+        result = {cls}
+        # subclass_of is already transitively closed, so any child whose
+        # ancestor set includes cls is a descendant
+        for child, parents in self.subclass_of.items():
+            if cls in parents:
+                result.add(child)
+        return result
+
     def props_for_class(self, cls: str) -> List[Tuple[str, str]]:
         """
         Return (prop_name, range_class) pairs for all object properties whose
-        domain intersects the ancestor set of cls.
+        domain intersects the ancestor set of cls OR the descendant set of cls.
+
+        KEY FIX: Also includes properties whose domain is a DESCENDANT (subclass)
+        of cls. This is critical because e.g. Person table should also get
+        :submit (domain=Author), :presentation (domain=Speaker), :obtain (domain=Author),
+        since some Person rows ARE Authors/Speakers via hidden patterns.
 
         Specificity rule: when two properties share the same range class and
         one has a domain that is a direct subclass of the other's domain, prefer
         the MORE SPECIFIC one (i.e. the one whose domain is closest to cls in
-        the hierarchy).  This prevents e.g. :was_a_committee_of (domain=Committee)
-        from being used for Program_committee when :was_a_program_committee_of
-        (domain=Program_committee) is available.
+        the hierarchy).
 
-        Specificity is measured as the length of the subclass chain from cls to
-        the domain: 0 = exact match (most specific), larger = further ancestor.
-
-        Fallback: if no properties have domain+range declarations, the method
-        cannot do specificity filtering. In that case, return all properties
-        that have at least a range declared, or return empty if nothing useful
-        can be inferred.
+        Fallback: if no properties have domain+range declarations, return all
+        properties that have at least a range declared.
         """
         ancestors     = self.get_ancestors(cls)
-        # Build depth map: how many steps from cls to each ancestor
+        descendants   = self.get_descendants(cls)
+        all_classes   = ancestors | descendants
+
+        # Build depth map: how many steps from cls to each ancestor/descendant
         depth: Dict[str, int] = {cls: 0}
         changed = True
         while changed:
             changed = False
             for c, d in list(depth.items()):
+                # Walk up
                 for parent in self.subclass_of.get(c, set()):
                     if parent not in depth:
                         depth[parent] = d + 1
+                        changed = True
+                # Walk down
+                for child, parents in self.subclass_of.items():
+                    if c in parents and child not in depth:
+                        depth[child] = d + 1
                         changed = True
 
         # Check if ANY property has both domain and range
@@ -351,7 +369,7 @@ class OWLObjectPropertyIndex:
         for prop, info in self.obj_props.items():
             if not info["domains"] or not info["ranges"]:
                 continue
-            matching_domains = info["domains"] & ancestors
+            matching_domains = info["domains"] & all_classes
             if not matching_domains:
                 continue
             min_d = min(depth.get(d, 9999) for d in matching_domains)
@@ -607,18 +625,8 @@ class SRInferenceAgent:
         sr_tables: Dict[str, Dict],
         tables_structure: Dict,
         all_mappings: Dict[str, Dict],
+        constraint_meta: Dict = None,
     ) -> str:
-        """
-        Build the LLM prompt.
-
-        The LLM receives:
-          - The full tables_structure schema (all tables, all columns)
-          - The SR junction tables that need FK inference
-          - The list of known entity tables and their triple_map_iris
-
-        It must return a JSON object that fills in participants and mappings
-        for every SR table.
-        """
 
         # Collect known entity triple map IRIs for reference
         entity_iri_map: Dict[str, str] = {}
@@ -645,6 +653,35 @@ class SRInferenceAgent:
             indent=2,
         )
 
+        # Build constraint hints block for SR tables
+        constraint_block = ""
+        if constraint_meta:
+            lines = []
+            for sr_name in sr_tables:
+                t_meta = constraint_meta.get(sr_name)
+                if not t_meta:
+                    for k, v in constraint_meta.items():
+                        if k.lower() == sr_name.lower():
+                            t_meta = v
+                            break
+                if t_meta:
+                    pk_name = t_meta.get("pk_constraint_name", "")
+                    fk_map = t_meta.get("fk_constraints", {})
+                    if pk_name or fk_map:
+                        lines.append(f"  {sr_name}:")
+                        if pk_name:
+                            lines.append(f"    PK: \"{pk_name}\"")
+                        for col, info in fk_map.items():
+                            cn = info.get("constraint_name", "")
+                            rt = info.get("ref_table", "")
+                            if cn:
+                                lines.append(f"    FK {col}: \"{cn}\" → {rt}")
+            if lines:
+                constraint_block = (
+                    "\nDATABASE CONSTRAINT NAMES (strong hints — property names and FK targets are embedded):\n"
+                    + "\n".join(lines) + "\n"
+                )
+
         return f"""You are a database schema expert helping to resolve foreign key relationships
 for junction tables in a relational database.
 
@@ -656,7 +693,7 @@ KNOWN ENTITY TABLES AND THEIR TRIPLE MAP IRIs:
 
 JUNCTION TABLES THAT NEED FK RESOLUTION (SR tables with empty mappings):
 {sr_block}
-
+{constraint_block}
 TASK:
 For each junction table listed above, analyse its column names against the full
 schema and infer which entity table each column references (i.e. what its FK
@@ -718,8 +755,10 @@ Return ONLY the JSON. No explanations, no markdown fences, no preamble."""
         sr_tables: Dict[str, Dict],
         tables_structure: Dict,
         all_mappings: Dict[str, Dict],
+        constraint_meta: Dict = None,
     ) -> Optional[Dict]:
-        prompt = self.build_prompt(sr_tables, tables_structure, all_mappings)
+        prompt = self.build_prompt(sr_tables, tables_structure, all_mappings,
+                                   constraint_meta=constraint_meta)
         raw    = self._call(prompt, max_tokens=3000)
         result = self._parse(raw)
         if not result or not isinstance(result, dict):
@@ -995,7 +1034,17 @@ def run_phase5b():
     hidden_mappings  = load_json_optional(HIDDEN_MAPPINGS_FILE)
     process_cache    = load_json_optional(PROCESS_CACHE_FILE)
 
-    print(f"\nLoading phase mapping files ...")
+    # Load constraint metadata from Phase 0
+    constraint_meta = {}
+    if os.path.exists(CONSTRAINT_META_FILE):
+        try:
+            with open(CONSTRAINT_META_FILE, "r", encoding="utf-8") as f:
+                constraint_meta = json.load(f)
+            print(f"  Constraint metadata: {len(constraint_meta)} tables")
+        except Exception:
+            print(f"  [WARN] Could not load constraint_metadata.json")
+
+    print(f"Loading phase mapping files ...")
     all_mappings:  Dict[str, Dict] = {}
     for phase_key, path in PHASE_FILES.items():
         data = load_json_optional(path)
@@ -1041,7 +1090,8 @@ def run_phase5b():
         else:
             agent      = SRInferenceAgent(provider=SELECTED_PROVIDER)
             llm_result = agent.infer_sr_fks(
-                unfilled_sr, tables_structure, all_mappings
+                unfilled_sr, tables_structure, all_mappings,
+                constraint_meta=constraint_meta
             )
             if llm_result:
                 process_cache[cache_key] = llm_result
