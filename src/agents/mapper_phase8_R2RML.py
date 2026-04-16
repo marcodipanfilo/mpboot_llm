@@ -720,6 +720,10 @@ def build_sr_section(sr_raw: Dict, entity_entries: Dict,
     seen_pairs: Set = set()
 
     for bridge_table, entry in sr_raw.items():
+        # Skip axiom typing entries — handled by _build_axiom_typing_blocks
+        if entry.get("pattern") == "SR_AXIOM_TYPING":
+            continue
+
         bridge_name_blocks = []
 
         for m in entry.get("mappings", []):
@@ -747,7 +751,11 @@ def build_sr_section(sr_raw: Dict, entity_entries: Dict,
 
             subj_tag = subj_iri.split("_")[-1]
             obj_tag  = obj_iri.split("_")[-1]
-            sr_iri   = f"{entry['triple_map_iri']}_{subj_tag}_{obj_tag}"
+            # Include predicate name in IRI to prevent duplicates when
+            # multiple predicates connect the same entity pair
+            # (e.g. :submit AND :presentation both on persons→documents)
+            pred_tag = pred.lstrip(":").replace("-", "_").replace(":", "_")
+            sr_iri   = f"{entry['triple_map_iri']}_{subj_tag}_{obj_tag}_{pred_tag}"
 
             _q3b = "'''"
             s_child     = s_join.get("child", "")
@@ -792,6 +800,94 @@ def build_sr_section(sr_raw: Dict, entity_entries: Dict,
             blocks.append(
                 f"# SR_{bridge_table}: all directions deduplicated or skipped\n"
             )
+
+    return "\n".join(blocks)
+
+
+def _build_axiom_typing_blocks(sr_raw: Dict) -> str:
+    """
+    Build TTL for SR_AXIOM_TYPING entries — EquivalentClasses materialization.
+
+    Each entry produces a simple TriplesMap that adds rdf:type to entities
+    participating in SR relationships. For example:
+
+        Author ≡ ∃submit.Paper
+        → persons in document_person.pid get rdf:type :Author
+        → documents in document_person.did get rdf:type :Paper
+
+    Output:
+        <urn:r2rml:AXIOM_document_person_Author>
+            a rr:TriplesMap ;
+            rr:logicalTable [ rr:sqlQuery '''SELECT DISTINCT "pid" FROM "document_person"''' ] ;
+            rr:subjectMap [
+                rr:template "http://sigkdd#persons/{pid}" ;
+                rr:class :Author ;
+            ] .
+    """
+    if not sr_raw:
+        return ""
+
+    # Collect axiom typing entries
+    axiom_entries = {
+        k: v for k, v in sr_raw.items()
+        if v.get("pattern") == "SR_AXIOM_TYPING"
+    }
+
+    if not axiom_entries:
+        return ""
+
+    blocks = [
+        "# " + "═" * 52,
+        "# AXIOM TYPING — EquivalentClasses materialization",
+        "# " + "═" * 52,
+        "",
+    ]
+
+    _q3b = "'''"
+
+    for entry_key, entry in axiom_entries.items():
+        iri = entry.get("triple_map_iri", f"urn:r2rml:AXIOM_{entry_key}")
+        logical_table = entry.get("logical_table", "")
+        typing_class = entry.get("typing_class", "")
+        subject_template = entry.get("subject_template", "")
+        source_column = entry.get("source_column", "")
+        axiom_info = entry.get("axiom", {})
+        reason = entry.get("_reason", "")
+
+        if not all([logical_table, typing_class, subject_template, source_column]):
+            blocks.append(
+                f"# SKIPPED {entry_key}: missing required fields "
+                f"(table={logical_table!r}, class={typing_class!r}, "
+                f"tmpl={subject_template!r}, col={source_column!r})\n"
+            )
+            continue
+
+        # Lowercase the template placeholder for PostgreSQL compatibility
+        subject_template_lower = subject_template.lower()
+
+        # Build SQL: SELECT DISTINCT "col" FROM "table"
+        sql = f'SELECT DISTINCT "{source_column}" FROM "{logical_table}"'
+
+        # Comment with axiom info
+        equiv = axiom_info.get("equiv_class", "?")
+        prop = axiom_info.get("property", "?")
+        filler = axiom_info.get("filler", "?")
+
+        lines = [
+            f"# ── AXIOM: {equiv} ≡ ∃{prop}.{filler} ──────────",
+            f"<{iri}>",
+            f"    a rr:TriplesMap ;",
+            f"",
+            f"    rr:logicalTable [ rr:sqlQuery {_q3b}{sql}{_q3b} ] ;",
+            f"",
+            f"    rr:subjectMap [",
+            f'        rr:template "{subject_template_lower}" ;',
+            f"        rr:class     {typing_class} ;",
+            f"    ]  .",
+            f"",
+            f"",
+        ]
+        blocks.extend(lines)
 
     return "\n".join(blocks)
 
@@ -912,6 +1008,18 @@ def build_hidden_section(hidden_raw: Dict, entity_entries: Dict,
             )
 
         # ── Type Dispatch ────────────────────────────────────────────────────
+        # Look up the parent entity's template and data POMs
+        parent_template = None
+        parent_data_poms = []
+        for phase_data in [entity_entries]:
+            parent_entry = phase_data.get(table_name)
+            if parent_entry:
+                parent_template = parent_entry.get("subject", {}).get("template")
+                for pom in parent_entry.get("predicate_object_maps", []):
+                    if pom.get("object", {}).get("type") == "literal":
+                        parent_data_poms.append(pom)
+                break
+
         for td in entry.get("type_dispatch", []):
             col      = td.get("discriminator_column", "type")
             col_type = (td.get("discriminator_type", "")
@@ -921,6 +1029,10 @@ def build_hidden_section(hidden_raw: Dict, entity_entries: Dict,
                 subj = dispatch.get("subject", {})
                 if not subj.get("class") or not subj.get("template"):
                     continue
+
+                # Inherit template from parent SE/SE_SH entry
+                if parent_template:
+                    subj = {**subj, "template": parent_template}
 
                 filter_value      = str(dispatch.get("filter_value", "?"))
                 dispatch_col_type = dispatch.get("filter_column_type", col_type)
@@ -936,7 +1048,7 @@ def build_hidden_section(hidden_raw: Dict, entity_entries: Dict,
                     "triple_map_iri":        dispatch["triple_map_iri"],
                     "subject":               subj,
                     "pattern":               "TYPE_DISPATCH",
-                    "predicate_object_maps": [],
+                    "predicate_object_maps": list(parent_data_poms),
                 }
                 blocks.append(
                     build_entity_block(table_name, fake_entry,
@@ -969,27 +1081,98 @@ def build_prefix_block(base_iri: str) -> str:
 
 def _fix_id_templates(entity_entries: Dict, tables_structure: Dict) -> int:
     """
-    Repair subject templates that use the generic {id} placeholder.
-    The SH mapper sometimes falls back to {id} when it cannot determine the PK.
-    This function replaces {id} with the actual PK columns from tables_structure.json.
+    Repair subject templates that use the generic {id} placeholder from
+    SH mapper fallback. Only rebuilds templates that are DEMONSTRABLY broken
+    (missing the table name, or using '{id}' where a real PK is expected).
 
-    Returns the number of templates fixed.
+    CRITICAL: Does NOT rebuild correct templates like 'document/{id}' just
+    because they contain '{id}'. The template is correct IF:
+      - It already ends with a {pk} that is a real PK column, AND
+      - The base path matches either the table's own name OR an ancestor's
+        name (for SE_SH inheritance: paper's template can use 'document/')
+
+    Only rebuilds when:
+      - The template ends in just '{id}' but 'id' is NOT actually a PK column,
+      - OR the path component before {id} doesn't match this table OR any
+        ancestor (via parent_table chain).
     """
     fixed = 0
     for table_name, entry in entity_entries.items():
         subj = entry.get("subject", {})
         tmpl = subj.get("template", "")
-        if "{id}" not in tmpl:
+        if not tmpl or "{" not in tmpl:
             continue
+
         pks = tables_structure.get(table_name, {}).get("primary_keys", [])
         if not pks:
-            print(f"  [WARN] {table_name}: has {{id}} template but no PKs in tables_structure — leaving as-is")
             continue
-        base = tmpl.replace("/{id}", "")
-        new_tmpl = base + "/" + "/".join(f"{{{pk}}}" for pk in pks)
-        entry["subject"] = {**subj, "template": new_tmpl}
-        print(f"  [fix-id] {table_name}: {{id}} → {'/'.join('{'+pk+'}' for pk in pks)}")
-        fixed += 1
+
+        # Extract the placeholder(s) currently in the template
+        import re as _re
+        placeholders = _re.findall(r'\{([^}]+)\}', tmpl)
+        own_cols = {c["name"] for c in tables_structure.get(table_name, {}).get("columns", [])}
+
+        # Is the template already correct?
+        # It's correct if: all placeholders are real columns in THIS table,
+        # AND the base path references this table or its parent chain.
+        all_placeholders_valid = all(p in own_cols for p in placeholders)
+
+        # Extract base path (everything before the first placeholder)
+        base_match = _re.match(r'^(.*?)(?=/\{)', tmpl)
+        base_path = base_match.group(1) if base_match else ""
+        # Get last path segment (after # or /)
+        last_seg = base_path.rsplit("/", 1)[-1].rsplit("#", 1)[-1]
+
+        # Check if last_seg is this table or any ancestor (SE_SH parent chain)
+        parent_chain = {table_name}
+        parent_tbl = entry.get("parent_table", "")
+        max_depth = 10
+        while parent_tbl and max_depth > 0:
+            parent_chain.add(parent_tbl)
+            # Walk up — find parent's entry in entity_entries if present
+            parent_entry = entity_entries.get(parent_tbl, {})
+            parent_tbl = parent_entry.get("parent_table", "")
+            max_depth -= 1
+
+        path_is_valid = last_seg in parent_chain
+
+        # If template is already correct, LEAVE IT ALONE
+        if all_placeholders_valid and path_is_valid:
+            continue
+
+        # Template is broken — rebuild it properly
+        cols = tables_structure.get(table_name, {}).get("columns", [])
+        # Build FK set from multiple sources for robustness
+        fk_names = set()
+        for c in cols:
+            if c.get("is_foreign_key"):
+                fk_names.add(c["name"])
+            if c.get("foreign_key_reference") or c.get("fk_references") or c.get("references"):
+                fk_names.add(c["name"])
+        for fk in tables_structure.get(table_name, {}).get("foreign_keys", []):
+            col_name = fk.get("column") or fk.get("from_column") or fk.get("name")
+            if col_name:
+                fk_names.add(col_name)
+
+        # Exclude FK PKs from template — they're relationships, not identity
+        non_fk_pks = [pk for pk in pks if pk not in fk_names]
+        template_pks = non_fk_pks if non_fk_pks else pks
+
+        # Preserve parent's base path for SE_SH tables
+        iri_base = _re.match(r'(https?://[^#]+#)', tmpl)
+        prefix = iri_base.group(1) if iri_base else ""
+
+        # If current base_path already references an ancestor, keep it
+        if last_seg in parent_chain and last_seg != table_name:
+            new_tmpl = base_path + "/" + "/".join(f"{{{pk}}}" for pk in template_pks)
+        else:
+            new_tmpl = f"{prefix}{table_name}/" + "/".join(f"{{{pk}}}" for pk in template_pks)
+
+        if new_tmpl != tmpl:
+            entry["subject"] = {**subj, "template": new_tmpl}
+            print(f"  [fix-template] {table_name}: {tmpl} → {new_tmpl}")
+            fixed += 1
+
     return fixed
 
 
@@ -1021,6 +1204,29 @@ def run_r2rml_generation():
     prefixes = parse_ontology_prefixes(ONTOLOGY_FILE)
     base_iri = get_base_iri(prefixes)
     print(f"  Base IRI : {base_iri}")
+
+    # Parse object vs data property names for SEw rescue (object props need joins, not literals)
+    ont_obj_props:  Set[str] = set()
+    ont_data_props: Set[str] = set()
+    try:
+        _ont_root = ET.parse(ONTOLOGY_FILE).getroot()
+        for _el in _ont_root.iter():
+            _tag = _el.tag.split("}")[-1] if "}" in _el.tag else _el.tag
+            if _tag == "Declaration":
+                _ch = list(_el)
+                if _ch:
+                    _ctag = _ch[0].tag.split("}")[-1] if "}" in _ch[0].tag else _ch[0].tag
+                    _iri  = _ch[0].get("IRI", "") or _ch[0].get("abbreviatedIRI", "")
+                    _name = _iri.split("#")[-1] if "#" in _iri else _iri.split("/")[-1]
+                    if _ctag == "ObjectProperty" and _name:
+                        ont_obj_props.add(_name)
+                    elif _ctag == "DataProperty" and _name:
+                        ont_data_props.add(_name)
+        print(f"  Object properties: {len(ont_obj_props)}, Data properties: {len(ont_data_props)}")
+    except Exception as _e:
+        print(f"  [WARN] Could not parse ontology properties: {_e}")
+        ont_obj_props = set()
+        ont_data_props = set()
 
     # ── Step 3: Merge entity entries, inject pattern tag ────
     entity_entries: Dict = {}
@@ -1171,27 +1377,260 @@ def run_r2rml_generation():
                              f'FROM "{t}" '
                              f'WHERE {data_col} IS NOT NULL')
                 table_line = f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql_q}{_q3} ] ;"
-                rescue_block = "\n".join([
-                    f"# ── SEw_{t} [property of {owner_tbl}: {data_col}] ────────────────────",
-                    f"<{rescue_iri}>",
-                    f"    a rr:TriplesMap ;",
-                    f"",
-                    table_line,
-                    f"",
-                    f"    rr:subjectMap [",
-                    f'        rr:template "{owner_tmpl_fk}" ;',
-                    f"    ] ;",
-                    f"",
-                    f"    rr:predicateObjectMap [",
-                    f"        rr:predicate {predicate} ;",
-                    f"        rr:objectMap  [",
-                    f'            rr:column   "{_safe_alias(data_col)}" ;',
-                    f"        ] ;",
-                    f"    ]  .",
-                    f"",
-                ])
-                sections.append(rescue_block)
-                print(f"  [SEw-rescue PATH-A] {t}.{data_col} → {predicate} on {owner_tmpl}")
+
+                # ── KEY FIX: Check if predicate is OBJECT property or DATA property
+                # If object property → emit rr:parentTriplesMap (join) instead of rr:column
+                # Primary signal: Phase 3's owner_pred_is_object field
+                # Fallback: check ontology declarations and FK status
+                pred_local = predicate.lstrip(":")
+                is_obj_prop = entry.get("owner_pred_is_object", False)
+                target_iri  = ""
+                target_pk   = "id"
+
+                if not is_obj_prop:
+                    # Check ontology: is this predicate declared as ObjectProperty?
+                    if ont_obj_props and pred_local in ont_obj_props:
+                        is_obj_prop = True
+                    elif ont_data_props and pred_local not in ont_data_props:
+                        # Not a declared data property — check if the column is an FK
+                        ts_entry = tables_structure.get(t, {})
+                        for col_info in ts_entry.get("columns", []):
+                            if col_info.get("name") == data_col and col_info.get("is_foreign_key"):
+                                is_obj_prop = True
+                                break
+
+                # If object property, resolve the target entity IRI
+                if is_obj_prop:
+                    # Helper: skip SEw entries that won't produce TriplesMap blocks
+                    def _is_emittable(oe):
+                        if oe.get("sew_type") == "property_of_owner":
+                            return False
+                        if oe.get("_rescued_as_property"):
+                            return False
+                        pat = oe.get("pattern", "")
+                        if pat == "SEw_rescued":
+                            return False
+                        return True
+
+                    # Strategy 0: read FK target from Phase 3's own attributes list
+                    # This is the most reliable source — Phase 3 already resolved FKs
+                    for attr in entry.get("attributes", []):
+                        if attr.get("name") == data_col:
+                            fk_ref = attr.get("fk_references", {})
+                            ref_table_s0 = fk_ref.get("table", "")
+                            if ref_table_s0:
+                                target_pk = fk_ref.get("column", "id")
+                                for oe_key, oe in entity_entries.items():
+                                    if not _is_emittable(oe):
+                                        continue
+                                    if oe_key == ref_table_s0 or oe_key.lower() == ref_table_s0.lower():
+                                        target_iri = oe.get("triple_map_iri", "")
+                                        break
+                                if not target_iri:
+                                    # Also try matching logical_table
+                                    for oe in entity_entries.values():
+                                        if not _is_emittable(oe):
+                                            continue
+                                        if oe.get("logical_table", "").lower() == ref_table_s0.lower():
+                                            target_iri = oe.get("triple_map_iri", "")
+                                            break
+                            break
+
+                    ts_entry = tables_structure.get(t, {})
+                    # Strategy 1: FK reference in tables_structure
+                    for col_info in ts_entry.get("columns", []):
+                        if col_info.get("name") == data_col and col_info.get("is_foreign_key"):
+                            ref = col_info.get("foreign_key_reference", {})
+                            ref_table = ref.get("table", "")
+                            target_pk = ref.get("column", "id")
+                            for oe in entity_entries.values():
+                                if not _is_emittable(oe):
+                                    continue
+                                oe_tbl = oe.get("logical_table", "")
+                                if oe_tbl == ref_table:
+                                    target_iri = oe.get("triple_map_iri", "")
+                                    break
+                            if not target_iri:
+                                for oe_key, oe in entity_entries.items():
+                                    if not _is_emittable(oe):
+                                        continue
+                                    if oe_key == ref_table or oe_key.lower() == ref_table.lower():
+                                        target_iri = oe.get("triple_map_iri", "")
+                                        break
+                            break
+
+                    # Strategy 2: column name matches an entity table name
+                    if not target_iri:
+                        dc_lower = data_col.lower()
+                        for oe_key, oe in entity_entries.items():
+                            if not _is_emittable(oe):
+                                continue
+                            if oe_key.lower() == dc_lower:
+                                target_iri = oe.get("triple_map_iri", "")
+                                target_pk = "id"
+                                break
+
+                    # Strategy 3: column name is a substring of an entity key
+                    if not target_iri:
+                        for oe_key, oe in entity_entries.items():
+                            if not _is_emittable(oe):
+                                continue
+                            oe_lower = oe_key.lower()
+                            if dc_lower in oe_lower or oe_lower in dc_lower:
+                                target_iri = oe.get("triple_map_iri", "")
+                                target_pk = "id"
+                                break
+
+                    # Strategy 4: ontology property range → find entity for that class
+                    # Supports subclass matching: if range is :ConferenceMember and
+                    # no entity has that exact class, finds :Person (superclass)
+                    if not target_iri and ont_obj_props:
+                        try:
+                            _ont_root2 = ET.parse(ONTOLOGY_FILE).getroot()
+
+                            # Build subclass index for range matching
+                            _subclass_pairs = []
+                            for _el in _ont_root2.iter():
+                                _tag = _el.tag.split("}")[-1] if "}" in _el.tag else _el.tag
+                                if _tag == "SubClassOf":
+                                    _ch = list(_el)
+                                    if len(_ch) == 2:
+                                        _s0 = _ch[0].tag.split("}")[-1] if "}" in _ch[0].tag else _ch[0].tag
+                                        _s1 = _ch[1].tag.split("}")[-1] if "}" in _ch[1].tag else _ch[1].tag
+                                        if _s0 == "Class" and _s1 == "Class":
+                                            sub = (_ch[0].get("IRI", "") or _ch[0].get("abbreviatedIRI", ""))
+                                            sup = (_ch[1].get("IRI", "") or _ch[1].get("abbreviatedIRI", ""))
+                                            sub = sub.split("#")[-1] if "#" in sub else sub.split("/")[-1]
+                                            sup = sup.split("#")[-1] if "#" in sup else sup.split("/")[-1]
+                                            if sub and sup:
+                                                _subclass_pairs.append((sub, sup))
+
+                            for _el in _ont_root2.iter():
+                                _tag = _el.tag.split("}")[-1] if "}" in _el.tag else _el.tag
+                                if _tag == "ObjectPropertyRange":
+                                    _ch = list(_el)
+                                    if len(_ch) >= 2:
+                                        _p = (_ch[0].get("IRI", "") or _ch[0].get("abbreviatedIRI", ""))
+                                        _p = _p.split("#")[-1] if "#" in _p else _p.split("/")[-1]
+                                        if _p == pred_local:
+                                            _r = (_ch[1].get("IRI", "") or _ch[1].get("abbreviatedIRI", ""))
+                                            _r = _r.split("#")[-1] if "#" in _r else _r.split("/")[-1]
+                                            if _r:
+                                                # Build set of classes to match: the range + all ancestors
+                                                range_and_ancestors = {_r}
+                                                # Also: any class whose subclass includes _r
+                                                for sub, sup in _subclass_pairs:
+                                                    if sub == _r:
+                                                        range_and_ancestors.add(sup)
+                                                # Transitive: ancestors of ancestors
+                                                changed = True
+                                                while changed:
+                                                    changed = False
+                                                    for sub, sup in _subclass_pairs:
+                                                        if sub in range_and_ancestors and sup not in range_and_ancestors:
+                                                            range_and_ancestors.add(sup)
+                                                            changed = True
+
+                                                # Try exact match first
+                                                for oe_key, oe in entity_entries.items():
+                                                    if not _is_emittable(oe):
+                                                        continue
+                                                    oe_cls = oe.get("subject", {}).get("class", "").lstrip(":")
+                                                    if oe_cls == _r:
+                                                        target_iri = oe.get("triple_map_iri", "")
+                                                        target_pk = "id"
+                                                        break
+
+                                                # If no exact match, try ancestors
+                                                if not target_iri:
+                                                    for oe_key, oe in entity_entries.items():
+                                                        if not _is_emittable(oe):
+                                                            continue
+                                                        oe_cls = oe.get("subject", {}).get("class", "").lstrip(":")
+                                                        if oe_cls in range_and_ancestors:
+                                                            target_iri = oe.get("triple_map_iri", "")
+                                                            target_pk = "id"
+                                                            break
+                                            break
+                        except Exception:
+                            pass
+
+                if is_obj_prop and target_iri:
+                    # Emit as OBJECT PROPERTY with join
+                    rescue_block = "\n".join([
+                        f"# ── SEw_{t} [property of {owner_tbl}: {data_col}] ────────────────────",
+                        f"<{rescue_iri}>",
+                        f"    a rr:TriplesMap ;",
+                        f"",
+                        table_line,
+                        f"",
+                        f"    rr:subjectMap [",
+                        f'        rr:template "{owner_tmpl_fk}" ;',
+                        f"    ] ;",
+                        f"",
+                        f"    rr:predicateObjectMap [",
+                        f"        rr:predicate {predicate} ;",
+                        f"        rr:objectMap  [",
+                        f"            rr:parentTriplesMap <{target_iri}> ;",
+                        f"            rr:joinCondition [",
+                        f'                rr:child  "{_safe_alias(data_col)}" ;',
+                        f'                rr:parent "{_safe_alias(target_pk)}" ;',
+                        f"            ] ;",
+                        f"        ] ;",
+                        f"    ]  .",
+                        f"",
+                    ])
+                    sections.append(rescue_block)
+                    print(f"  [SEw-rescue PATH-A] {t}.{data_col} → {predicate} on {owner_tmpl} "
+                          f"(OBJECT PROP → join to <{target_iri}>)")
+                elif is_obj_prop and not target_iri:
+                    # Object property but can't find target — emit as literal with warning
+                    rescue_block = "\n".join([
+                        f"# ── SEw_{t} [property of {owner_tbl}: {data_col}] ────────────────────",
+                        f"# WARNING: {predicate} is an object property but target entity not found",
+                        f"<{rescue_iri}>",
+                        f"    a rr:TriplesMap ;",
+                        f"",
+                        table_line,
+                        f"",
+                        f"    rr:subjectMap [",
+                        f'        rr:template "{owner_tmpl_fk}" ;',
+                        f"    ] ;",
+                        f"",
+                        f"    rr:predicateObjectMap [",
+                        f"        rr:predicate {predicate} ;",
+                        f"        rr:objectMap  [",
+                        f'            rr:column   "{_safe_alias(data_col)}" ;',
+                        f"        ] ;",
+                        f"    ]  .",
+                        f"",
+                    ])
+                    sections.append(rescue_block)
+                    print(f"  [SEw-rescue PATH-A] {t}.{data_col} → {predicate} on {owner_tmpl} "
+                          f"(WARN: obj prop but no target found — emitted as literal)")
+                else:
+                    # Data property — emit as literal (original behavior)
+                    rescue_block = "\n".join([
+                        f"# ── SEw_{t} [property of {owner_tbl}: {data_col}] ────────────────────",
+                        f"<{rescue_iri}>",
+                        f"    a rr:TriplesMap ;",
+                        f"",
+                        table_line,
+                        f"",
+                        f"    rr:subjectMap [",
+                        f'        rr:template "{owner_tmpl_fk}" ;',
+                        f"    ] ;",
+                        f"",
+                        f"    rr:predicateObjectMap [",
+                        f"        rr:predicate {predicate} ;",
+                        f"        rr:objectMap  [",
+                        f'            rr:column   "{_safe_alias(data_col)}" ;',
+                        f"        ] ;",
+                        f"    ]  .",
+                        f"",
+                    ])
+                    sections.append(rescue_block)
+                    print(f"  [SEw-rescue PATH-A] {t}.{data_col} → {predicate} on {owner_tmpl}")
                 continue
 
             # ── PATH B: fallback composite-PK detection ───────────────────
@@ -1294,6 +1733,12 @@ def run_r2rml_generation():
             build_sr_section(sr_raw, entity_entries, defined_iris, iri_index)
         )
 
+    # AXIOM TYPING (EquivalentClasses materialization)
+    if sr_raw:
+        axiom_ttl = _build_axiom_typing_blocks(sr_raw)
+        if axiom_ttl.strip():
+            sections.append(axiom_ttl)
+
     # HIDDEN
     if hidden:
         sections.append(
@@ -1301,8 +1746,56 @@ def run_r2rml_generation():
                                  tables_structure=tables_structure)
         )
 
-    # ── Step 6: Write TTL ────────────────────────────────────
+    # ── Step 6: Validate & fix broken parentTriplesMap references ──
     ttl_content = "\n".join(sections)
+
+    # Extract all defined TriplesMap IRIs
+    import re as _re_val
+    defined_iris_final = set(_re_val.findall(r'^<(urn:r2rml:[^>]+)>', ttl_content, _re_val.MULTILINE))
+    # Extract all referenced parentTriplesMap IRIs
+    referenced_iris = set(_re_val.findall(r'rr:parentTriplesMap\s+<([^>]+)>', ttl_content))
+
+    broken = referenced_iris - defined_iris_final
+    if broken:
+        print(f"\n  [WARN] {len(broken)} broken parentTriplesMap reference(s) found:")
+        for br in sorted(broken):
+            print(f"    ✗ {br}")
+            # Try to find a valid replacement by matching the class
+            # Extract the table name hint from the broken IRI
+            tail = br.split(":")[-1]  # e.g. "SEw_program_committee_members"
+            # Remove common prefixes
+            for pfx in ("SEw_", "SE_SH_", "SE_", "SR_", "SRR_"):
+                if tail.startswith(pfx):
+                    tail = tail[len(pfx):]
+                    break
+            tail_lower = tail.lower()
+            # Search defined IRIs for a match
+            replacement = None
+            for d_iri in sorted(defined_iris_final):
+                d_tail = d_iri.split(":")[-1].lower()
+                if tail_lower in d_tail or d_tail.endswith(tail_lower):
+                    replacement = d_iri
+                    break
+            if not replacement:
+                # Try matching by entity class
+                for oe_key, oe in entity_entries.items():
+                    oe_iri = oe.get("triple_map_iri", "")
+                    if oe_iri in defined_iris_final:
+                        if tail_lower in oe_key.lower() or oe_key.lower() in tail_lower:
+                            replacement = oe_iri
+                            break
+            if replacement:
+                print(f"      → auto-fixed to {replacement}")
+                ttl_content = ttl_content.replace(f"<{br}>", f"<{replacement}>")
+            else:
+                print(f"      → NO replacement found — commenting out referencing block")
+                # Comment out lines that reference this broken IRI
+                ttl_content = ttl_content.replace(
+                    f"rr:parentTriplesMap <{br}>",
+                    f"# BROKEN REF: rr:parentTriplesMap <{br}>"
+                )
+
+    # ── Step 7: Write TTL ────────────────────────────────────
     with open(R2RML_FILE, "w", encoding="utf-8") as f:
         f.write(ttl_content)
 
