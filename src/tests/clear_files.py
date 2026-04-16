@@ -30,6 +30,7 @@ EXTRA_DELETE_FILES = [
     os.path.join(MAPPINGS_DIR, "mappings_r2rml.ttl"),
     os.path.join(MAPPINGS_DIR, "mappings_r2rml_final.ttl"),
     os.path.join("src/inputs/database", "dump_new.sql"),
+    os.path.join("src/inputs/database", "constraint_metadata.json"),
 ]
 
 # Memory files in src/memory/ (these get DELETED, not emptied)
