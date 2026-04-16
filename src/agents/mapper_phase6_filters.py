@@ -74,47 +74,65 @@ ENRICHMENT_FILE       = os.path.join(MEMORY_FOLDER, "enrichment.json")
 TABLES_STRUCTURE_FILE = os.path.join(DB_JSON_FOLDER, "tables_structure.json")
 ONTOLOGY_FILE         = "src/inputs/ontology/ontology.owl"
 SQLITE_DB_FILE        = "src/inputs/database/database.sqlite"
+DUMP_FILE             = "src/inputs/database/dump.sql"
+DUMP_NEW_FILE         = "src/inputs/database/dump_new.sql"
 OUTPUT_DIR            = "src/outputs"
 MAPPINGS_DIR          = os.path.join(OUTPUT_DIR, "mappings")
 SE_MAPPINGS_FILE      = os.path.join(MAPPINGS_DIR, "SE_mappings.json")
 SH_MAPPINGS_FILE      = os.path.join(MAPPINGS_DIR, "SH_mappings.json")
 PROCESS_FILE          = os.path.join(OUTPUT_DIR, "mappings_process_hidden.json")
 HIDDEN_MAPPINGS_FILE  = os.path.join(MAPPINGS_DIR, "HIDDEN_mappings.json")
+CONSTRAINT_META_FILE  = "src/inputs/database/constraint_metadata.json"
 
 # ===== THRESHOLDS =====
 SAMPLE_LIMIT          = 40    # max rows queried per column for distinct value discovery
-MAX_DISTINCT_FOR_DISP = 4     # type discriminator: skip if more distinct values than this
+MAX_DISTINCT_FOR_DISP = 15    # type discriminator: skip if more distinct values than this
 MIN_CONFIDENCE        = 3     # minimum LLM confidence (1-5) to accept a suggestion
 
-# ===== COLUMN CLASSIFICATION =====
+# ===== COLUMN CLASSIFICATION — 3-TIER SYSTEM =====
 # Boolean flag prefixes — the column name encodes the sub-entity
 BOOL_FLAG_PREFIXES    = ("is_", "has_", "was_", "can_", "did_", "will_")
 BOOL_TYPES            = {"boolean", "bool"}
 BOOL_OR_INT_TYPES     = {"boolean", "bool", "integer", "int", "smallint", "tinyint"}
-TYPE_KEYWORDS         = {"type", "kind", "category", "role", "status", "mode",
-                         "flag", "class", "subtype", "variant", "form"}
+
+# TIER 1 (Certain): Column is ALWAYS a discriminator. LLM only assigns classes.
+# These keywords unambiguously indicate sub-entity dispatch.
+TIER1_KEYWORDS        = {"type", "kind", "category", "subtype", "class"}
+
+# TIER 2 (Likely): Column might be a discriminator. LLM decides yes/no AND assigns.
+# These keywords sometimes indicate dispatch, sometimes just attributes.
+TIER2_KEYWORDS        = {"role", "status", "mode", "flag", "variant", "form",
+                         "level", "grade", "rank", "group"}
+
+# Combined for backward compatibility
+TYPE_KEYWORDS         = TIER1_KEYWORDS | TIER2_KEYWORDS
+
 DISCRIMINATOR_TYPES   = {"integer", "int", "smallint", "bigint", "tinyint",
                          "boolean", "bool", "varchar", "text", "char", "character"}
 
 
 def _is_metadata_table(table_name: str, se_mappings: Dict,
+                        sh_mappings: Dict,
                         understanding: Dict) -> bool:
     """
     Heuristic: detect internal metadata/config/catalog tables that should
-    NOT get hidden sub-entity mappings.  These are tables that:
-      a) Have no meaningful ontology class match (the SE class mapping is
-         clearly forced — e.g. table 'subcl' mapped to 'GeographicalThing'),  OR
-      b) The table's understanding.json description mentions metadata, config,
-         schema management, RDF conversion, class hierarchies, etc.
+    NOT get hidden sub-entity mappings.
 
-    This prevents Phase 6 from creating type-dispatch entries like
-    HIDDEN_TD_subcl_subclass_City which assign domain classes (City, River…)
-    to rows in internal schema-management tables, causing R2RML engine crashes
-    and polluted evaluation results.
+    CRITICAL SAFETY: A table that has been successfully mapped to a real
+    ontology class in SE or SE_SH is NEVER considered metadata. The soft
+    heuristic only applies to tables with no valid class mapping.
     """
     tname_lower = table_name.lower()
 
-    # ── Hard-coded known metadata table prefixes / names ──────────
+    # ── SAFETY: if table is mapped to a real ontology class, it's NOT metadata ──
+    for phase_data in (se_mappings, sh_mappings if sh_mappings else {}):
+        entry = phase_data.get(table_name)
+        if entry:
+            cls = entry.get("subject", {}).get("class", "").lstrip(":")
+            if cls and cls not in ("", "Unknown", "Thing"):
+                return False  # Real entity table — never skip
+
+    # ── Hard-coded known metadata table names (RODI-specific) ──────────
     METADATA_PREFIXES = ("top_", "rdf2sql")
     METADATA_NAMES = {
         "allcl", "subcl", "inv", "nmj", "nmtables", "md", "mdlastchanged",
@@ -126,18 +144,20 @@ def _is_metadata_table(table_name: str, se_mappings: Dict,
     if any(tname_lower.startswith(p) for p in METADATA_PREFIXES):
         return True
 
-    # ── Soft heuristic: description mentions metadata/config keywords ──
+    # ── Soft heuristic: description explicitly says it's metadata/config ──
+    # Only trigger on STRONG indicators that the table is internal infrastructure,
+    # not domain data. Words like "subclass" or "schema" can appear in descriptions
+    # of real domain tables (e.g. "Paper is a subclass of Document").
     meaning = understanding.get(table_name, {}).get("table_meaning", "")
     if meaning:
         meaning_lower = meaning.lower()
-        META_KEYWORDS = [
-            "metadata", "configuration", "config setting", "schema",
-            "rdf to sql", "rdf2sql", "class hierarch", "subclass",
-            "property mapping", "column dictionary", "catalog",
-            "stores relationships between tables",
-            "stores metadata about",
+        STRONG_META_PHRASES = [
+            "rdf to sql", "rdf2sql", "stores metadata about",
+            "column dictionary", "property mapping table",
+            "internal configuration", "config setting",
+            "stores relationships between tables and columns",
         ]
-        if any(kw in meaning_lower for kw in META_KEYWORDS):
+        if any(phrase in meaning_lower for phrase in STRONG_META_PHRASES):
             return True
 
     return False
@@ -225,16 +245,17 @@ def profile_column(table_name: str, col_name: str,
                    db_path: str) -> Dict[str, Any]:
     """
     Query SQLite for:
-      - distinct non-null values (up to SAMPLE_LIMIT)
+      - ALL distinct non-null values (no arbitrary LIMIT for low-cardinality)
       - count of non-null rows
       - total row count
+      - value occurrence counts (value → count)
 
     Returns a dict:
       { "values": [...], "non_null_count": N, "total_count": N,
-        "distinct_count": N, "available": True/False }
+        "distinct_count": N, "value_counts": {val: count}, "available": True/False }
     """
     result = {"values": [], "non_null_count": 0, "total_count": 0,
-              "distinct_count": 0, "available": False}
+              "distinct_count": 0, "value_counts": {}, "available": False}
     if not os.path.exists(db_path):
         return result
     try:
@@ -244,24 +265,38 @@ def profile_column(table_name: str, col_name: str,
         cur.execute(f'SELECT COUNT(*) FROM "{table_name}"')
         result["total_count"] = cur.fetchone()[0]
 
+        # First get the exact distinct count
         cur.execute(
-            f'SELECT DISTINCT "{col_name}" FROM "{table_name}" '
-            f'WHERE "{col_name}" IS NOT NULL LIMIT {SAMPLE_LIMIT}'
+            f'SELECT COUNT(DISTINCT "{col_name}") FROM "{table_name}" '
+            f'WHERE "{col_name}" IS NOT NULL'
         )
-        rows = [r[0] for r in cur.fetchall()]
-        result["values"] = rows
+        result["distinct_count"] = cur.fetchone()[0]
+
+        # For low-cardinality columns (≤ MAX_DISTINCT_FOR_DISP), get ALL values
+        # with their occurrence counts. This ensures rare values at the bottom
+        # of the table (e.g. type=2 appearing only in last 5 rows) are never missed.
+        if result["distinct_count"] <= MAX_DISTINCT_FOR_DISP:
+            cur.execute(
+                f'SELECT "{col_name}", COUNT(*) as cnt FROM "{table_name}" '
+                f'WHERE "{col_name}" IS NOT NULL '
+                f'GROUP BY "{col_name}" ORDER BY cnt DESC'
+            )
+            rows = cur.fetchall()
+            result["values"] = [r[0] for r in rows]
+            result["value_counts"] = {r[0]: r[1] for r in rows}
+        else:
+            # High-cardinality: sample up to SAMPLE_LIMIT
+            cur.execute(
+                f'SELECT DISTINCT "{col_name}" FROM "{table_name}" '
+                f'WHERE "{col_name}" IS NOT NULL LIMIT {SAMPLE_LIMIT}'
+            )
+            result["values"] = [r[0] for r in cur.fetchall()]
 
         cur.execute(
             f'SELECT COUNT(*) FROM "{table_name}" '
             f'WHERE "{col_name}" IS NOT NULL'
         )
         result["non_null_count"] = cur.fetchone()[0]
-
-        cur.execute(
-            f'SELECT COUNT(DISTINCT "{col_name}") FROM "{table_name}" '
-            f'WHERE "{col_name}" IS NOT NULL'
-        )
-        result["distinct_count"] = cur.fetchone()[0]
 
         result["available"] = True
         conn.close()
@@ -270,23 +305,136 @@ def profile_column(table_name: str, col_name: str,
     return result
 
 
+def _profile_column_from_dump(table_name: str, col_name: str,
+                               dump_path: str) -> Dict[str, Any]:
+    """
+    Fallback profiler: extract ALL distinct values + counts from a PostgreSQL
+    dump file's COPY ... FROM stdin blocks. Used when SQLite DB is not available.
+
+    Reads the ENTIRE COPY block for the table (not just 5 rows) to ensure
+    rare values at the bottom are never missed.
+    """
+    result = {"values": [], "non_null_count": 0, "total_count": 0,
+              "distinct_count": 0, "value_counts": {}, "available": False}
+    if not os.path.exists(dump_path):
+        return result
+
+    try:
+        with open(dump_path, "r", encoding="utf-8", errors="replace") as f:
+            dump_text = f.read()
+
+        # Find COPY block for this table
+        copy_re = re.compile(
+            r'COPY\s+(?:[\w"]+\s*\.\s*)?["\']?' + re.escape(table_name) + r'["\']?\s*'
+            r'\((?P<cols>[^)]+)\)\s+FROM\s+stdin\s*;\n(?P<data>.*?)^\\\.',
+            re.IGNORECASE | re.DOTALL | re.MULTILINE,
+        )
+        m = copy_re.search(dump_text)
+        if not m:
+            # Try with quoted table name
+            copy_re2 = re.compile(
+                r'COPY\s+(?:[\w"]+\s*\.\s*)?"' + re.escape(table_name) + r'"\s*'
+                r'\((?P<cols>[^)]+)\)\s+FROM\s+stdin\s*;\n(?P<data>.*?)^\\\.',
+                re.IGNORECASE | re.DOTALL | re.MULTILINE,
+            )
+            m = copy_re2.search(dump_text)
+        if not m:
+            # Broadest fallback: match table name as a word boundary anywhere in COPY line
+            copy_re3 = re.compile(
+                r'COPY\s+[^\n]*\b' + re.escape(table_name) + r'\b[^\n]*'
+                r'\((?P<cols>[^)]+)\)\s+FROM\s+stdin\s*;\n(?P<data>.*?)^\\\.',
+                re.IGNORECASE | re.DOTALL | re.MULTILINE,
+            )
+            m = copy_re3.search(dump_text)
+        if not m:
+            print(f"  [DUMP-PROFILE] No COPY block found for '{table_name}' — column '{col_name}' has no values")
+            return result
+
+        col_names = [c.strip().strip('"') for c in m.group("cols").split(",")]
+        data_text = m.group("data")
+
+        # Find column index
+        col_idx = None
+        for i, cn in enumerate(col_names):
+            if cn.lower() == col_name.lower():
+                col_idx = i
+                break
+        if col_idx is None:
+            return result
+
+        # Count all values
+        value_counts = {}
+        total = 0
+        non_null = 0
+        for line in data_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split("\t")
+            if col_idx >= len(parts):
+                continue
+            total += 1
+            val = parts[col_idx]
+            if val == "\\N":
+                continue  # NULL
+            non_null += 1
+            # Normalize: try int conversion for integer-like values
+            try:
+                val_norm = int(val)
+            except (ValueError, TypeError):
+                val_norm = val
+            value_counts[val_norm] = value_counts.get(val_norm, 0) + 1
+
+        if not value_counts:
+            return result
+
+        # Sort by count descending
+        sorted_vals = sorted(value_counts.items(), key=lambda x: -x[1])
+        result["values"] = [v for v, c in sorted_vals]
+        result["value_counts"] = dict(sorted_vals)
+        result["total_count"] = total
+        result["non_null_count"] = non_null
+        result["distinct_count"] = len(value_counts)
+        result["available"] = True
+
+    except Exception as e:
+        print(f"  [WARN] Dump profile failed for {table_name}.{col_name}: {e}")
+    return result
+
+
 def profile_table_columns(table_name: str, columns: List[Dict],
                            pk_set: set, db_path: str) -> Dict[str, Dict]:
     """
-    Profile every non-PK column.  Returns col_name → profile dict.
-    Skips long-text columns (varchar with many values) at profiling stage.
+    Profile columns for hidden pattern detection.
+    Uses SQLite if available, otherwise falls back to parsing the PostgreSQL dump.
+
+    IMPORTANT: Always profiles columns whose name contains Tier 1 keywords
+    (type/kind/category) even if they're part of the primary key.
+    A 'type' column in a composite PK is still a discriminator.
     """
+    use_sqlite = os.path.exists(db_path)
+    dump_path = ""
+    if not use_sqlite:
+        for dp in (DUMP_NEW_FILE, DUMP_FILE):
+            if os.path.exists(dp):
+                dump_path = dp
+                break
+
     profiles = {}
     for col in columns:
         name = col["name"]
-        if name in pk_set:
+        nl = name.lower()
+        is_tier1 = any(kw in nl for kw in TIER1_KEYWORDS)
+        # Skip PK columns UNLESS they match Tier 1 keywords (type discriminators)
+        if name in pk_set and not is_tier1:
             continue
-        dt = col["data_type"].lower().split("(")[0].strip()
-        # Always profile boolean/integer/enum-like. For text, only profile if small.
-        if dt in ("text", "varchar", "character varying", "char"):
-            # Still profile — we'll filter by distinct count downstream
-            pass
-        profiles[name] = profile_column(table_name, name, db_path)
+        if use_sqlite:
+            profiles[name] = profile_column(table_name, name, db_path)
+        elif dump_path:
+            profiles[name] = _profile_column_from_dump(table_name, name, dump_path)
+        else:
+            profiles[name] = {"values": [], "non_null_count": 0, "total_count": 0,
+                              "distinct_count": 0, "value_counts": {}, "available": False}
     return profiles
 
 
@@ -300,6 +448,11 @@ def get_base_subject(table_name: str, se_mappings: Dict,
     """Return the subject template for a table.
     Validates that the template uses this table's own columns and IRI path.
     If not (e.g. phase 2 copied a parent template), rebuilds from actual PKs.
+
+    CRITICAL for SE_SH: a child table legitimately inherits its parent's IRI
+    path (e.g. paper uses 'document/{id}' because Paper subclassOf Document).
+    The template is correct if the base path matches this table OR any ancestor
+    in the parent chain.
     """
     import re as _re
     for phase in (se_mappings, sh_mappings):
@@ -310,20 +463,56 @@ def get_base_subject(table_name: str, se_mappings: Dict,
             own_cols     = {c["name"] for c in tables_structure.get(table_name, {}).get("columns", [])}
             placeholders = _re.findall(r'\{([^}]+)\}', tmpl)
             base_path    = _re.sub(r'/\{[^}]+\}', '', tmpl)
+
+            # Build the parent chain: this table + all ancestors via SE_SH parent_table
+            parent_chain = {table_name}
+            cur = table_name
+            max_depth = 10
+            while max_depth > 0:
+                entry = sh_mappings.get(cur) or se_mappings.get(cur) or {}
+                parent = entry.get("parent_table", "")
+                if not parent or parent in parent_chain:
+                    break
+                parent_chain.add(parent)
+                cur = parent
+                max_depth -= 1
+
+            # Path is valid if it references THIS table OR any ancestor
+            path_is_valid = any(
+                f"#{p}" in base_path or f"/{p}" == base_path.rsplit("/", 1)[-1] or base_path.endswith(f"#{p}") or base_path.endswith(f"/{p}")
+                for p in parent_chain
+            )
+
             needs_rebuild = (
                 (placeholders and not all(p in own_cols for p in placeholders))
-                or (f"#{table_name}" not in base_path and f"/{table_name}" not in base_path)
+                or not path_is_valid
             )
             if needs_rebuild:
                 pks = tables_structure.get(table_name, {}).get("primary_keys", [])
+                cols = tables_structure.get(table_name, {}).get("columns", [])
+                # FK detection from multiple sources
+                fk_names = set()
+                for c in cols:
+                    if c.get("is_foreign_key"):
+                        fk_names.add(c["name"])
+                    if c.get("foreign_key_reference") or c.get("fk_references") or c.get("references"):
+                        fk_names.add(c["name"])
+                for fk in tables_structure.get(table_name, {}).get("foreign_keys", []):
+                    col_name = fk.get("column") or fk.get("from_column") or fk.get("name")
+                    if col_name:
+                        fk_names.add(col_name)
+
                 iri_base = _re.match(r'(https?://[^#]+#)', tmpl)
                 prefix = iri_base.group(1) if iri_base else ""
                 if pks:
-                    tmpl = f"{prefix}{table_name}/" + "/".join(f"{{{pk}}}" for pk in pks)
+                    non_fk_pks = [pk for pk in pks if pk not in fk_names]
+                    template_pks = non_fk_pks if non_fk_pks else pks
+                    parent_path = _re.sub(r'/\{[^}]+\}.*', '', tmpl)
+                    if parent_path and parent_path != prefix.rstrip("#"):
+                        tmpl = parent_path + "/" + "/".join(f"{{{pk}}}" for pk in template_pks)
+                    else:
+                        tmpl = f"{prefix}{table_name}/" + "/".join(f"{{{pk}}}" for pk in template_pks)
                 else:
-                    # No declared PK — use all non-FK columns as composite key
-                    cols = tables_structure.get(table_name, {}).get("columns", [])
-                    fk_names = {c["name"] for c in cols if c.get("is_foreign_key")}
                     non_fk = [c["name"] for c in cols if c["name"] not in fk_names]
                     key_cols = non_fk if non_fk else [c["name"] for c in cols]
                     tmpl = f"{prefix}{table_name}/" + "/".join(f"{{{c}}}" for c in key_cols)
@@ -361,6 +550,53 @@ def get_all_mapped_classes(se_mappings: Dict, sh_mappings: Dict) -> set:
 def _to_camel_case(name: str) -> str:
     parts = re.split(r"[_\-]", name)
     return parts[0] + "".join(p.capitalize() for p in parts[1:])
+
+
+# ── Pre-built subclass index (populated once at startup) ──────────────
+_subclass_of_index: Dict[str, set] = {}
+
+
+def _build_subclass_index(owl_file: str) -> Dict[str, set]:
+    """Parse SubClassOf from OWL once, transitively close, return child→ancestors."""
+    result: Dict[str, set] = {}
+    try:
+        root = ET.parse(owl_file).getroot()
+        for elem in root.iter():
+            tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+            if tag != "SubClassOf":
+                continue
+            ch = list(elem)
+            if len(ch) != 2:
+                continue
+            s0 = ch[0].tag.split("}")[-1] if "}" in ch[0].tag else ch[0].tag
+            s1 = ch[1].tag.split("}")[-1] if "}" in ch[1].tag else ch[1].tag
+            if s0 != "Class" or s1 != "Class":
+                continue
+            sub_iri = ch[0].get("IRI", "") or ch[0].get("abbreviatedIRI", "")
+            sup_iri = ch[1].get("IRI", "") or ch[1].get("abbreviatedIRI", "")
+            sub = sub_iri.split("#")[-1] if "#" in sub_iri else sub_iri.split("/")[-1]
+            sup = sup_iri.split("#")[-1] if "#" in sup_iri else sup_iri.split("/")[-1]
+            if sub and sup and sup not in ("Thing", ""):
+                result.setdefault(sub, set()).add(sup)
+        # Transitive closure
+        changed = True
+        while changed:
+            changed = False
+            for c, ps in list(result.items()):
+                for p in list(ps):
+                    new = result.get(p, set()) - ps
+                    if new:
+                        result[c].update(new)
+                        changed = True
+    except Exception:
+        pass
+    return result
+
+
+def _is_subclass_of(child: str, parent: str) -> bool:
+    """Check if child IS-A parent using the pre-built index."""
+    ancestors = {child} | _subclass_of_index.get(child, set())
+    return parent in ancestors
 
 
 def _sanitize_filter_value(value: Any) -> str:
@@ -447,15 +683,18 @@ def _is_binary_integer(col_profile: Dict) -> bool:
 
 def _col_kind(col: Dict, col_profile: Dict) -> str:
     """
-    Classify a column into one of: bool_flag | type_dispatch | fk_ref | other.
+    Classify a column into one of:
+      bool_flag | type_dispatch_t1 | type_dispatch_t2 | type_dispatch | fk_ref | other
 
-    bool_flag requires BOTH:
-      a) column name starts with a boolean-flag prefix (is_, has_, was_, …)
-      b) data type is a real SQL boolean  OR  data type is integer AND the
-         DB profile confirms only {0, 1} values are stored
-
-    This prevents integer columns like was_a_program_committee_of ∈ {0,1,2}
-    from being wrongly classified as bool_flag.
+    Priority order:
+      1. FK → fk_ref
+      2. Name contains Tier 1 keyword (type/kind/category) → type_dispatch_t1
+         This ALWAYS wins, even if values are {0,1}. "type" means type dispatch.
+      3. SQL boolean type → bool_flag
+      4. Boolean prefix (is_/has_) + binary integer → bool_flag
+      5. Name contains Tier 2 keyword → type_dispatch_t2
+      6. Boolean column without prefix (noun like "listener") → bool_flag
+      7. Everything else → other
     """
     name  = col["name"]
     dt    = col["data_type"].lower().split("(")[0].strip()
@@ -464,21 +703,39 @@ def _col_kind(col: Dict, col_profile: Dict) -> str:
     if col.get("is_foreign_key"):
         return "fk_ref"
 
-    has_flag_prefix = any(nl.startswith(pfx) for pfx in BOOL_FLAG_PREFIXES)
-    if has_flag_prefix:
-        if dt in BOOL_TYPES:
-            # Real SQL boolean — always a bool_flag
-            return "bool_flag"
-        elif dt in BOOL_OR_INT_TYPES:
-            # Integer with flag-like name — only accept if DB data confirms 0/1 only
-            if _is_binary_integer(col_profile):
-                return "bool_flag"
-            # Otherwise fall through — might be a type_dispatch or just "other"
-
+    # ── Tier 1 keywords ALWAYS win — checked FIRST ─────────────
+    # A column named "type"/"kind"/"category" is a type discriminator
+    # even if its values happen to be {0, 1}. The name is the authority.
     distinct = col_profile.get("distinct_count", 0)
     if dt in DISCRIMINATOR_TYPES and distinct <= MAX_DISTINCT_FOR_DISP:
-        if any(kw in nl for kw in TYPE_KEYWORDS) or dt in BOOL_TYPES:
-            return "type_dispatch"
+        if any(kw in nl for kw in TIER1_KEYWORDS):
+            return "type_dispatch_t1"
+
+    # ── Boolean flag detection ────────────────────────────────
+    # SQL boolean type → always bool_flag (program_chair, listener, etc.)
+    if dt in BOOL_TYPES:
+        return "bool_flag"
+
+    # Flag-prefix (is_/has_/was_) + binary integer
+    has_flag_prefix = any(nl.startswith(pfx) for pfx in BOOL_FLAG_PREFIXES)
+    if has_flag_prefix and dt in BOOL_OR_INT_TYPES:
+        if _is_binary_integer(col_profile):
+            return "bool_flag"
+
+    # ── Tier 2 keywords ───────────────────────────────────────
+    if dt in DISCRIMINATOR_TYPES and distinct <= MAX_DISTINCT_FOR_DISP:
+        if any(kw in nl for kw in TIER2_KEYWORDS):
+            return "type_dispatch_t2"
+
+    # ── Binary integer without prefix — bool_flag as last resort ──
+    # Noun columns like "listener", "reviewer" with {0,1} values.
+    # But NOT columns with Tier 1/2 keywords (already handled above).
+    NON_FLAG_NAMES = {"count", "amount", "total", "sum", "quantity", "num", "number",
+                      "size", "length", "width", "height", "weight", "price", "cost",
+                      "score", "rating", "rank", "order", "position", "index", "level"}
+    if dt in BOOL_OR_INT_TYPES and _is_binary_integer(col_profile):
+        if not any(nfn in nl for nfn in NON_FLAG_NAMES):
+            return "bool_flag"
 
     return "other"
 
@@ -491,6 +748,7 @@ def build_table_evidence(
     se_mappings: Dict,
     sh_mappings: Dict,
     col_profiles: Dict[str, Dict],
+    constraint_meta: Dict = None,
 ) -> Dict:
     """
     Assemble all evidence about a table into a structured dict that will be
@@ -506,10 +764,26 @@ def build_table_evidence(
     table_meaning = und.get("table_meaning", "")
     col_meanings  = und.get("columns", {})
 
+    # Load constraint names for this table
+    fk_constraints = {}
+    pk_constraint_name = ""
+    if constraint_meta:
+        t_meta = constraint_meta.get(table_name, {})
+        if not t_meta:
+            for k, v in constraint_meta.items():
+                if k.lower() == table_name.lower():
+                    t_meta = v
+                    break
+        fk_constraints = t_meta.get("fk_constraints", {})
+        pk_constraint_name = t_meta.get("pk_constraint_name", "")
+
     columns_evidence = []
     for col in info.get("columns", []):
         name  = col["name"]
-        if name in pk_set:
+        nl = name.lower()
+        is_tier1 = any(kw in nl for kw in TIER1_KEYWORDS)
+        # Skip PK columns UNLESS they match Tier 1 keywords (type discriminators)
+        if name in pk_set and not is_tier1:
             continue
         dt       = col["data_type"]
         dt_lower = dt.lower().split("(")[0].strip()
@@ -531,28 +805,43 @@ def build_table_evidence(
             entry["fk_ref_col"]   = ref.get("column", "id")
             ref_class = get_base_class(ref.get("table", ""), se_mappings, sh_mappings)
             entry["fk_ref_class"] = ref_class or ""
+            # Add FK constraint name if available
+            fk_meta = fk_constraints.get(name, {})
+            cn = fk_meta.get("constraint_name", "")
+            if cn:
+                entry["fk_constraint_name"] = cn
 
         if profile.get("available"):
             entry["distinct_count"]  = profile["distinct_count"]
             entry["non_null_count"]  = profile["non_null_count"]
             entry["sample_values"]   = profile["values"][:10]  # cap at 10 for prompt
+            # Include value occurrence counts for type_dispatch columns
+            if kind in ("type_dispatch_t1", "type_dispatch_t2") and profile.get("value_counts"):
+                entry["value_counts"] = {str(k): v for k, v in profile["value_counts"].items()}
             if name in enums:
                 entry["enum_labels"] = enums[name]
 
         # Flag the bool_flag candidate class name derived from column name
         if kind == "bool_flag":
+            candidate = None
             for pfx in BOOL_FLAG_PREFIXES:
                 if name.lower().startswith(pfx):
-                    entry["flag_candidate_name"] = name[len(pfx):]
+                    candidate = name[len(pfx):]
                     break
+            if not candidate:
+                # No prefix — use the full column name as the candidate
+                # e.g. "program_chair" → "program_chair", "listener" → "listener"
+                candidate = name
+            entry["flag_candidate_name"] = candidate
 
         columns_evidence.append(entry)
 
     return {
-        "table_name":    table_name,
-        "base_class":    base_class,
-        "table_meaning": table_meaning,
-        "columns":       columns_evidence,
+        "table_name":         table_name,
+        "base_class":         base_class,
+        "table_meaning":      table_meaning,
+        "pk_constraint_name": pk_constraint_name,
+        "columns":            columns_evidence,
     }
 
 
@@ -659,6 +948,7 @@ class HiddenPatternAgent:
         table_name    = evidence["table_name"]
         base_class    = evidence["base_class"]
         table_meaning = evidence["table_meaning"]
+        pk_cn = evidence.get("pk_constraint_name", "")
 
         # Render columns evidence as readable block
         col_lines = []
@@ -669,13 +959,18 @@ class HiddenPatternAgent:
             if c.get("fk_ref_table"):
                 ref_cls = c.get("fk_ref_class") or "not-yet-mapped"
                 line += f"  FK→{c['fk_ref_table']}(:{ref_cls})"
+            if c.get("fk_constraint_name"):
+                line += f"  fk_constraint=\"{c['fk_constraint_name']}\""
             if c.get("flag_candidate_name"):
                 line += f"  ⚑ flag-for={c['flag_candidate_name']}"
             if c.get("sample_values") is not None:
                 sv = c["sample_values"]
                 labels = c.get("enum_labels", {})
+                vc = c.get("value_counts", {})
                 sv_str = ", ".join(
-                    f"{v}({labels[str(v)]})" if str(v) in labels else str(v)
+                    f"{v}({labels[str(v)]})" if str(v) in labels
+                    else f"{v}({vc[str(v)]} rows)" if str(v) in vc
+                    else str(v)
                     for v in sv
                 )
                 line += f"  values=[{sv_str}]  distinct={c.get('distinct_count', '?')}"
@@ -683,12 +978,18 @@ class HiddenPatternAgent:
 
         col_block = "\n".join(col_lines) if col_lines else "  (no candidate columns)"
 
+        # Constraint hint block
+        constraint_hint = ""
+        if pk_cn:
+            constraint_hint = f"\nPK CONSTRAINT NAME: \"{pk_cn}\" (may hint at the table's semantic role)\n"
+
         already_str = ", ".join(sorted(already_mapped)) if already_mapped else "none"
 
         return f"""You are an ontology mapping expert discovering hidden sub-entity patterns.
 
 TABLE: {table_name}  (already mapped to ontology class :{base_class})
 TABLE MEANING: {table_meaning or 'not available'}
+{constraint_hint}
 
 COLUMN EVIDENCE (non-PK columns only):
 {col_block}
@@ -818,6 +1119,119 @@ Return ONLY a JSON object where each key is "table.column" and the value is:
 If all proposals are fine, return all of them with action="keep"."""
 
     # ----------------------------------------------------------
+    # Targeted Tier 1 dispatch — force value→class mapping for
+    # columns that are CERTAIN discriminators but LLM missed
+    # ----------------------------------------------------------
+
+    def force_dispatch_mapping(
+        self,
+        table_name: str,
+        base_class: str,
+        col_name: str,
+        distinct_values: List,
+        ontology_classes: List[str],
+        already_mapped: set,
+        value_counts: Dict = None,
+    ) -> Optional[Dict]:
+        """
+        For a Tier 1 column (name contains type/kind/category) that the LLM
+        didn't nominate, ask a targeted question: "What ontology subclass does
+        each value represent?"
+
+        When value_counts is provided, includes occurrence counts so the LLM
+        can reason about which class is more common (e.g. PaperFullVersion
+        typically has more rows than PaperAbstract).
+
+        Returns a suggestion dict or None.
+        """
+        # Build values string with occurrence counts if available
+        if value_counts:
+            vals_parts = []
+            for v in distinct_values[:15]:
+                cnt = value_counts.get(v, value_counts.get(str(v), "?"))
+                vals_parts.append(f"{v} ({cnt} rows)")
+            vals_str = ", ".join(vals_parts)
+            count_hint = (
+                "\n\nHINT: Use the row counts to reason about which class each value "
+                "represents. Classes that represent the 'main' or 'full' variant "
+                "typically have MORE rows than specialized/minor subclasses. "
+                "For example, if Paper has subclasses PaperFullVersion and PaperAbstract, "
+                "the value with more rows is likely PaperFullVersion (full papers are "
+                "typically more common than abstracts)."
+            )
+        else:
+            vals_str = ", ".join(str(v) for v in distinct_values[:15])
+            count_hint = ""
+
+        already_str = ", ".join(sorted(already_mapped)) if already_mapped else "none"
+
+        # Find subclasses of base_class in ontology
+        subclasses = [c for c in ontology_classes
+                      if c != base_class and c not in already_mapped]
+
+        prompt = f"""You are an ontology mapping expert.
+
+TABLE: {table_name} (mapped to ontology class :{base_class})
+COLUMN: {col_name} (type discriminator column)
+DISTINCT VALUES IN DATABASE: [{vals_str}]
+
+AVAILABLE ONTOLOGY CLASSES (subclasses or related to :{base_class}):
+{', '.join(subclasses)}
+
+ALREADY MAPPED CLASSES (do not reuse): {already_str}
+
+TASK:
+The column '{col_name}' contains integer/string codes that distinguish
+different sub-types of :{base_class}. Map each distinct value to the
+most appropriate ontology class.
+
+RULES:
+  - Every class MUST come from the AVAILABLE list above.
+  - If a value doesn't map to any class, set it to null.
+  - Use the class hierarchy: if :{base_class} has known subclasses,
+    prefer those. E.g. Paper → PaperFullVersion, PaperAbstract.
+  - You MUST map ALL distinct values shown above, not just some.{count_hint}
+
+Return ONLY JSON:
+{{
+  "column": "{col_name}",
+  "assigned_class": "most_common_subclass",
+  "value_class_map": {{"value1": "ClassName", "value2": "ClassName"}},
+  "confidence": 4,
+  "reasoning": "one sentence"
+}}"""
+
+        raw = self._call(prompt, max_tokens=800)
+        result = self._parse(raw)
+        if not result or not isinstance(result, dict):
+            return None
+
+        # Validate
+        vcm = result.get("value_class_map", {})
+        if not vcm:
+            return None
+
+        # Clean classes
+        clean_vcm = {}
+        for val, cls in vcm.items():
+            if not cls or str(cls).lower() == "null":
+                continue
+            cls_clean = str(cls).lstrip(":")
+            if cls_clean in ontology_classes:
+                clean_vcm[val] = cls_clean
+
+        if not clean_vcm:
+            return None
+
+        result["value_class_map"] = clean_vcm
+        result["column"] = col_name
+        result["assigned_class"] = list(clean_vcm.values())[0]
+        result.pop("kind", None)
+        result.pop("filter_type", None)
+
+        return result
+
+    # ----------------------------------------------------------
     # Sweep 1: discover sub-entities for one table
     # ----------------------------------------------------------
 
@@ -879,10 +1293,9 @@ If all proposals are fine, return all of them with action="keep"."""
                     profile = col_profiles.get(col, {})
                     deterministic_kind = _col_kind(col_def, profile)
 
-            if deterministic_kind in ("type_dispatch", "bool_flag"):
+            if deterministic_kind in ("type_dispatch_t1", "type_dispatch_t2", "type_dispatch", "bool_flag"):
                 if conf < MIN_CONFIDENCE:
-                    print(f"  [bypass-conf] {col} -> :{cls}  conf={conf} "
-                          f"(kind={deterministic_kind} — deterministic, bypassing threshold)")
+                    pass  # deterministic kind — bypass confidence threshold
             elif conf < MIN_CONFIDENCE:
                 print(f"  [skip] {col} -> :{cls}  conf={conf} < {MIN_CONFIDENCE}")
                 continue
@@ -899,8 +1312,6 @@ If all proposals are fine, return all of them with action="keep"."""
             # For single-class assignments: check assigned_class
             assigned = s["assigned_class"]
             if assigned not in ontology_classes:
-                print(f"  [reject-class] {col} -> :{assigned}  "
-                      f"(not in ontology — skipping)")
                 continue
 
             # For type_dispatch value_class_map: validate every class
@@ -914,13 +1325,9 @@ If all proposals are fine, return all of them with action="keep"."""
                     vcls_clean = str(vcls).lstrip(":")
                     if vcls_clean in ontology_classes:
                         cleaned_vcm[val] = vcls_clean
-                    else:
-                        print(f"  [reject-vcm] {col} value={val!r} -> :{vcls_clean}  "
-                              f"(not in ontology — dropped from map)")
                 s["value_class_map"] = cleaned_vcm
                 # If all classes were dropped, skip the whole suggestion
                 if not any(v for v in cleaned_vcm.values()):
-                    print(f"  [reject-vcm-empty] {col} — no valid classes remain")
                     continue
 
             accepted.append(s)
@@ -1047,20 +1454,24 @@ def build_hidden_sh_entry(
         if target_class.lstrip(":").lower() == assigned_class.lstrip(":").lower():
             use_target_template = True
         # CASE C: the FK column value references an entity that gains the assigned_class.
-        # Only trigger when the FK column name suggests a forward reference to a person
-        # or entity (e.g. "committee_chair", "invited_by") — NOT a back-reference
-        # (e.g. "hascommittee_inv", "iscommitteeof" which point BACK to a conference).
-        # Back-reference columns contain "inv", "ispartof", "iscommitteeof" etc.
-        # Forward FK columns point FROM this table TO the entity that gets the class.
+        # Only trigger when:
+        #   1. The assigned_class is a known SUBCLASS of the FK target's class
+        #      (e.g. assigned=Chair, target=Person → Chair IS-A Person → use person/{col})
+        #   2. The FK column name is NOT a back-reference
         elif target_subject:
             col_lc = col_name.lower()
-            # Skip back-references — these should NOT redirect the typing IRI
             back_ref_hints = ("_inv", "inv", "ispartof", "iscommitteeof",
                               "isreviewof", "submittedto", "belongsto")
             is_back_ref = any(col_lc.endswith(h) or col_lc == h
                               for h in back_ref_hints)
             if not is_back_ref and fk_ref_table != table_name:
-                use_target_template = True
+                _assigned_clean = assigned_class.lstrip(":")
+                _target_clean   = target_class.lstrip(":")
+                # Use pre-built subclass index (no inline OWL re-parsing)
+                if _is_subclass_of(_assigned_clean, _target_clean):
+                    use_target_template = True
+                else:
+                    use_target_template = False
 
     if use_target_template and target_subject:
         # Replace the PK placeholder ({id} or whatever the target uses) with
@@ -1275,11 +1686,15 @@ def apply_suggestion_to_entry(
     profile  = col_profiles.get(col_name, {})
     db_kind  = _col_kind(col_def, profile)
 
+    # Normalize tier names for downstream processing
+    is_type_dispatch = db_kind in ("type_dispatch_t1", "type_dispatch_t2", "type_dispatch")
+
     # LLM nominated a column the heuristic classifies as "other":
     # accept as type_dispatch only if value_class_map was provided; else reject.
     if db_kind == "other":
         if suggestion.get("value_class_map"):
             db_kind = "type_dispatch"
+            is_type_dispatch = True
         elif col_def.get("is_foreign_key"):
             db_kind = "fk_ref"
         else:
@@ -1293,6 +1708,60 @@ def apply_suggestion_to_entry(
         ref = col_def.get("foreign_key_reference") or {}
         suggestion["fk_ref_table"] = ref.get("table", "")
         suggestion["fk_ref_col"]   = ref.get("column", "id")
+
+        # ── FK IS NOT NULL validation gate ──────────────────────────
+        # Only create FK-based HIDDEN_SH when the LLM-assigned class is
+        # DIFFERENT from both:
+        #   (a) this table's own base class (e.g. :Abstract for abstracts)
+        #   (b) the FK target table's class (e.g. :Person for person)
+        # This prevents duplicate TriplesMaps (same class, different template)
+        # which break R2RML engines.
+        #
+        # Valid example: committee.has_a_committee_chair FK→person
+        #   table class = :Committee, FK target class = :Person,
+        #   assigned class = :Chair → different from both → ALLOWED
+        #
+        # Invalid example: abstracts.th_part FK→conference_contributions
+        #   table class = :Abstract, assigned class = :Abstract → SAME → BLOCKED
+        assigned_cls = suggestion.get("assigned_class", "").lstrip(":")
+
+        # Get this table's own base class from SE or SH mappings
+        table_base_cls = ""
+        for phase_data in (se_mappings, sh_mappings):
+            e = phase_data.get(table_name)
+            if e:
+                table_base_cls = e.get("subject", {}).get("class", "").lstrip(":")
+                break
+
+        # Get the FK target table's base class
+        fk_target_table = suggestion.get("fk_ref_table", "")
+        fk_target_cls = ""
+        for phase_data in (se_mappings, sh_mappings):
+            e = phase_data.get(fk_target_table)
+            if e:
+                fk_target_cls = e.get("subject", {}).get("class", "").lstrip(":")
+                break
+
+        # Check: assigned class must differ from BOTH source and target base classes
+        if assigned_cls == table_base_cls:
+            print(f"  [SKIP-FK] {table_name}.{col_name} → :{assigned_cls} "
+                  f"is SAME as table's own class :{table_base_cls} — duplicate, skipping")
+            return False
+
+        if assigned_cls == fk_target_cls:
+            print(f"  [SKIP-FK] {table_name}.{col_name} → :{assigned_cls} "
+                  f"is SAME as FK target class :{fk_target_cls} — no new typing, skipping")
+            return False
+
+        # Also check: is this class already mapped to an existing SE/SE_SH table?
+        for phase_data in (se_mappings, sh_mappings):
+            for t, e in phase_data.items():
+                existing_cls = e.get("subject", {}).get("class", "").lstrip(":")
+                if existing_cls == assigned_cls:
+                    print(f"  [SKIP-FK] {table_name}.{col_name} → :{assigned_cls} "
+                          f"already mapped to table '{t}' — skipping")
+                    return False
+
         m = build_hidden_sh_entry(table_name, suggestion, base_iri,
                                    se_mappings, sh_mappings, tables_structure)
         if m:
@@ -1306,7 +1775,7 @@ def apply_suggestion_to_entry(
             entry["hidden_sh"].append(m)
             return True
 
-    elif db_kind == "type_dispatch":
+    elif is_type_dispatch:
         # Validate value_class_map keys against real DB values.
         # Strip surrounding quotes that the LLM sometimes wraps around values
         # (e.g. '"SLIDING SCALE"' → 'SLIDING SCALE') before matching against DB.
@@ -1318,8 +1787,6 @@ def apply_suggestion_to_entry(
             clean_vcm = {k: v for k, v in raw_vcm.items() if str(k) in db_values}
             if not clean_vcm:
                 print(f"  [WARN] All value_class_map keys invalid for {table_name}.{col_name} — skipping")
-                print(f"  [WARN]   LLM keys : {list(raw_vcm.keys())}")
-                print(f"  [WARN]   DB values: {list(db_values)[:10]}")
                 return False
             suggestion["value_class_map"] = clean_vcm
         else:
@@ -1349,10 +1816,17 @@ def run_hidden_mapping():
     enrichment       = load_json_safe(ENRICHMENT_FILE)
 
     db_available = os.path.exists(SQLITE_DB_FILE)
+    dump_available = any(os.path.exists(p) for p in (DUMP_NEW_FILE, DUMP_FILE))
     print(f"  Patterns    : {len(table_patterns)} tables")
     print(f"  Understood  : {len(understanding)} tables")
     print(f"  Enriched    : {len(enrichment)} tables")
-    print(f"  SQLite DB   : {'found → ' + SQLITE_DB_FILE if db_available else 'NOT FOUND — value sampling disabled'}")
+    if db_available:
+        print(f"  SQLite DB   : found → {SQLITE_DB_FILE}")
+    elif dump_available:
+        dp = DUMP_NEW_FILE if os.path.exists(DUMP_NEW_FILE) else DUMP_FILE
+        print(f"  SQLite DB   : NOT FOUND — using dump fallback → {dp}")
+    else:
+        print(f"  SQLite DB   : NOT FOUND — NO dump file either — value sampling DISABLED")
     print(f"  Max distinct values for dispatch: {MAX_DISTINCT_FOR_DISP}")
     print(f"  Min LLM confidence to accept   : {MIN_CONFIDENCE}/5")
 
@@ -1364,30 +1838,40 @@ def run_hidden_mapping():
     print(f"  SH mappings : {len(sh_mappings)} tables")
 
     # ── Ontology setup ──────────────────────────────────────
-    print(f"\nParsing ontology from '{ONTOLOGY_FILE}' ...")
     prefixes = parse_ontology_prefixes(ONTOLOGY_FILE)
     base_iri = get_ontology_base_iri(prefixes)
     ontology_classes = ontology_explorer(mode="classes")["classes"]
-    print(f"  Base IRI  : {base_iri}")
-    print(f"  Classes   : {len(ontology_classes)}")
+    print(f"  Base IRI: {base_iri}  Classes: {len(ontology_classes)}")
+
+    # Build subclass index once (used by build_hidden_sh_entry)
+    global _subclass_of_index
+    _subclass_of_index = _build_subclass_index(ONTOLOGY_FILE)
+
+    # Load constraint metadata from Phase 0
+    constraint_meta = {}
+    if os.path.exists(CONSTRAINT_META_FILE):
+        try:
+            with open(CONSTRAINT_META_FILE, "r", encoding="utf-8") as f:
+                constraint_meta = json.load(f)
+            print(f"  Constraint metadata: {len(constraint_meta)} tables")
+        except Exception:
+            pass
 
     already_mapped   = get_all_mapped_classes(se_mappings, sh_mappings)
     target_tables    = {t: p for t, p in table_patterns.items()
                         if p in ("SE", "SE_SH")}
-    print(f"\n  Target tables (SE + SE_SH) : {len(target_tables)}")
+    print(f"  Target tables (SE + SE_SH) : {len(target_tables)}")
 
     # ── Skip metadata / config tables ──────────────────────
     skipped_meta = []
     clean_targets = {}
     for t, p in target_tables.items():
-        if _is_metadata_table(t, se_mappings, understanding):
+        if _is_metadata_table(t, se_mappings, sh_mappings, understanding):
             skipped_meta.append(t)
         else:
             clean_targets[t] = p
     if skipped_meta:
-        print(f"  Skipped metadata tables    : {len(skipped_meta)}")
-        for t in sorted(skipped_meta):
-            print(f"    - {t}")
+        print(f"  Skipped metadata tables: {len(skipped_meta)} — {skipped_meta}")
     target_tables = clean_targets
 
     # ── Load caches ─────────────────────────────────────────
@@ -1428,6 +1912,13 @@ def run_hidden_mapping():
         )
         col_profiles_all[table_name] = col_profiles
 
+        # Always build evidence — needed for rescue blocks even on cached path
+        evidence = build_table_evidence(
+            table_name, tables_structure, understanding, enrichment,
+            se_mappings, sh_mappings, col_profiles,
+            constraint_meta=constraint_meta
+        )
+
         if cache_key in process_cache:
             accepted = process_cache[cache_key]
             # Strip any stale kind/filter_type from old cache entries
@@ -1437,24 +1928,18 @@ def run_hidden_mapping():
             print(f"  cached: {len(accepted)} suggestion(s)")
         else:
 
-            # Build evidence dict for LLM
-            evidence = build_table_evidence(
-                table_name, tables_structure, understanding, enrichment,
-                se_mappings, sh_mappings, col_profiles
-            )
-
-            # Screen out columns the LLM doesn't need to see:
-            # - pure text columns with many distinct values (not useful signals)
-            # - columns with 0 evidence
+            # Screen columns: keep all with ≤MAX_DISTINCT_FOR_DISP distinct values,
+            # plus all bool_flag, fk_ref, and type_dispatch regardless of cardinality.
+            # This ensures the LLM sees potential discriminator columns even if
+            # _col_kind classified them as "other" (the LLM may still recognize them).
             screened_cols = []
             for c in evidence["columns"]:
-                dt = c["data_type"].lower().split("(")[0].strip()
-                if c["kind"] == "other":
-                    # Only include if it has enum labels or few distinct values
+                if c["kind"] in ("bool_flag", "fk_ref", "type_dispatch", "type_dispatch_t1", "type_dispatch_t2"):
+                    screened_cols.append(c)
+                else:
                     distinct = c.get("distinct_count", 9999)
-                    if distinct > MAX_DISTINCT_FOR_DISP and not c.get("enum_labels"):
-                        continue
-                screened_cols.append(c)
+                    if distinct <= MAX_DISTINCT_FOR_DISP or c.get("enum_labels"):
+                        screened_cols.append(c)
             evidence["columns"] = screened_cols
 
             if not screened_cols:
@@ -1483,8 +1968,123 @@ def run_hidden_mapping():
                     errors.append(cache_key)
                     accepted = []
 
-            process_cache[cache_key] = accepted
-            save_json(PROCESS_FILE, process_cache)
+        # ── Rescue blocks — run for BOTH cached and fresh results ──────
+        # ── Tier 1 rescue: force dispatch for CERTAIN columns the LLM missed ──
+        # Also: if the LLM returned a partial value_class_map for a Tier 1 column,
+        # re-call the LLM to fill in missing values.
+        accepted_cols = {s.get("column", "") for s in accepted}
+        base_class = ""
+        for phase_data in (se_mappings, sh_mappings):
+            e = phase_data.get(table_name)
+            if e:
+                base_class = e.get("subject", {}).get("class", "").lstrip(":")
+                break
+
+        # Log profiled dispatch/bool columns for debugging
+        for c in evidence.get("columns", []):
+            if c["kind"] in ("type_dispatch_t1", "type_dispatch_t2", "bool_flag"):
+                col_name = c["name"]
+                p = col_profiles.get(col_name, {})
+                vals = p.get("values", [])
+                vc = p.get("value_counts", {})
+                avail = p.get("available", False)
+                if vc:
+                    vc_str = ", ".join(f"{v}={vc.get(v, vc.get(str(v), '?'))}" for v in vals)
+                    print(f"  [PROFILE] {col_name} ({c['kind']}): {len(vals)} values [{vc_str}] avail={avail}")
+                elif vals:
+                    print(f"  [PROFILE] {col_name} ({c['kind']}): {len(vals)} values {vals[:10]} avail={avail}")
+                else:
+                    print(f"  [PROFILE] {col_name} ({c['kind']}): NO VALUES avail={avail}")
+
+        for c in evidence.get("columns", []):
+            col_name = c["name"]
+            if c["kind"] != "type_dispatch_t1":
+                continue  # Not a Tier 1 column
+
+            profile_t1 = col_profiles.get(col_name, {})
+            vals = profile_t1.get("values", [])
+            if not vals:
+                continue
+            vcounts = profile_t1.get("value_counts", {})
+
+            if col_name not in accepted_cols:
+                # LLM completely missed this Tier 1 column
+                print(f"  [TIER1-RESCUE] {col_name} is Tier 1 but LLM missed it — forcing dispatch")
+                try:
+                    forced = agent.force_dispatch_mapping(
+                        table_name, base_class, col_name, vals,
+                        ontology_classes, already_mapped,
+                        value_counts=vcounts,
+                    )
+                    if forced:
+                        accepted.append(forced)
+                        accepted_cols.add(col_name)
+                        fv = forced.get("value_class_map", {})
+                        print(f"     {col_name} -> {fv}  [TIER1-FORCED]")
+                    else:
+                        print(f"     {col_name}: LLM returned no mapping even when forced")
+                except Exception as e2:
+                    print(f"     {col_name}: force_dispatch error: {e2}")
+            else:
+                # LLM covered this column — check if value_class_map is complete
+                existing = next((s for s in accepted if s.get("column") == col_name), None)
+                if existing:
+                    vcm = existing.get("value_class_map", {})
+                    db_vals = {str(v) for v in vals}
+                    mapped_vals = set(vcm.keys())
+                    missing_vals = db_vals - mapped_vals
+                    if missing_vals and len(missing_vals) < len(db_vals):
+                        print(f"  [TIER1-PARTIAL] {col_name} has unmapped values {missing_vals} — forcing")
+                        try:
+                            forced = agent.force_dispatch_mapping(
+                                table_name, base_class, col_name, list(missing_vals),
+                                ontology_classes, already_mapped,
+                                value_counts=vcounts,
+                            )
+                            if forced:
+                                new_vcm = forced.get("value_class_map", {})
+                                vcm.update(new_vcm)
+                                existing["value_class_map"] = vcm
+                                print(f"     {col_name} updated: {vcm}  [TIER1-COMPLETED]")
+                        except Exception as e3:
+                            print(f"     {col_name}: partial rescue error: {e3}")
+
+        # ── Bool flag rescue: force bool_flag for boolean columns the LLM missed ──
+        for c in evidence.get("columns", []):
+            col_name = c["name"]
+            if c["kind"] != "bool_flag":
+                continue
+            if col_name in accepted_cols:
+                continue  # LLM already covered this
+            # The LLM missed a boolean flag column — add it with a targeted call
+            candidate_name = c.get("flag_candidate_name", col_name)
+            print(f"  [BOOL-RESCUE] {col_name} is bool_flag but LLM missed — forcing")
+            try:
+                forced_bf = agent.force_dispatch_mapping(
+                    table_name, base_class, col_name, ["true"],
+                    ontology_classes, already_mapped,
+                )
+                if forced_bf:
+                    # Convert to bool_flag format
+                    cls = forced_bf.get("assigned_class", candidate_name)
+                    bf_suggestion = {
+                        "column": col_name,
+                        "assigned_class": cls,
+                        "filter_value": "true",
+                        "confidence": 4,
+                        "reasoning": f"Boolean column {col_name} indicates {cls} membership",
+                    }
+                    accepted.append(bf_suggestion)
+                    accepted_cols.add(col_name)
+                    print(f"     {col_name} -> :{cls}  [BOOL-FORCED]")
+                else:
+                    print(f"     {col_name}: LLM returned no mapping for bool flag")
+            except Exception as e4:
+                print(f"     {col_name}: bool rescue error: {e4}")
+
+        # Save to cache (includes rescue additions)
+        process_cache[cache_key] = accepted
+        save_json(PROCESS_FILE, process_cache)
 
         if accepted:
             all_proposals[table_name] = accepted
@@ -1526,6 +2126,15 @@ def run_hidden_mapping():
     # Apply review decisions
     reviewed_proposals: Dict[str, List[Dict]] = {}
     kept = dropped = fixed = 0
+
+    # Build parent→child class index for inheritance override
+    parent_child_classes = {}
+    for t, entry in sh_mappings.items():
+        parent_table = entry.get("parent_table", "")
+        if parent_table:
+            child_cls = entry.get("subject", {}).get("class", "").lstrip(":")
+            parent_child_classes.setdefault(parent_table, set()).add(child_cls)
+
     for table_name, suggestions in all_proposals.items():
         kept_sugg = []
         for s in suggestions:
@@ -1534,8 +2143,24 @@ def run_hidden_mapping():
             action = dec.get("action", "keep").lower()
 
             if action == "drop":
-                print(f"  [drop] {key} — {dec.get('reason', '')}")
-                dropped += 1
+                # Override: if the dispatch class belongs to a CHILD table,
+                # it's valid inheritance typing — don't drop
+                assigned_cls = s.get("assigned_class", "").lstrip(":")
+                child_classes = parent_child_classes.get(table_name, set())
+                vcm = s.get("value_class_map", {})
+                vcm_classes = set(str(c).lstrip(":") for c in vcm.values() if c)
+
+                is_inheritance = (
+                    assigned_cls in child_classes
+                    or bool(vcm_classes & child_classes)
+                )
+                if is_inheritance:
+                    print(f"  [keep-override] {key}: dispatch has child class of {table_name} — keeping")
+                    kept_sugg.append(s)
+                    kept += 1
+                else:
+                    print(f"  [drop] {key} — {dec.get('reason', '')}")
+                    dropped += 1
             elif action == "fix":
                 new_cls = str(dec.get("assigned_class", s["assigned_class"])).lstrip(":")
                 print(f"  [fix]  {key}: :{s['assigned_class']} → :{new_cls}  "
