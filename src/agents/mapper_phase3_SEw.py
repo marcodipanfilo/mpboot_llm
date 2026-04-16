@@ -70,6 +70,7 @@ SE_MAPPINGS_FILE      = os.path.join(MAPPINGS_DIR, "SE_mappings.json")
 SH_MAPPINGS_FILE      = os.path.join(MAPPINGS_DIR, "SH_mappings.json")
 PROCESS_FILE          = os.path.join(OUTPUT_DIR, "mappings_process_sew.json")
 SEW_MAPPINGS_FILE     = os.path.join(MAPPINGS_DIR, "SEw_mappings.json")
+CONSTRAINT_META_FILE  = "src/inputs/database/constraint_metadata.json"
 
 RDFS_LABEL = "rdfs:label"
 
@@ -447,44 +448,41 @@ def _match_property(
     prop_list:       List[str],
     used_predicates: Set[str],
 ) -> Optional[str]:
+    """Match with quality threshold — prevents weak substring matches."""
     col_norm = _norm(col_name)
+    MIN_MATCH_QUALITY = 0.6
 
     def _already_used(prop: str) -> bool:
         return f":{prop}" in used_predicates
 
-    # P1: exact normalised match (with and without OWL prefix stripping)
+    # Pass 1 — exact normalised match
     for p in prop_list:
         if _norm(p) == col_norm or _norm(_strip_owl_prefix(p)) == col_norm:
             if _already_used(p):
-                print(f"        [SKIP P1-exact — already used] col={col_name!r} prop={p!r}")
                 continue
-            print(f"        [MATCH P1-exact]    col={col_name!r}  →  prop={p!r}")
             return p
 
-    # P2: col_norm is substring of prop_norm (try both raw and prefix-stripped)
+    # Pass 2 — substring match with quality threshold
+    candidates = []
     for p in prop_list:
+        if _already_used(p):
+            continue
         pn = _norm(p)
-        ps = _norm(_strip_owl_prefix(p))
-        if col_norm in pn or col_norm in ps:
-            if _already_used(p):
-                print(f"        [SKIP P2-col⊂prop — already used] col={col_name!r} prop={p!r}")
-                continue
-            print(f"        [MATCH P2-col⊂prop] col={col_name!r}  →  prop={p!r}")
-            return p
+        pn_stripped = _norm(_strip_owl_prefix(p))
+        quality = 0.0
+        for a, b in [(col_norm, pn), (col_norm, pn_stripped)]:
+            if a and b:
+                if a in b:
+                    quality = max(quality, len(a) / len(b))
+                if b in a:
+                    quality = max(quality, len(b) / len(a))
+        if quality >= MIN_MATCH_QUALITY:
+            candidates.append((p, quality, len(p)))
 
-    # P3: prop_norm is substring of col_norm (try both raw and prefix-stripped)
-    for p in prop_list:
-        pn = _norm(p)
-        ps = _norm(_strip_owl_prefix(p))
-        if pn in col_norm or ps in col_norm:
-            if _already_used(p):
-                print(f"        [SKIP P3-prop⊂col — already used] col={col_name!r} prop={p!r}")
-                continue
-            print(f"        [MATCH P3-prop⊂col] col={col_name!r}  →  prop={p!r}")
-            return p
+    if candidates:
+        candidates.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        return candidates[0][0]
 
-    print(f"        [NO MATCH] col={col_name!r}  (checked {len(prop_list)} props, "
-          f"{len(used_predicates)} already used)")
     return None
 
 
@@ -519,7 +517,6 @@ def _fetch_class_properties(ontology_class: str) -> Tuple[List[str], List[str]]:
         print(f"    [WARN] ontology_explorer failed for {ontology_class!r}: {e}")
         return [], []
 
-    print(f"\n    ┌── ontology_explorer — class_properties({ontology_class!r}) ──┐")
 
     data_props: List[str] = []
     obj_props:  List[str] = []
@@ -595,6 +592,7 @@ def _build_column_predicate_prompt(
     available_props: List[str],
     used_predicates: Set[str],
     prop_kind:       str,
+    constraint_hint: str = "",
 ) -> str:
     props_block = (
         "\n".join(f"  - {p}" for p in available_props)
@@ -609,6 +607,12 @@ def _build_column_predicate_prompt(
         if prop_kind == "data"
         else "Choose the BEST object property to represent this foreign-key relationship."
     )
+    constraint_block = ""
+    if constraint_hint:
+        constraint_block = f"""
+FK CONSTRAINT NAME (strong semantic hint — property names are often embedded):
+  {constraint_hint}
+"""
 
     return f"""You are an ontology mapping expert.
 
@@ -620,7 +624,7 @@ COLUMN TO MAP:
   name     : {col_name}
   meaning  : {col_meaning}
   db type  : {col_db_type}
-
+{constraint_block}
 AVAILABLE ONTOLOGY {prop_kind.upper()} PROPERTIES (already-used ones excluded):
 {props_block}
 
@@ -631,6 +635,7 @@ TASK: {kind_instruction}
 
 Rules:
   - Use the column's SEMANTIC MEANING as the primary guide, not just its name.
+  - PRIORITIZE the FK constraint name hint when available — it often encodes the property name.
   - Only choose from the AVAILABLE properties listed above.
   - Do NOT choose a predicate already listed under "PREDICATES ALREADY ASSIGNED".
   - If none of the available properties semantically fits this column, return null.
@@ -654,20 +659,18 @@ def _llm_select_predicate(
     used_predicates: Set[str],
     prop_kind:       str,
     mapper:          "OntologyMapper",
+    constraint_hint: str = "",
 ) -> Optional[str]:
     if not available_props:
-        print(f"        [LLM-PRED] No available props — skipping for {col_name!r}")
         return None
 
     prompt = _build_column_predicate_prompt(
         table_name, table_meaning, ontology_class,
         col_name, col_meaning, col_db_type,
-        available_props, used_predicates, prop_kind
+        available_props, used_predicates, prop_kind,
+        constraint_hint=constraint_hint
     )
-    print(f"        [LLM-PRED] Asking LLM for {prop_kind} property for "
-          f"{col_name!r} (meaning: {col_meaning!r})")
     raw = mapper.get_llm_response(prompt)
-    print(f"        [LLM-PRED] Raw: {raw[:200]!r}")
 
     try:
         cleaned = re.sub(r'```json\s*', '', raw)
@@ -867,17 +870,9 @@ def build_sew_json_mapping(
         pk_template = "/".join(f"{{{c['name']}}}" for c in non_fk) if non_fk else "/".join(f"{{{c['name']}}}" for c in attributes)
     subject_template = f"{base_iri}{table_name}/{pk_template}"
 
-    print(f"\n    [BUILD] table={table_name!r}  class={ontology_class!r}")
-    print(f"            pk+fk: {[c['name'] for c in pk_fk_cols]}")
-    print(f"            pk   : {[c['name'] for c in pk_own_cols]}")
-    print(f"            attr : {[c['name'] for c in attr_cols]}")
-    print(f"            fk   : {[c['name'] for c in fk_cols]}")
 
     # ── Step 1: seed used_predicates from disk ─────────────────────────────
     used_predicates: Set[str] = _load_used_predicates(table_name)
-    if used_predicates:
-        print(f"    [DEDUP] Seeded {len(used_predicates)} used predicate(s) from disk: "
-              f"{sorted(used_predicates)}")
 
     # ── Step 2: fetch class properties from ontology_explorer ─────────────
     data_prop_names, obj_prop_names = _fetch_class_properties(ontology_class)
@@ -896,7 +891,6 @@ def build_sew_json_mapping(
     predicate_object_maps = []
 
     # ── Step 4: owner FK columns (pk+fk) → object property join ──────────
-    print(f"\n    ── Owner FK (pk+fk) column mapping ──")
     for col in pk_fk_cols:
         col_name    = col["name"]
         col_meaning = col_meanings.get(col_name, "(no description)")
@@ -905,14 +899,12 @@ def build_sew_json_mapping(
         ref_col     = col["fk_references"]["column"]
         owner_iri, resolved = resolve_owner(ref_table, se_mappings, sh_mappings)
 
-        print(f"\n      Processing pk+fk col={col_name!r}  ref={ref_table!r}  meaning={col_meaning!r}")
-        print(f"      used_predicates so far: {sorted(used_predicates)}")
 
         if obj_prop_names:
             matched = _match_property(col_name, obj_prop_names, used_predicates)
             if matched:
                 predicate = f":{matched}"
-                print(f"      → {col_name!r}  :  {predicate}  [string-match object property]")
+                print(f"      {col_name!r} → {predicate}  [string-match]")
             else:
                 unused_obj = [p for p in obj_prop_names if f":{p}" not in used_predicates]
                 chosen = _llm_select_predicate(
@@ -922,13 +914,13 @@ def build_sew_json_mapping(
                 ) if unused_obj else None
                 if chosen:
                     predicate = f":{chosen}"
-                    print(f"      → {col_name!r}  :  {predicate}  [LLM semantic object property]")
+                    print(f"      {col_name!r} → {predicate}  [LLM]")
                 else:
                     predicate = f":{_to_camel_case(col_name)}"
-                    print(f"      → {col_name!r}  :  {predicate}  [FALLBACK camelCase]")
+                    print(f"      {col_name!r} → {predicate}  [camelCase fallback]")
         else:
             predicate = f":{_to_camel_case(col_name)}"
-            print(f"      → {col_name!r}  :  {predicate}  [FALLBACK camelCase — no obj properties]")
+            print(f"      {col_name!r} → {predicate}  [camelCase — no obj props]")
 
         used_predicates.add(predicate)
         predicate_object_maps.append({
@@ -945,13 +937,10 @@ def build_sew_json_mapping(
         })
 
     # ── Step 5: attribute columns ─────────────────────────────────────────
-    print(f"\n    ── Attribute (non-FK) column mapping ──")
     for attr in attr_cols:
         col         = attr["name"]
         col_meaning = col_meanings.get(col, "(no description)")
         col_db_type = attr.get("data_type", "unknown")
-        print(f"\n      Processing col={col!r}  meaning={col_meaning!r}  db_type={col_db_type!r}")
-        print(f"      used_predicates so far: {sorted(used_predicates)}")
 
         # ── rdfs:label is ADDITIVE — resolve the real data property first,
         #    then append a second rdfs:label entry for the same column.
@@ -962,7 +951,7 @@ def build_sew_json_mapping(
             if matched:
                 predicate = f":{matched}"
                 datatype  = _xsd_type(col_db_type)
-                print(f"      → {col!r}  :  {predicate}  [string-match data property]")
+                print(f"      {col!r} → {predicate}  [string-match]")
             else:
                 unused_data = [p for p in data_prop_names if f":{p}" not in used_predicates]
                 chosen = _llm_select_predicate(
@@ -973,15 +962,15 @@ def build_sew_json_mapping(
                 if chosen:
                     predicate = f":{chosen}"
                     datatype  = _xsd_type(col_db_type)
-                    print(f"      → {col!r}  :  {predicate}  [LLM semantic data property]")
+                    print(f"      {col!r} → {predicate}  [LLM]")
                 else:
                     predicate = f":{_to_camel_case(col)}"
                     datatype  = _xsd_type(col_db_type)
-                    print(f"      → {col!r}  :  {predicate}  [FALLBACK camelCase]")
+                    print(f"      {col!r} → {predicate}  [camelCase fallback]")
         else:
             predicate = f":{_to_camel_case(col)}"
             datatype  = _xsd_type(col_db_type)
-            print(f"      → {col!r}  :  {predicate}  [FALLBACK camelCase — no class properties]")
+            print(f"      {col!r} → {predicate}  [camelCase — no class props]")
 
         used_predicates.add(predicate)
         predicate_object_maps.append({
@@ -995,8 +984,6 @@ def build_sew_json_mapping(
 
         # ── Additive rdfs:label entry ────────────────────────────────────────
         if emit_rdfs_label and predicate != RDFS_LABEL:
-            print(f"      + adding additive rdfs:label for {col!r} "
-                  f"(in addition to {predicate!r})")
             predicate_object_maps.append({
                 "predicate": RDFS_LABEL,
                 "object": {
@@ -1007,7 +994,6 @@ def build_sew_json_mapping(
             })
 
     # ── Step 6: pure FK columns ───────────────────────────────────────────
-    print(f"\n    ── Pure FK column mapping ──")
     for fk in fk_cols:
         col         = fk["name"]
         col_meaning = col_meanings.get(col, "(no description)")
@@ -1016,14 +1002,12 @@ def build_sew_json_mapping(
         ref_col     = fk["fk_references"]["column"]
         fk_iri, resolved = resolve_owner(ref_table, se_mappings, sh_mappings)
 
-        print(f"\n      Processing FK col={col!r}  ref={ref_table!r}  meaning={col_meaning!r}")
-        print(f"      used_predicates so far: {sorted(used_predicates)}")
 
         if obj_prop_names:
             matched = _match_property(col, obj_prop_names, used_predicates)
             if matched:
                 predicate = f":{matched}"
-                print(f"      → {col!r} (FK→{ref_table})  :  {predicate}  [string-match object property]")
+                print(f"      {col!r} (FK→{ref_table}) → {predicate}  [string-match]")
             else:
                 unused_obj = [p for p in obj_prop_names if f":{p}" not in used_predicates]
                 chosen = _llm_select_predicate(
@@ -1033,13 +1017,13 @@ def build_sew_json_mapping(
                 ) if unused_obj else None
                 if chosen:
                     predicate = f":{chosen}"
-                    print(f"      → {col!r} (FK→{ref_table})  :  {predicate}  [LLM semantic object property]")
+                    print(f"      {col!r} (FK→{ref_table}) → {predicate}  [LLM]")
                 else:
                     predicate = f":{_to_camel_case(col)}"
-                    print(f"      → {col!r} (FK→{ref_table})  :  {predicate}  [FALLBACK camelCase]")
+                    print(f"      {col!r} (FK→{ref_table}) → {predicate}  [camelCase fallback]")
         else:
             predicate = f":{_to_camel_case(col)}"
-            print(f"      → {col!r} (FK→{ref_table})  :  {predicate}  [FALLBACK camelCase — no obj properties]")
+            print(f"      {col!r} (FK→{ref_table}) → {predicate}  [camelCase — no obj props]")
 
         used_predicates.add(predicate)
         predicate_object_maps.append({
@@ -1055,68 +1039,19 @@ def build_sew_json_mapping(
             }
         })
 
-    print(f"\n    [BUILD DONE] {table_name!r} — total predicates: {len(used_predicates)}")
-    print(f"                 final predicate set: {sorted(used_predicates)}")
 
     # ── Detect attribute-like SEw: composite PK where the non-FK PK columns
     # hold data values (e.g. e-mail.value, phone.number).
-    # These tables have no attr_cols — the data IS the pk_own_col.
-    # They should be mapped as a property on the owner entity, not as entities.
-    # Detection rule: pk_own_cols is non-empty AND attr_cols is empty.
-    sew_type = "entity"   # default
-    owner_predicate = None
-    owner_data_col  = None
-
-    if pk_own_cols and not attr_cols and pk_fk_cols:
-        # This looks like an attribute-like SEw (e.g. e-mail, phone, address)
-        # Try to find a matching data property on the OWNER class
-        owner_ref_table = pk_fk_cols[0]["fk_references"]["table"] if pk_fk_cols else None
-        if owner_ref_table:
-            # Find owner class from se_mappings / sh_mappings
-            owner_class = None
-            for phase_map in (se_mappings, sh_mappings):
-                if owner_ref_table in phase_map:
-                    raw_cls = phase_map[owner_ref_table].get("subject", {}).get("class", "")
-                    owner_class = raw_cls.lstrip(":")
-                    break
-
-            if owner_class:
-                owner_data_props, _ = _fetch_class_properties(owner_class)
-                # Try to match the table name or the data column name against owner properties
-                data_col_name = pk_own_cols[0]["name"]  # e.g. "value"
-                # Use the table name as the primary candidate (e.g. "e-mail" → E-mail)
-                matched = _match_property(table_name, owner_data_props, set())
-                if not matched:
-                    matched = _match_property(data_col_name, owner_data_props, set())
-                if matched:
-                    sew_type        = "property_of_owner"
-                    owner_predicate = f":{matched}"
-                    owner_data_col  = data_col_name
-                    print(f"    [SEw-ATTR] {table_name!r} detected as attribute-like SEw")
-                    print(f"               owner_class={owner_class!r}  matched_prop={matched!r}")
-                    print(f"               → sew_type=property_of_owner  predicate={owner_predicate!r}")
-                else:
-                    # No string match — fall back to capitalised table name as predicate
-                    # This preserves the EXACT ontology capitalisation pattern
-                    parts     = table_name.replace("_", "-").split("-")
-                    if parts and parts[-1].endswith("s") and len(parts[-1]) > 2:
-                        parts[-1] = parts[-1][:-1]
-                    pred_name = "-".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]] if parts else [])
-                    sew_type        = "property_of_owner"
-                    owner_predicate = f":{pred_name}"
-                    owner_data_col  = data_col_name
-                    print(f"    [SEw-ATTR] {table_name!r} detected as attribute-like SEw (no prop match)")
-                    print(f"               fallback predicate={owner_predicate!r}")
-
     return {
         "pattern":          "SEw",
-        "sew_type":         sew_type,
+        "sew_type":         "entity",
         "triple_map_iri":   triple_map_iri,
         "logical_table":    table_name,
         "owner_columns":    [c["name"] for c in pk_fk_cols],
         "local_pk_columns": [c["name"] for c in pk_own_cols],
-        "owner_predicate":  owner_predicate,
-        "owner_data_col":   owner_data_col,
+        "owner_predicate":  None,
+        "owner_pred_is_object": False,
+        "owner_data_col":   None,
         "subject": {
             "template": subject_template,
             "class":    f":{ontology_class}"
@@ -1427,17 +1362,22 @@ def run_sew_mapping():
 
     print("  Building ontology property index ...")
     prop_index = OntologyPropertyIndex(ONTOLOGY_FILE)
-    print(f"  ✓ {len(prop_index.data_props)} data properties, "
-          f"{len(prop_index.obj_props)} object properties")
 
-    # Filter SEw tables
     sew_tables = {t: p for t, p in table_patterns.items() if p == "SEw"}
-    print(f"\n  SEw tables : {len(sew_tables)}")
+    print(f"  SEw tables : {len(sew_tables)}")
 
-    # Load ontology classes
-    print("\nLoading ontology classes...")
     ontology_classes = ontology_explorer(mode="classes")["classes"]
-    print(f"  ✓ {len(ontology_classes)} classes loaded")
+    print(f"  Ontology classes: {len(ontology_classes)}")
+
+    # Load constraint metadata from Phase 0
+    constraint_meta = {}
+    if os.path.exists(CONSTRAINT_META_FILE):
+        try:
+            with open(CONSTRAINT_META_FILE, "r", encoding="utf-8") as f:
+                constraint_meta = json.load(f)
+            print(f"  Constraint metadata: {len(constraint_meta)} tables")
+        except Exception:
+            print(f"  [WARN] Could not load constraint_metadata.json")
 
     # Load existing caches for resumable runs
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -1518,10 +1458,10 @@ def run_sew_mapping():
             is_attribute_like = bool(pk_own) and not attr and bool(pk_fk)
 
             if is_attribute_like:
-                # Find the owner class to look up its properties
                 owner_ref   = pk_fk[0]["fk_references"]["table"] if pk_fk else None
                 owner_class = None
                 owner_iri   = None
+                owner_tmpl  = ""
                 for phase_map in (se_mappings, sh_mappings):
                     if owner_ref and owner_ref in phase_map:
                         raw_cls     = phase_map[owner_ref].get("subject", {}).get("class", "")
@@ -1531,52 +1471,80 @@ def run_sew_mapping():
                         break
 
                 owner_pred    = None
-                data_col_name = pk_own[0]["name"]   # e.g. "value"
-                fk_col_name   = pk_fk[0]["name"]    # e.g. "person"
+                owner_pred_is_object = False  # track if it's an object property
+                data_col_name = pk_own[0]["name"]
+                fk_col_name   = pk_fk[0]["name"]
 
                 if owner_class:
-                    # Always use prop_index (parsed directly from OWL) as the
-                    # authoritative source — it correctly reads abbreviatedIRI
-                    # and domain declarations. ontology_explorer may return
-                    # incomplete or differently-formatted names.
                     ancestors = prop_index.get_ancestors(owner_class)
-                    data_props = list(dict.fromkeys([
+                    # Collect both data AND object properties for the owner class
+                    data_props = [
                         p for p, info in prop_index.data_props.items()
                         if info.get("domain") in ancestors
                         or info.get("domain") == owner_class
-                    ]))
-                    print(f"  [ATTR-SEw] prop_index props for :{owner_class}: {data_props}")
-                    # Also add any extra props from ontology_explorer (union)
-                    extra, _ = _fetch_class_properties(owner_class)
-                    for ep in extra:
+                    ]
+                    obj_props = [
+                        p for p, info in prop_index.obj_props.items()
+                        if info.get("domain") in ancestors
+                        or info.get("domain") == owner_class
+                    ]
+                    extra_dp, extra_op = _fetch_class_properties(owner_class)
+                    for ep in extra_dp:
                         if ep not in data_props:
                             data_props.append(ep)
-                    # Try table name first, then data column name
-                    matched = _match_property(table_name, data_props, set())
+                    for ep in extra_op:
+                        if ep not in obj_props:
+                            obj_props.append(ep)
+
+                    all_props = data_props + obj_props
+
+                    # Try string match (table name first, then data column name)
+                    matched = _match_property(table_name, all_props, set())
                     if not matched:
-                        matched = _match_property(data_col_name, data_props, set())
+                        matched = _match_property(data_col_name, all_props, set())
+
                     if matched:
                         owner_pred = f":{matched}"
-                        print(f"  [ATTR-SEw] {table_name!r} → property :{matched} on :{owner_class}")
+                        owner_pred_is_object = matched in obj_props or matched in [
+                            p for p in prop_index.obj_props
+                        ]
+                        print(f"  [ATTR-SEw] {table_name!r} → :{matched} on :{owner_class}"
+                              f" ({'obj' if owner_pred_is_object else 'data'} prop)")
                     else:
-                        # Fallback: capitalise table name parts
-                        parts      = table_name.replace("_", "-").split("-")
-                        if parts and parts[-1].endswith("s") and len(parts[-1]) > 2:
-                            parts[-1] = parts[-1][:-1]
-                        pred_name  = "-".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]] if parts else [])
-                        owner_pred = f":{pred_name}"
-                        print(f"  [ATTR-SEw] {table_name!r} → fallback predicate {owner_pred!r} on :{owner_class}")
-                else:
-                    parts      = table_name.replace("_", "-").split("-")
-                    if parts and parts[-1].endswith("s") and len(parts[-1]) > 2:
-                        parts[-1] = parts[-1][:-1]
-                    pred_name  = "-".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]] if parts else [])
-                    owner_pred = f":{pred_name}"
-                    print(f"  [ATTR-SEw] {table_name!r} → no owner class found, fallback {owner_pred!r}")
+                        # LLM fallback — ask with full context
+                        col_meaning = col_meanings.get(data_col_name, "(no description)")
+                        # Get constraint hint if available
+                        c_hint = ""
+                        if constraint_meta:
+                            t_meta = constraint_meta.get(table_name, {})
+                            fk_meta = t_meta.get("fk_constraints", {}).get(fk_col_name, {})
+                            c_hint = fk_meta.get("constraint_name", "")
+                            pk_hint = t_meta.get("pk_constraint_name", "")
+                            if pk_hint:
+                                c_hint = f"{c_hint}; PK={pk_hint}" if c_hint else f"PK={pk_hint}"
 
-                # Store minimal property-only entry — NO entity block, NO class,
-                # NO composite template. Phase 8 reads this and generates only
-                # the SQL-join TriplesMap on the owner subject IRI.
+                        chosen = _llm_select_predicate(
+                            table_name, table_meaning, owner_class,
+                            data_col_name, col_meaning,
+                            pk_own[0].get("data_type", "unknown"),
+                            all_props, set(), "data", mapper,
+                            constraint_hint=c_hint
+                        )
+                        if chosen:
+                            owner_pred = f":{chosen}"
+                            owner_pred_is_object = chosen in obj_props or chosen in [
+                                p for p in prop_index.obj_props
+                            ]
+                            print(f"  [ATTR-SEw] {table_name!r} → :{chosen} [LLM]"
+                                  f" ({'obj' if owner_pred_is_object else 'data'} prop)")
+                        else:
+                            # Final fallback: camelCase of table name
+                            owner_pred = f":{_to_camel_case(table_name)}"
+                            print(f"  [ATTR-SEw] {table_name!r} → {owner_pred} [camelCase fallback]")
+                else:
+                    owner_pred = f":{_to_camel_case(table_name)}"
+                    print(f"  [ATTR-SEw] {table_name!r} → {owner_pred} [no owner class]")
+
                 sew_mappings[table_name] = {
                     "pattern":          "SEw",
                     "sew_type":         "property_of_owner",
@@ -1585,21 +1553,21 @@ def run_sew_mapping():
                     "owner_columns":    [c["name"] for c in pk_fk],
                     "local_pk_columns": [c["name"] for c in pk_own],
                     "owner_predicate":  owner_pred,
+                    "owner_pred_is_object": owner_pred_is_object,
                     "owner_data_col":   data_col_name,
                     "owner_fk_col":     fk_col_name,
                     "owner_table":      owner_ref,
                     "owner_iri":        owner_iri or f"urn:r2rml:SE_{owner_ref}",
                     "owner_template":   owner_tmpl if owner_class else "",
                     "subject": {
-                        "template": "",    # not used — owner template used instead
-                        "class":    "",    # no entity class
+                        "template": "",
+                        "class":    "",
                     },
-                    "predicate_object_maps": [],   # not used — rescue generates the POM
+                    "predicate_object_maps": [],
                 }
                 with open(SEW_MAPPINGS_FILE, "w", encoding="utf-8") as f:
                     json.dump(sew_mappings, f, indent=2)
-                print(f"  ✓ Stored as attribute-like property entry "
-                      f"(owner={owner_ref!r} pred={owner_pred!r} col={data_col_name!r})")
+                print(f"  ✓ property_of_owner (owner={owner_ref!r} pred={owner_pred!r})")
 
             else:
                 # Core-entity SEw — build full entity mapping as normal
