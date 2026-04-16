@@ -32,6 +32,7 @@ Writes : src/inputs/database/dump_new.sql
 import re
 import os
 import sys
+import json
 import requests
 from typing import Dict, List, Optional, Tuple
 
@@ -41,6 +42,7 @@ from config.llm_config import LLMConfig, SELECTED_PROVIDER
 # ===== PATHS =====
 INPUT_DUMP  = "src/inputs/database/dump.sql"
 OUTPUT_DUMP = "src/inputs/database/dump_new.sql"
+CONSTRAINT_METADATA_FILE = "src/inputs/database/constraint_metadata.json"
 MAX_SAMPLE_ROWS = 5
 
 
@@ -327,12 +329,12 @@ class DumpParser:
                 continue
 
             # ── regular column definition ──
-            col_m = re.match(r'(?P<name>["`\w]+)\s+(?P<type>.+)', part, re.IGNORECASE)
+            col_m = re.match(r'(["`\w]+)\s+(.+)', part, re.IGNORECASE)
             if not col_m:
                 continue
 
-            col_name = col_m.group("name").strip('"').strip("`")
-            col_type = col_m.group("type").strip()
+            col_name = col_m.group(1).strip('"').strip("`")
+            col_type = col_m.group(2).strip()
 
             # Inline PRIMARY KEY on column
             if re.search(r"\bPRIMARY\s+KEY\b", col_type, re.IGNORECASE):
@@ -447,6 +449,84 @@ class DumpParser:
             stmt = re.sub(r"\s+", " ", m.group(0)).strip()
             constraints.append(stmt)
         return constraints
+
+
+
+def build_constraint_metadata(parsed):
+    """Build structured constraint metadata from the parsed dump."""
+    tables = parsed["tables"]
+    existing = parsed["existing_constraints"]
+    metadata = {}
+
+    for tname, info in tables.items():
+        entry = {
+            "pk_constraint_name": "",
+            "pk_columns": list(info["inline_pks"]),
+            "fk_constraints": {},
+            "unique_constraints": list(info["inline_uniq"]),
+        }
+        for fk in info["inline_fks"]:
+            entry["fk_constraints"][fk["col"]] = {
+                "constraint_name": fk.get("constraint_name", ""),
+                "ref_table": fk["ref_table"],
+                "ref_col": fk["ref_col"],
+            }
+        metadata[tname] = entry
+
+    pk_re = re.compile(
+        r'ALTER\s+TABLE\s+(?:ONLY\s+)?(?:[\w"]+\s*\.\s*)?'
+        r'(?P<table>[\w"]+)\s+'
+        r'ADD\s+CONSTRAINT\s+"?(?P<cname>[^"\s;]+)"?\s+'
+        r'PRIMARY\s+KEY\s*\((?P<cols>[^)]+)\)',
+        re.IGNORECASE,
+    )
+    fk_re = re.compile(
+        r'ALTER\s+TABLE\s+(?:ONLY\s+)?(?:[\w"]+\s*\.\s*)?'
+        r'(?P<table>[\w"]+)\s+'
+        r'ADD\s+CONSTRAINT\s+"?(?P<cname>[^"\s;]+)"?\s+'
+        r'FOREIGN\s+KEY\s*\((?P<col>[^)]+)\)\s+'
+        r'REFERENCES\s+(?:[\w"]+\s*\.\s*)?(?P<ref_table>[\w"]+)'
+        r'\s*\((?P<ref_col>[^)]+)\)',
+        re.IGNORECASE,
+    )
+
+    for stmt in existing:
+        m = pk_re.search(stmt)
+        if m:
+            tbl = m.group("table").strip('"')
+            cname = m.group("cname").strip('"')
+            cols = [c.strip().strip('"') for c in m.group("cols").split(",")]
+            matched = None
+            for k in metadata:
+                if k.lower() == tbl.lower():
+                    matched = k
+                    break
+            if matched:
+                metadata[matched]["pk_constraint_name"] = cname
+                if not metadata[matched]["pk_columns"]:
+                    metadata[matched]["pk_columns"] = cols
+            continue
+
+        m = fk_re.search(stmt)
+        if m:
+            tbl = m.group("table").strip('"')
+            cname = m.group("cname").strip('"')
+            col = m.group("col").strip().strip('"')
+            ref_table = m.group("ref_table").strip('"')
+            ref_col = m.group("ref_col").strip().strip('"')
+            matched = None
+            for k in metadata:
+                if k.lower() == tbl.lower():
+                    matched = k
+                    break
+            if matched:
+                metadata[matched]["fk_constraints"][col] = {
+                    "constraint_name": cname,
+                    "ref_table": ref_table,
+                    "ref_col": ref_col,
+                }
+
+    return metadata
 
 
 # =====================================================================
@@ -953,6 +1033,18 @@ def run_phase0():
 
     print(f"\n  Written to : {OUTPUT_DUMP}")
     print(f"  File size  : {len(enriched):,} characters")
+
+    # ── Phase 3b: Build & Save Constraint Metadata ────────────────
+    print("\n  Building constraint metadata...")
+    enriched_parsed = DumpParser(enriched).parse()
+    constraint_meta = build_constraint_metadata(enriched_parsed)
+
+    os.makedirs(os.path.dirname(CONSTRAINT_METADATA_FILE), exist_ok=True)
+    with open(CONSTRAINT_METADATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(constraint_meta, f, indent=2)
+
+    n_with_fk = sum(1 for v in constraint_meta.values() if v["fk_constraints"])
+    print(f"  Constraint metadata: {CONSTRAINT_METADATA_FILE} ({n_with_fk} tables with FK names)")
 
     # ── Summary ─────────────────────────────────────────────────────
     print("\n" + "=" * 65)
