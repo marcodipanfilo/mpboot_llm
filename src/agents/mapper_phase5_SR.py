@@ -75,6 +75,7 @@ SEW_MAPPINGS_FILE     = os.path.join(MAPPINGS_DIR, "SEw_mappings.json")
 SRR_MAPPINGS_FILE     = os.path.join(MAPPINGS_DIR, "SRR_mappings.json")
 PROCESS_FILE          = os.path.join(OUTPUT_DIR, "mappings_process_sr.json")
 SR_MAPPINGS_FILE      = os.path.join(MAPPINGS_DIR, "SR_mappings.json")
+CONSTRAINT_META_FILE  = "src/inputs/database/constraint_metadata.json"
 
 
 # ============================================================
@@ -119,6 +120,322 @@ def get_ontology_base_iri(prefixes: Dict[str, str]) -> str:
         if name not in standard:
             return iri
     return "http://ontology#"
+
+
+# ============================================================
+# OWL subclass + object property index (for descendant-aware matching)
+# ============================================================
+
+def _local(iri: str) -> str:
+    if not iri:
+        return ""
+    return iri.split("#")[-1] if "#" in iri else iri.split("/")[-1]
+
+
+class OWLPropertyIndex:
+    """
+    Parses the OWL ontology to build:
+      - subclass_of: child → set of parents (transitively closed)
+      - children_of: parent → set of children (transitively closed)
+      - obj_props: property_name → {domains: set, ranges: set}
+      - inverse_of: property_name → inverse_property_name
+    """
+    def __init__(self, owl_file: str):
+        from collections import defaultdict
+        self.obj_props:   Dict[str, Dict] = defaultdict(lambda: {"domains": set(), "ranges": set()})
+        self.subclass_of: Dict[str, set]  = defaultdict(set)
+        self.children_of: Dict[str, set]  = defaultdict(set)
+        self.inverse_of:  Dict[str, str]  = {}
+        self._parse(owl_file)
+        self._close_subclass()
+        self._build_children()
+
+    def _parse(self, owl_file: str):
+        root = ET.parse(owl_file).getroot()
+
+        # Declarations
+        for elem in root.iter():
+            tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+            if tag != "Declaration":
+                continue
+            ch = list(elem)
+            if not ch:
+                continue
+            ctag = ch[0].tag.split("}")[-1] if "}" in ch[0].tag else ch[0].tag
+            iri  = ch[0].get("IRI", "") or ch[0].get("abbreviatedIRI", "")
+            if ctag == "ObjectProperty" and iri:
+                _ = self.obj_props[_local(iri)]
+
+        # Domain / Range
+        for elem in root.iter():
+            tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+            if tag == "ObjectPropertyDomain":
+                ch = list(elem)
+                if len(ch) < 2:
+                    continue
+                p = _local(ch[0].get("IRI", "") or ch[0].get("abbreviatedIRI", ""))
+                if p not in self.obj_props:
+                    continue
+                de = ch[1]
+                dt = de.tag.split("}")[-1] if "}" in de.tag else de.tag
+                if dt == "ObjectUnionOf":
+                    for c in de:
+                        d = _local(c.get("IRI", "") or c.get("abbreviatedIRI", ""))
+                        if d:
+                            self.obj_props[p]["domains"].add(d)
+                else:
+                    d = _local(de.get("IRI", ""))
+                    if d:
+                        self.obj_props[p]["domains"].add(d)
+            elif tag == "ObjectPropertyRange":
+                ch = list(elem)
+                if len(ch) < 2:
+                    continue
+                p = _local(ch[0].get("IRI", "") or ch[0].get("abbreviatedIRI", ""))
+                if p not in self.obj_props:
+                    continue
+                re_elem = ch[1]
+                rt = re_elem.tag.split("}")[-1] if "}" in re_elem.tag else re_elem.tag
+                if rt == "ObjectUnionOf":
+                    for c in re_elem:
+                        r = _local(c.get("IRI", "") or c.get("abbreviatedIRI", ""))
+                        if r:
+                            self.obj_props[p]["ranges"].add(r)
+                else:
+                    r = _local(re_elem.get("IRI", ""))
+                    if r:
+                        self.obj_props[p]["ranges"].add(r)
+
+        # SubClassOf (simple class-class only)
+        for elem in root.iter():
+            tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+            if tag != "SubClassOf":
+                continue
+            ch = list(elem)
+            if len(ch) < 2:
+                continue
+            s0tag = ch[0].tag.split("}")[-1] if "}" in ch[0].tag else ch[0].tag
+            s1tag = ch[1].tag.split("}")[-1] if "}" in ch[1].tag else ch[1].tag
+            if s0tag != "Class" or s1tag != "Class":
+                continue
+            sub = _local(ch[0].get("IRI", "") or ch[0].get("abbreviatedIRI", ""))
+            sup = _local(ch[1].get("IRI", "") or ch[1].get("abbreviatedIRI", ""))
+            if sub and sup and sup not in ("Thing", ""):
+                self.subclass_of[sub].add(sup)
+
+        # EquivalentClasses with ObjectSomeValuesFrom (domain inference)
+        for axiom_tag in ("EquivalentClasses", "SubClassOf"):
+            for elem in root.iter():
+                tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+                if tag != axiom_tag:
+                    continue
+                ch = list(elem)
+                named_cls = None
+                restrictions = []
+                for c in ch:
+                    ctag = c.tag.split("}")[-1] if "}" in c.tag else c.tag
+                    if ctag == "Class":
+                        iri = c.get("IRI", "") or c.get("abbreviatedIRI", "")
+                        named_cls = _local(iri)
+                    elif ctag == "ObjectSomeValuesFrom":
+                        restrictions.append(c)
+                if not named_cls or not restrictions:
+                    continue
+                for restr in restrictions:
+                    rch = list(restr)
+                    if len(rch) < 2:
+                        continue
+                    ptag = rch[0].tag.split("}")[-1] if "}" in rch[0].tag else rch[0].tag
+                    rtag = rch[1].tag.split("}")[-1] if "}" in rch[1].tag else rch[1].tag
+                    if ptag != "ObjectProperty":
+                        continue
+                    prop = _local(rch[0].get("IRI", ""))
+                    rng  = _local(rch[1].get("IRI", "")) if rtag == "Class" else ""
+                    if prop and rng:
+                        self.obj_props[prop]["domains"].add(named_cls)
+                        self.obj_props[prop]["ranges"].add(rng)
+
+        # InverseObjectProperties
+        for elem in root.iter():
+            tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+            if tag != "InverseObjectProperties":
+                continue
+            ch = list(elem)
+            if len(ch) == 2:
+                a = _local(ch[0].get("IRI", "") or ch[0].get("abbreviatedIRI", ""))
+                b = _local(ch[1].get("IRI", "") or ch[1].get("abbreviatedIRI", ""))
+                if a and b:
+                    self.inverse_of[a] = b
+                    self.inverse_of[b] = a
+
+    def _close_subclass(self):
+        changed = True
+        while changed:
+            changed = False
+            for cls, parents in list(self.subclass_of.items()):
+                for parent in list(parents):
+                    new = self.subclass_of.get(parent, set()) - parents
+                    if new:
+                        self.subclass_of[cls].update(new)
+                        changed = True
+
+    def _build_children(self):
+        """Build the inverse of subclass_of: parent → all descendants."""
+        for child, parents in self.subclass_of.items():
+            for parent in parents:
+                self.children_of[parent].add(child)
+
+    def get_ancestors(self, cls: str) -> set:
+        return {cls} | self.subclass_of.get(cls, set())
+
+    def get_descendants(self, cls: str) -> set:
+        return {cls} | self.children_of.get(cls, set())
+
+    def get_properties_for_class_and_descendants(self, cls: str) -> List[Dict]:
+        """
+        Return object properties whose domain intersects cls OR any descendant of cls.
+        This is the key fix: for Person, we also get properties with domain=Speaker,
+        Author, Organizator, etc.
+        """
+        all_classes = self.get_descendants(cls)
+        seen = {}
+        for prop, info in self.obj_props.items():
+            if not info["domains"] or not info["ranges"]:
+                continue
+            matching = info["domains"] & all_classes
+            if not matching:
+                continue
+            for rng in info["ranges"]:
+                key = (prop, rng)
+                if key not in seen:
+                    # Pick the most specific domain match
+                    domains_str = ", ".join(sorted(matching))
+                    seen[key] = {
+                        "property": prop,
+                        "domain": domains_str,
+                        "range": rng,
+                        "matching_domains": sorted(matching),
+                    }
+        return list(seen.values())
+
+
+# ============================================================
+# FK constraint name extractor
+# ============================================================
+
+# Cache loaded constraint metadata
+_constraint_meta_cache: Optional[Dict] = None
+
+
+def _load_constraint_metadata() -> Dict:
+    """Load constraint_metadata.json from Phase 0 (cached)."""
+    global _constraint_meta_cache
+    if _constraint_meta_cache is not None:
+        return _constraint_meta_cache
+
+    if os.path.exists(CONSTRAINT_META_FILE):
+        try:
+            with open(CONSTRAINT_META_FILE, "r", encoding="utf-8") as f:
+                _constraint_meta_cache = json.load(f)
+                return _constraint_meta_cache
+        except Exception:
+            pass
+
+    # Fallback: parse SQL dump if constraint_metadata.json not available
+    SQL_DUMP_NEW  = "src/inputs/database/dump_new.sql"
+    SQL_DUMP_ORIG = "src/inputs/database/dump.sql"
+    dump_path = SQL_DUMP_NEW if os.path.exists(SQL_DUMP_NEW) else SQL_DUMP_ORIG
+    if not os.path.exists(dump_path):
+        _constraint_meta_cache = {}
+        return _constraint_meta_cache
+
+    try:
+        with open(dump_path, "r", encoding="utf-8", errors="replace") as f:
+            sql_text = f.read()
+    except Exception:
+        _constraint_meta_cache = {}
+        return _constraint_meta_cache
+
+    result: Dict = {}
+    pk_re = re.compile(
+        r'ALTER\s+TABLE\s+(?:ONLY\s+)?(?:[\w"]+\s*\.\s*)?'
+        r'(?P<table>[\w"]+)\s+'
+        r'ADD\s+CONSTRAINT\s+"?(?P<cname>[^"\s;]+)"?\s+'
+        r'PRIMARY\s+KEY\s*\((?P<cols>[^)]+)\)',
+        re.IGNORECASE,
+    )
+    fk_re = re.compile(
+        r'ALTER\s+TABLE\s+(?:ONLY\s+)?(?:[\w"]+\s*\.\s*)?'
+        r'(?P<table>[\w"]+)\s+'
+        r'ADD\s+CONSTRAINT\s+"?(?P<cname>[^"\s;]+)"?\s+'
+        r'FOREIGN\s+KEY\s*\((?P<col>[^)]+)\)\s+'
+        r'REFERENCES\s+(?:[\w"]+\s*\.\s*)?(?P<ref_table>[\w"]+)'
+        r'\s*\((?P<ref_col>[^)]+)\)',
+        re.IGNORECASE,
+    )
+    for m in pk_re.finditer(sql_text):
+        tbl = m.group("table").strip('"')
+        result.setdefault(tbl, {"pk_constraint_name": "", "pk_columns": [], "fk_constraints": {}, "unique_constraints": []})
+        result[tbl]["pk_constraint_name"] = m.group("cname").strip('"')
+    for m in fk_re.finditer(sql_text):
+        tbl = m.group("table").strip('"')
+        col = m.group("col").strip().strip('"')
+        result.setdefault(tbl, {"pk_constraint_name": "", "pk_columns": [], "fk_constraints": {}, "unique_constraints": []})
+        result[tbl]["fk_constraints"][col] = {
+            "constraint_name": m.group("cname").strip('"'),
+            "ref_table": m.group("ref_table").strip('"'),
+            "ref_col": m.group("ref_col").strip().strip('"'),
+        }
+
+    _constraint_meta_cache = result
+    return _constraint_meta_cache
+
+
+def extract_fk_constraint_names(table_name: str, tables_structure: Dict) -> Dict[str, str]:
+    """
+    Extract FK constraint names for a table.
+    Primary: constraint_metadata.json (Phase 0 output).
+    Fallback: SQL dump parsing.
+    Returns {column_name: constraint_name}.
+    """
+    meta = _load_constraint_metadata()
+
+    # Try exact match then case-insensitive
+    table_meta = meta.get(table_name)
+    if not table_meta:
+        for k, v in meta.items():
+            if k.lower() == table_name.lower():
+                table_meta = v
+                break
+
+    if table_meta:
+        return {
+            col: info["constraint_name"]
+            for col, info in table_meta.get("fk_constraints", {}).items()
+            if info.get("constraint_name")
+        }
+
+    return {}
+
+
+def extract_pk_constraint_name(table_name: str, tables_structure: Dict) -> str:
+    """
+    Extract PK constraint name for a table.
+    Primary: constraint_metadata.json (Phase 0 output).
+    """
+    meta = _load_constraint_metadata()
+
+    table_meta = meta.get(table_name)
+    if not table_meta:
+        for k, v in meta.items():
+            if k.lower() == table_name.lower():
+                table_meta = v
+                break
+
+    if table_meta:
+        return table_meta.get("pk_constraint_name", "")
+
+    return ""
 
 
 # ============================================================
@@ -333,33 +650,57 @@ def get_participant_classes(
 
 def fetch_properties_for_participants(
     participant_classes: Dict[str, str],
+    owl_index: Optional["OWLPropertyIndex"] = None,
 ) -> List[Dict]:
     """
     Fetch ontology object properties that connect the participant classes,
     including direction (domain → range).
 
+    KEY FIX: Uses OWLPropertyIndex to also collect properties whose domain
+    is a DESCENDANT (subclass) of the participant classes. This is critical
+    because many ontologies define properties on subclasses (e.g. :submit
+    has domain Author, which is a subclass of Person). Without this, the
+    LLM never sees these properties and picks wrong ones.
+
+    Also collects properties from ontology_explorer as a fallback.
+
     Returns a list of dicts:
       { "property": str, "domain": str, "range": str }
-
-    where domain and range are local class names (without colon prefix).
-    Properties are returned for both directions so the prompt can show
-    which predicates go which way between the two entities.
-    If domain/range info is unavailable for a property, it is included
-    with domain/range set to None so the LLM can still consider it.
     """
     classes = list(participant_classes.values())
     if not classes:
         return []
 
-    seen: Dict[str, Dict] = {}   # property_name → best dict we have so far
+    seen: Dict[str, Dict] = {}
 
+    # ── PRIMARY: OWL index with descendant-aware property collection ──
+    if owl_index:
+        for cls in classes:
+            props = owl_index.get_properties_for_class_and_descendants(cls)
+            for p in props:
+                name = p["property"]
+                if name not in seen:
+                    seen[name] = p
+            # Also add inverse properties for completeness
+            for p in list(props):
+                inv = owl_index.inverse_of.get(p["property"])
+                if inv and inv not in seen:
+                    inv_info = owl_index.obj_props.get(inv, {})
+                    inv_domains = ", ".join(sorted(inv_info.get("domains", set())))
+                    inv_ranges  = ", ".join(sorted(inv_info.get("ranges", set())))
+                    seen[inv] = {
+                        "property": inv,
+                        "domain": inv_domains or None,
+                        "range": inv_ranges or None,
+                    }
+
+    # ── FALLBACK: ontology_explorer for any properties not yet found ──
     for cls in classes:
         try:
             result = ontology_explorer(mode="class_properties", class_name=cls)
         except Exception:
             continue
 
-        # Handle different response shapes
         op_raw = (
             result.get("object_properties")
             or result.get("objectProperties")
@@ -382,7 +723,6 @@ def fetch_properties_for_participants(
                 name = (item.get("property_name") or item.get("name")
                         or item.get("local_name") or "")
                 if not name:
-                    # fallback: derive from IRI
                     name = (item.get("property_iri") or item.get("iri", ""))
                 name = name.split("#")[-1].split("/")[-1] if name else ""
                 if not name:
@@ -517,6 +857,8 @@ class OntologyMapper:
         column_enrichment: Dict[str, Dict],
         ontology_properties: List[Dict],
         participant_classes: Dict[str, str] = None,
+        fk_constraint_names: Dict[str, str] = None,
+        pk_constraint_name: str = "",
     ) -> str:
         col_lines = []
         for col_name, meaning in column_meanings.items():
@@ -553,6 +895,16 @@ class OntologyMapper:
             if i != j
         )
 
+        # FK constraint name hints — these are extremely strong signals
+        constraint_block = ""
+        if fk_constraint_names or pk_constraint_name:
+            lines = []
+            if pk_constraint_name:
+                lines.append(f"  PK constraint: \"{pk_constraint_name}\"")
+            for col, cn in (fk_constraint_names or {}).items():
+                lines.append(f"  FK {col}: \"{cn}\"")
+            constraint_block = "\nDATABASE CONSTRAINT NAMES (strong hints — property names are often embedded here):\n" + "\n".join(lines) + "\n"
+
         return f"""You are an ontology mapping expert. This is a SIMPLE RELATIONSHIP (bridge) table — it has no identity of its own and connects entities via object properties.
 
 TABLE: {table_name}
@@ -563,9 +915,20 @@ MAPPED ONTOLOGY CLASSES:
 
 COLUMNS (FK links to participant entities):
 {columns_block}
-
+{constraint_block}
 AVAILABLE ONTOLOGY OBJECT PROPERTIES (with domain→range where known):
 {prop_block}
+
+IMPORTANT NOTES ON DOMAIN/RANGE:
+  - Properties may have domains that are SUBCLASSES of the mapped entity class.
+    For example, if a table is mapped to :Person, a property with domain :Author
+    is still valid because Author is a subclass of Person — some Person rows ARE Authors.
+  - Similarly, if a table is mapped to :Document, a property with domain :Paper
+    is valid because Paper is a subclass of Document.
+  - Constraint names from the database (PK and FK names) often contain the
+    original ontology property name. For example, "submitPK" suggests the
+    property is :submit, "obtain_Author_fkey" suggests :obtain, etc.
+  - PRIORITIZE constraint name hints over column name matching when available.
 
 TASK:
 For EACH directed pair below, pick the single best object property.
@@ -661,6 +1024,7 @@ Return ONLY a JSON object, no markdown, no extra text:
         tables_structure: Dict,
         understanding: Dict,
         enrichment: Dict,
+        owl_index: Optional["OWLPropertyIndex"] = None,
     ) -> Dict:
         table_und         = understanding.get(table_name, {})
         table_meaning     = table_und.get("table_meaning", "Not available")
@@ -673,14 +1037,23 @@ Return ONLY a JSON object, no markdown, no extra text:
         attributes = build_attributes(table_name, tables_structure)
 
         # Fetch object properties linking the participant classes (with domain/range)
-        ontology_properties = fetch_properties_for_participants(participant_classes)
+        # Now uses descendant-aware OWL index
+        ontology_properties = fetch_properties_for_participants(
+            participant_classes, owl_index=owl_index
+        )
         # Build a set of valid property names for post-validation
         valid_obj_props = {p["property"] for p in ontology_properties if p.get("property")}
+
+        # Extract FK constraint names for this table (strong property hints)
+        fk_constraint_names = extract_fk_constraint_names(table_name, tables_structure)
+        pk_constraint_name  = extract_pk_constraint_name(table_name, tables_structure)
 
         prompt   = self._build_mapping_prompt(
             table_name, table_meaning, participants,
             column_meanings, column_enrichment,
-            ontology_properties, participant_classes
+            ontology_properties, participant_classes,
+            fk_constraint_names=fk_constraint_names,
+            pk_constraint_name=pk_constraint_name,
         )
         response = self.get_llm_response(prompt)
         mappings = self._parse_mapping_response(response)
@@ -753,6 +1126,13 @@ def run_sr_mapping():
     base_iri = get_ontology_base_iri(prefixes)
     print(f"  ✓ Base IRI: {base_iri}")
 
+    # Parse OWL property index (with subclass hierarchy for descendant-aware matching)
+    print(f"  Building OWL property index (with subclass hierarchy) ...")
+    owl_index = OWLPropertyIndex(ONTOLOGY_FILE)
+    print(f"  ✓ {len(owl_index.obj_props)} object properties, "
+          f"{len(owl_index.subclass_of)} subclass relations, "
+          f"{len(owl_index.children_of)} parent→children entries")
+
     # Filter SR tables
     sr_tables = {t: p for t, p in table_patterns.items() if p == "SR"}
     print(f"\n  SR tables : {len(sr_tables)}")
@@ -797,6 +1177,7 @@ def run_sr_mapping():
                 record = mapper.map_table(
                     table_name, participants, participant_classes,
                     tables_structure, understanding, enrichment,
+                    owl_index=owl_index,
                 )
                 mappings_process[table_name] = record
                 success += 1
