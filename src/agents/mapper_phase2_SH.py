@@ -61,6 +61,7 @@ MAPPINGS_DIR          = os.path.join(OUTPUT_DIR, "mappings")
 SE_MAPPINGS_FILE      = os.path.join(MAPPINGS_DIR, "SE_mappings.json")
 PROCESS_FILE          = os.path.join(OUTPUT_DIR, "mappings_process_sh.json")
 SH_MAPPINGS_FILE      = os.path.join(MAPPINGS_DIR, "SH_mappings.json")
+CONSTRAINT_META_FILE  = "src/inputs/database/constraint_metadata.json"
 
 RDFS_LABEL = "rdfs:label"
 
@@ -498,7 +499,9 @@ def _match_property(
     prop_list:       List[str],
     used_predicates: Set[str],
 ) -> Optional[str]:
+    """Match with quality threshold — prevents weak substring matches."""
     col_norm = _norm(col_name)
+    MIN_MATCH_QUALITY = 0.6
 
     def _already_used(prop: str) -> bool:
         return f":{prop}" in used_predicates
@@ -507,31 +510,30 @@ def _match_property(
     for p in prop_list:
         if _norm(p) == col_norm or _norm(_strip_owl_prefix(p)) == col_norm:
             if _already_used(p):
-                print(f"        [SKIP P1-exact — already used] col={col_name!r} prop={p!r}")
                 continue
-            print(f"        [MATCH P1-exact]    col={col_name!r}  →  prop={p!r}")
             return p
 
-    # Pass 2 — col contained in prop
+    # Pass 2 — substring match with quality threshold
+    candidates = []
     for p in prop_list:
-        if col_norm in _norm(p) or col_norm in _norm(_strip_owl_prefix(p)):
-            if _already_used(p):
-                print(f"        [SKIP P2-col⊂prop — already used] col={col_name!r} prop={p!r}")
-                continue
-            print(f"        [MATCH P2-col⊂prop] col={col_name!r}  →  prop={p!r}")
-            return p
+        if _already_used(p):
+            continue
+        pn = _norm(p)
+        pn_stripped = _norm(_strip_owl_prefix(p))
+        quality = 0.0
+        for a, b in [(col_norm, pn), (col_norm, pn_stripped)]:
+            if a and b:
+                if a in b:
+                    quality = max(quality, len(a) / len(b))
+                if b in a:
+                    quality = max(quality, len(b) / len(a))
+        if quality >= MIN_MATCH_QUALITY:
+            candidates.append((p, quality, len(p)))
 
-    # Pass 3 — prop contained in col
-    for p in prop_list:
-        if _norm(p) in col_norm or _norm(_strip_owl_prefix(p)) in col_norm:
-            if _already_used(p):
-                print(f"        [SKIP P3-prop⊂col — already used] col={col_name!r} prop={p!r}")
-                continue
-            print(f"        [MATCH P3-prop⊂col] col={col_name!r}  →  prop={p!r}")
-            return p
+    if candidates:
+        candidates.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        return candidates[0][0]
 
-    print(f"        [NO MATCH] col={col_name!r}  (checked {len(prop_list)} props, "
-          f"{len(used_predicates)} already used)")
     return None
 
 
@@ -646,6 +648,7 @@ def _build_column_predicate_prompt(
     available_props: List[str],
     used_predicates: Set[str],
     prop_kind:       str,
+    constraint_hint: str = "",
 ) -> str:
     props_block = (
         "\n".join(f"  - {p}" for p in available_props)
@@ -661,6 +664,13 @@ def _build_column_predicate_prompt(
         else "Choose the BEST object property to represent this foreign-key relationship."
     )
 
+    constraint_block = ""
+    if constraint_hint:
+        constraint_block = f"""
+FK CONSTRAINT NAME (strong semantic hint — property names are often embedded):
+  {constraint_hint}
+"""
+
     return f"""You are an ontology mapping expert.
 
 TABLE: {table_name}
@@ -671,7 +681,7 @@ COLUMN TO MAP:
   name     : {col_name}
   meaning  : {col_meaning}
   db type  : {col_db_type}
-
+{constraint_block}
 AVAILABLE ONTOLOGY {prop_kind.upper()} PROPERTIES (already-used ones excluded):
 {props_block}
 
@@ -682,6 +692,7 @@ TASK: {kind_instruction}
 
 Rules:
   - Use the column's SEMANTIC MEANING as the primary guide, not just its name.
+  - PRIORITIZE the FK constraint name hint when available — it often encodes the property name.
   - Only choose from the AVAILABLE properties listed above.
   - Do NOT choose a predicate already listed under "PREDICATES ALREADY ASSIGNED".
   - If none of the available properties semantically fits this column, return null.
@@ -705,6 +716,7 @@ def _llm_select_predicate(
     used_predicates: Set[str],
     prop_kind:       str,
     mapper:          "OntologyMapper",
+    constraint_hint: str = "",
 ) -> Optional[str]:
     if not available_props:
         print(f"        [LLM-PRED] No available props — skipping for {col_name!r}")
@@ -713,12 +725,10 @@ def _llm_select_predicate(
     prompt = _build_column_predicate_prompt(
         table_name, table_meaning, ontology_class,
         col_name, col_meaning, col_db_type,
-        available_props, used_predicates, prop_kind
+        available_props, used_predicates, prop_kind,
+        constraint_hint=constraint_hint
     )
-    print(f"        [LLM-PRED] Asking LLM for {prop_kind} property for "
-          f"{col_name!r} (meaning: {col_meaning!r})")
     raw = mapper.get_llm_response(prompt)
-    print(f"        [LLM-PRED] Raw: {raw[:200]!r}")
 
     try:
         cleaned = re.sub(r'```json\s*', '', raw)
@@ -888,6 +898,7 @@ def build_sh_json_mapping(
     mapper:         "OntologyMapper",
     col_meanings:   Dict[str, str],
     table_meaning:  str,
+    constraint_meta: Dict = None,
 ) -> Dict:
     """
     Build the structured JSON mapping for one SE_SH table.
@@ -946,27 +957,20 @@ def build_sh_json_mapping(
     predicate_object_maps = []
 
     # ── Step 4: map non-FK attribute columns ──────────────────────────────
-    print(f"\n    ── Attribute (non-FK) column mapping ──")
     for attr in attr_cols:
         col         = attr["name"]
         col_meaning = col_meanings.get(col, "(no description)")
         col_db_type = attr.get("data_type", "unknown")
-        print(f"\n      Processing col={col!r}  meaning={col_meaning!r}  db_type={col_db_type!r}")
-        print(f"      used_predicates so far: {sorted(used_predicates)}")
 
-        # ── rdfs:label is ADDITIVE — resolve the real data property first,
-        #    then append a second rdfs:label entry for the same column.
         emit_rdfs_label = col in label_columns
 
         if data_prop_names:
-            # Priority 1: string similarity (fast)
             matched = _match_property(col, data_prop_names, used_predicates)
             if matched:
                 predicate = f":{matched}"
                 datatype  = _xsd_type(col_db_type)
-                print(f"      → {col!r}  :  {predicate}  [string-match data property]")
+                print(f"      {col!r} → {predicate}  [string-match]")
             else:
-                # Priority 2: LLM semantic selection
                 unused_data_props = [p for p in data_prop_names if f":{p}" not in used_predicates]
                 chosen = _llm_select_predicate(
                     table_name, table_meaning, ontology_class,
@@ -976,15 +980,14 @@ def build_sh_json_mapping(
                 if chosen:
                     predicate = f":{chosen}"
                     datatype  = _xsd_type(col_db_type)
-                    print(f"      → {col!r}  :  {predicate}  [LLM semantic data property]")
+                    print(f"      {col!r} → {predicate}  [LLM]")
                 else:
                     predicate = f":{_to_camel_case(col)}"
                     datatype  = _xsd_type(col_db_type)
-                    print(f"      → {col!r}  :  {predicate}  [FALLBACK camelCase]")
+                    print(f"      {col!r} → {predicate}  [camelCase fallback]")
         else:
             predicate = f":{_to_camel_case(col)}"
             datatype  = _xsd_type(col_db_type)
-            print(f"      → {col!r}  :  {predicate}  [FALLBACK camelCase — no class properties]")
 
         used_predicates.add(predicate)
         predicate_object_maps.append({
@@ -996,10 +999,7 @@ def build_sh_json_mapping(
             }
         })
 
-        # ── Additive rdfs:label entry ────────────────────────────────────────
         if emit_rdfs_label and predicate != RDFS_LABEL:
-            print(f"      + adding additive rdfs:label for {col!r} "
-                  f"(in addition to {predicate!r})")
             predicate_object_maps.append({
                 "predicate": RDFS_LABEL,
                 "object": {
@@ -1010,7 +1010,11 @@ def build_sh_json_mapping(
             })
 
     # ── Step 5: map FK columns ────────────────────────────────────────────
-    print(f"\n    ── FK column mapping ──")
+    fk_constraints = {}
+    if constraint_meta:
+        table_meta = constraint_meta.get(table_name, {})
+        fk_constraints = table_meta.get("fk_constraints", {})
+
     for fk in fk_cols:
         col         = fk["name"]
         col_meaning = col_meanings.get(col, "(no description)")
@@ -1026,30 +1030,31 @@ def build_sh_json_mapping(
         else:
             fk_parent_iri = f"urn:r2rml:SE_SH_{ref_table}"
 
-        print(f"\n      Processing FK col={col!r}  ref={ref_table!r}  meaning={col_meaning!r}")
-        print(f"      used_predicates so far: {sorted(used_predicates)}")
+        # Get constraint name hint
+        fk_meta = fk_constraints.get(col, {})
+        constraint_hint = fk_meta.get("constraint_name", "")
 
         if obj_prop_names:
             matched = _match_property(col, obj_prop_names, used_predicates)
             if matched:
                 predicate = f":{matched}"
-                print(f"      → {col!r} (FK→{ref_table})  :  {predicate}  [string-match object property]")
+                print(f"      {col!r} (FK→{ref_table}) → {predicate}  [string-match]")
             else:
                 unused_obj_props = [p for p in obj_prop_names if f":{p}" not in used_predicates]
                 chosen = _llm_select_predicate(
                     table_name, table_meaning, ontology_class,
                     col, col_meaning, col_db_type,
-                    unused_obj_props, used_predicates, "object", mapper
+                    unused_obj_props, used_predicates, "object", mapper,
+                    constraint_hint=constraint_hint
                 ) if unused_obj_props else None
                 if chosen:
                     predicate = f":{chosen}"
-                    print(f"      → {col!r} (FK→{ref_table})  :  {predicate}  [LLM semantic object property]")
+                    print(f"      {col!r} (FK→{ref_table}) → {predicate}  [LLM]")
                 else:
                     predicate = f":{_to_camel_case(col)}"
-                    print(f"      → {col!r} (FK→{ref_table})  :  {predicate}  [FALLBACK camelCase]")
+                    print(f"      {col!r} (FK→{ref_table}) → {predicate}  [camelCase fallback]")
         else:
             predicate = f":{_to_camel_case(col)}"
-            print(f"      → {col!r} (FK→{ref_table})  :  {predicate}  [FALLBACK camelCase — no obj properties]")
 
         used_predicates.add(predicate)
         predicate_object_maps.append({
@@ -1064,9 +1069,6 @@ def build_sh_json_mapping(
                 }
             }
         })
-
-    print(f"\n    [BUILD DONE] {table_name!r} — total predicates: {len(used_predicates)}")
-    print(f"                 final predicate set: {sorted(used_predicates)}")
 
     return {
         "pattern":               "SE_SH",
@@ -1506,21 +1508,25 @@ def run_sh_mapping():
 
     print("  Building ontology property index ...")
     prop_index = OntologyPropertyIndex(ONTOLOGY_FILE)
-    print(f"  ✓ {len(prop_index.data_props)} data properties, "
-          f"{len(prop_index.obj_props)} object properties")
 
-    # Filter SE_SH tables
     se_sh_tables  = {t: p for t, p in table_patterns.items() if p == "SE_SH"}
     all_se_sh_set = set(se_sh_tables.keys())
-    print(f"\n  SE_SH tables : {len(se_sh_tables)}")
+    print(f"  SE_SH tables : {len(se_sh_tables)}")
 
-    # Sort topologically — parents before children
     sorted_tables = topological_sort(se_sh_tables, tables_structure)
-    print(f"  Processing order: {sorted_tables}\n")
 
-    # Load ontology classes
-    print("Loading ontology classes...")
     ontology_classes = ontology_explorer(mode="classes")["classes"]
+    print(f"  Ontology classes: {len(ontology_classes)}")
+
+    # Load constraint metadata from Phase 0
+    constraint_meta = {}
+    if os.path.exists(CONSTRAINT_META_FILE):
+        try:
+            with open(CONSTRAINT_META_FILE, "r", encoding="utf-8") as f:
+                constraint_meta = json.load(f)
+            print(f"  Constraint metadata: {len(constraint_meta)} tables")
+        except Exception:
+            print(f"  [WARN] Could not load constraint_metadata.json")
     print(f"  ✓ {len(ontology_classes)} classes loaded")
 
     # Load existing caches for resumable runs
@@ -1605,6 +1611,7 @@ def run_sh_mapping():
                 mapper      = mapper,
                 col_meanings  = col_meanings,
                 table_meaning = table_meaning,
+                constraint_meta = constraint_meta,
             )
             with open(SH_MAPPINGS_FILE, "w", encoding="utf-8") as f:
                 json.dump(sh_mappings, f, indent=2)
