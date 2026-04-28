@@ -33,11 +33,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip", dest="skip_ids", action="append", default=[], help="Skip a step for each dataset")
     parser.add_argument("--dry-run", action="store_true", help="Print the intended actions without executing steps")
     parser.add_argument("--keep-going", action="store_true", help="Continue with later datasets after a failure")
-    parser.add_argument(
-        "--force-all",
-        action="store_true",
-        help="Process all selected datasets, including ones that already have archived outputs for the current model",
-    )
     return parser.parse_args()
 
 
@@ -54,17 +49,6 @@ def select_dataset_dirs(root: Path, selected_names: List[str]) -> List[Path]:
     return filtered
 
 
-def has_existing_archive(model_name: str, dataset_name: str) -> bool:
-    model_output_dir = ARCHIVE_OUTPUTS_DIR / model_name
-    if not model_output_dir.exists():
-        return False
-
-    for metadata_path in model_output_dir.glob(f"*/{dataset_name}/run_metadata.json"):
-        if metadata_path.is_file():
-            return True
-    return False
-
-
 def main() -> None:
     args = parse_args()
     ensure_workspace_dirs()
@@ -73,20 +57,6 @@ def main() -> None:
     model_name = selected_model_name()
     batch_run_id = timestamp_id()
     batch_output_dir = ARCHIVE_OUTPUTS_DIR / model_name / batch_run_id
-
-    if not args.force_all:
-        selected_dataset_names = [path.name for path in dataset_dirs]
-        skipped_existing = [name for name in selected_dataset_names if has_existing_archive(model_name, name)]
-        if skipped_existing:
-            print("Skipping already processed datasets for current model:")
-            for name in skipped_existing:
-                print(f"  - {name}")
-        dataset_dirs = [path for path in dataset_dirs if path.name not in set(skipped_existing)]
-
-        if not dataset_dirs:
-            print("No datasets left to process after skipping existing archives.")
-            print(f"Model output root checked: {ARCHIVE_OUTPUTS_DIR / model_name}")
-            sys.exit(0)
 
     overall_ok = True
 

@@ -229,107 +229,6 @@ def resolve_dataset_files(dataset_dir: Path) -> WorkspaceDataset:
     )
 
 
-def _infer_ontology_iri_from_ttl(source: Path) -> Optional[str]:
-    text = source.read_text(encoding="utf-8", errors="replace")
-
-    match = re.search(r"@prefix\s*:\s*<([^>]+)>\s*\.", text)
-    if match:
-        return match.group(1).rstrip("#")
-
-    match = re.search(r"@base\s+<([^>]+)>\s*\.", text)
-    if match:
-        return match.group(1).rstrip("#")
-
-    match = re.search(r"<([^>]+)>\s+(?:a|rdf:type)\s+owl:Ontology\b", text)
-    if match:
-        return match.group(1).rstrip("#")
-
-    return None
-
-
-def _repair_owlxml_ontology_iri(source_ttl: Path, destination_owl: Path) -> None:
-    text = destination_owl.read_text(encoding="utf-8", errors="replace")
-    if "<Ontology" not in text[:1024]:
-        return
-
-    ontology_iri = _infer_ontology_iri_from_ttl(source_ttl)
-    if not ontology_iri:
-        return
-
-    ontology_prefix_iri = f"{ontology_iri}#"
-    match = re.search(r"<Ontology\b([^>]*)>", text)
-    if not match:
-        return
-
-    attrs = match.group(1)
-    patched_attrs = attrs
-    changed = False
-
-    if "ontologyIRI=" in patched_attrs:
-        updated_attrs, count = re.subn(
-            r'\s+ontologyIRI="[^"]*"',
-            f'\n     ontologyIRI="{ontology_iri}"',
-            patched_attrs,
-            count=1,
-        )
-        if count:
-            patched_attrs = updated_attrs
-            changed = True
-    else:
-        patched_attrs += f'\n     ontologyIRI="{ontology_iri}"'
-        changed = True
-
-    if "xml:base=" in patched_attrs:
-        updated_attrs, count = re.subn(
-            r'\s+xml:base="[^"]*"',
-            f'\n     xml:base="{ontology_iri}"',
-            patched_attrs,
-            count=1,
-        )
-        if count:
-            patched_attrs = updated_attrs
-            changed = True
-    else:
-        patched_attrs += f'\n     xml:base="{ontology_iri}"'
-        changed = True
-
-    patched = text[: match.start(1)] + patched_attrs + text[match.end(1) :]
-
-    if '<Prefix name="" ' not in patched:
-        prefix_line = f'    <Prefix name="" IRI="{ontology_prefix_iri}"/>\n'
-        if "<Prefix " in patched:
-            patched, count = re.subn(r"(\s*<Prefix\s+name=\"owl\"\s+IRI=\"http://www\.w3\.org/2002/07/owl#\"/>\s*)", prefix_line + r"\1", patched, count=1)
-            if count:
-                changed = True
-        if '<Prefix name="" ' not in patched:
-            patched, count = re.subn(r"(<Ontology\b[^>]*>)", r"\1\n" + prefix_line.rstrip("\n"), patched, count=1)
-            if count:
-                patched += "\n" if not patched.endswith("\n") else ""
-                changed = True
-
-    patched, count = re.subn(r'(<Ontology\b[^>]*>)\s*(<Prefix name="" )', r'\1\n    \2', patched, count=1)
-    if count:
-        changed = True
-
-    patched, count = re.subn(
-        rf'(<Prefix name="" IRI="{re.escape(ontology_prefix_iri)}"/>)\n\s*\n(\s*<Prefix name="owl" )',
-        r'\1\n\2',
-        patched,
-        count=1,
-    )
-    if count:
-        changed = True
-
-    iri_pattern = re.compile(rf'IRI="{re.escape(ontology_prefix_iri)}([^"#]+)"')
-    patched, count = iri_pattern.subn(r'IRI="#\1"', patched)
-    if count:
-        changed = True
-
-    if changed:
-        destination_owl.write_text(patched, encoding="utf-8")
-        print(f"Normalized OWL/XML ontology header and local IRIs in {destination_owl} -> {ontology_iri}")
-
-
 def convert_ttl_to_owlxml(source: Path, destination: Path) -> None:
     if not ROBOT_BIN.exists():
         raise FileNotFoundError(
@@ -349,7 +248,6 @@ def convert_ttl_to_owlxml(source: Path, destination: Path) -> None:
         check=True,
         cwd=str(ROOT_DIR),
     )
-    _repair_owlxml_ontology_iri(source, destination)
 
 
 def _stage_ontology_file(source: Path, destination: Path) -> None:

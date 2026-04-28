@@ -11,7 +11,7 @@ load_dotenv()
 
 
 # ===== CHANGE PROVIDER HERE =====
-SELECTED_PROVIDER = "gpt4o" # or "gpt4o-mini", "claude", "gpt4o" etc.
+SELECTED_PROVIDER = "claude" # or "gpt4o-mini", "claude", "gpt4o" etc.
 # ================================
 
 
@@ -41,7 +41,7 @@ class LLMConfig:
         "gpt4o-mini": "gpt-4o-mini",
         "gpt4o":      "gpt-4o",
         "groq":       "openai/gpt-oss-120b",
-        "claude":     "claude-sonnet-4-20250514",
+        "claude":     "claude-haiku-4-5-20251001",
         "gemini":     "gemini-2.0-flash-exp"
     }
 
