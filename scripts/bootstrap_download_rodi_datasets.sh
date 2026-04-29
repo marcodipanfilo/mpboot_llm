@@ -11,9 +11,10 @@ rm -rf "${DATASETS_DIR}"
 mkdir -p "${DATASETS_DIR}"
 
 echo "Downloading selected RODI datasets into ${DATASETS_DIR}"
-git clone --depth 1 --filter=blob:none --sparse "${RODI_REPO_URL}" "${tmp_dir}/rodi"
+git clone --depth 1 --filter=blob:none "${RODI_REPO_URL}" "${tmp_dir}/rodi"
 (
   cd "${tmp_dir}/rodi"
+  git sparse-checkout init --cone
   git sparse-checkout set "${RODI_DATASETS[@]/#/data/}"
 )
 
@@ -23,4 +24,3 @@ for dataset in "${RODI_DATASETS[@]}"; do
 done
 
 rm -rf "${tmp_dir}"
-
