@@ -6,6 +6,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${ROOT_DIR}/.venv"
 TOOLS_DIR="${ROOT_DIR}/.tools"
 
+if [[ -f "${ROOT_DIR}/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${ROOT_DIR}/.env"
+  set +a
+fi
+
 ROBOT_DIR="${TOOLS_DIR}/robot"
 ROBOT_JAR="${ROBOT_DIR}/robot.jar"
 ROBOT_BIN="${ROBOT_DIR}/robot"
