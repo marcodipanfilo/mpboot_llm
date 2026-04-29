@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from sanitizer import transform_sql_for_qpair
 
-TOP_LEVEL_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*\s*=")
+TOP_LEVEL_KEY_RE = re.compile(r"^\s*[A-Za-z][A-Za-z0-9_]*\s*=")
 SQL_KEY_RE = re.compile(r"^\s*sql\s*=", re.IGNORECASE)
 
 

@@ -70,11 +70,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--compare-tabular", action="store_true", help="Compare Ontop and RODI tabular reports")
     parser.add_argument("--keep-going", action="store_true", help="Continue with later datasets after a failure")
-    parser.add_argument(
-        "--force-all",
-        action="store_true",
-        help="Evaluate all selected datasets, including ones that already have the expected evaluation artifacts",
-    )
     return parser.parse_args()
 
 
@@ -159,26 +154,6 @@ def _build_config(dataset_dir: Path, args: argparse.Namespace) -> EvaluationRunC
     )
 
 
-def _has_existing_evaluation(cfg: EvaluationRunConfig, args: argparse.Namespace) -> bool:
-    if args.method == "rodi":
-        return cfg.eval_rodi_report_file.exists() and cfg.eval_rodi_tabular_file.exists()
-    if args.method == "ontop":
-        return (
-            cfg.eval_ontop_metrics_file.exists()
-            and cfg.eval_ontop_summary_file.exists()
-            and cfg.eval_ontop_tabular_file.exists()
-        )
-    if args.method == "all":
-        return (
-            cfg.eval_rodi_report_file.exists()
-            and cfg.eval_rodi_tabular_file.exists()
-            and cfg.eval_ontop_metrics_file.exists()
-            and cfg.eval_ontop_summary_file.exists()
-            and cfg.eval_ontop_tabular_file.exists()
-        )
-    return False
-
-
 def _run_compare(cfg: EvaluationRunConfig) -> None:
     from evaluation.utils_compare import build_tabular_diff
 
@@ -194,10 +169,6 @@ def _run_compare(cfg: EvaluationRunConfig) -> None:
 def _resolve_db_setup(cfg: EvaluationRunConfig, args: argparse.Namespace) -> str:
     if args.db_setup != "auto":
         return args.db_setup
-    if args.method == "ontop":
-        return "dump"
-    if args.method == "rodi":
-        return "rodi"
     return "rodi" if cfg.qpair_dir.exists() else "dump"
 
 
@@ -225,16 +196,7 @@ def _run_dataset(cfg: EvaluationRunConfig, args: argparse.Namespace) -> None:
             print(f"Log file  : {log_file}")
             print(f"{'=' * 72}")
 
-            if args.method == "ontop" and db_setup == "rodi":
-                raise ValueError("RODI DB setup is not allowed with --method ontop. Use --db-setup dump or none.")
-
             if args.method == "rodi":
-                if db_setup == "dump":
-                    prepare_database_from_dump(cfg)
-                elif db_setup == "none":
-                    ensure_dataset_database_ready(cfg)
-                elif db_setup != "rodi":
-                    raise ValueError(f"Unsupported db setup mode: {db_setup}")
                 run_rodi(cfg, include_setup=True)
             else:
                 if db_setup == "rodi":
@@ -262,26 +224,6 @@ def _run_dataset(cfg: EvaluationRunConfig, args: argparse.Namespace) -> None:
 def main() -> None:
     args = parse_args()
     dataset_dirs = _select_dataset_dirs(args.run_path, args.dataset)
-
-    if not args.force_all:
-        skipped_existing = []
-        filtered_dataset_dirs = []
-        for dataset_dir in dataset_dirs:
-            cfg = _build_config(dataset_dir, args)
-            if _has_existing_evaluation(cfg, args):
-                skipped_existing.append(dataset_dir.name)
-            else:
-                filtered_dataset_dirs.append(dataset_dir)
-
-        if skipped_existing:
-            print("Skipping datasets with existing evaluation artifacts:")
-            for name in skipped_existing:
-                print(f"  - {name}")
-
-        dataset_dirs = filtered_dataset_dirs
-        if not dataset_dirs:
-            print("No datasets left to evaluate after skipping existing evaluation artifacts.")
-            sys.exit(0)
 
     overall_ok = True
     for dataset_dir in dataset_dirs:

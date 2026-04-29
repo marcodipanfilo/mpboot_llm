@@ -1,139 +1,16 @@
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
+import re
 from pathlib import Path
 
 from evaluation.common import EvaluationRunConfig
 from evaluation.database import ensure_dataset_database_ready
-from parsers.dump_split import discover_schemas
 
 
 JAVA_CP = "target/classes:target/dependency/*:lib/*"
 MAIN_CLASS = "com.fluidops.rdb2rdfbench.Main"
-_RODI_JVM_FLAGS = [
-    "-Djava.util.Arrays.useLegacyMergeSort=true",
-]
-_RODI_DATATYPE_PATCHES = [
-    ("xsd:anyURI", "xsd:string"),
-    ("http://www.w3.org/2001/XMLSchema#anyURI", "http://www.w3.org/2001/XMLSchema#string"),
-    ("xsd:nonNegativeInteger", "xsd:integer"),
-    ("http://www.w3.org/2001/XMLSchema#nonNegativeInteger", "http://www.w3.org/2001/XMLSchema#integer"),
-    ("xsd:positiveInteger", "xsd:integer"),
-    ("http://www.w3.org/2001/XMLSchema#positiveInteger", "http://www.w3.org/2001/XMLSchema#integer"),
-    ("xsd:unsignedLong", "xsd:integer"),
-    ("http://www.w3.org/2001/XMLSchema#unsignedLong", "http://www.w3.org/2001/XMLSchema#integer"),
-    ("xsd:unsignedInt", "xsd:integer"),
-    ("http://www.w3.org/2001/XMLSchema#unsignedInt", "http://www.w3.org/2001/XMLSchema#integer"),
-]
-
-
-def _table_schema_map_from_dump(dump_file: Path) -> dict[str, str]:
-    lines = dump_file.read_text(encoding="utf-8", errors="replace").splitlines()
-    current_schema: str | None = None
-    table_to_schema: dict[str, str] = {}
-
-    set_search_path_re = re.compile(r'^\s*SET\s+search_path\s*=\s*("?)([A-Za-z_][A-Za-z0-9_]*)\1\b', re.IGNORECASE)
-    create_schema_table_re = re.compile(
-        r'^\s*CREATE\s+TABLE\s+(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))\.(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))',
-        re.IGNORECASE,
-    )
-    create_table_re = re.compile(r'^\s*CREATE\s+TABLE\s+(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))', re.IGNORECASE)
-
-    for line in lines:
-        search_path_match = set_search_path_re.match(line)
-        if search_path_match:
-            current_schema = search_path_match.group(2)
-            continue
-
-        qualified_match = create_schema_table_re.match(line)
-        if qualified_match:
-            schema = qualified_match.group(1) or qualified_match.group(2)
-            table = qualified_match.group(3) or qualified_match.group(4)
-            table_to_schema[table] = schema
-            table_to_schema.setdefault(table.lower(), schema)
-            continue
-
-        create_match = create_table_re.match(line)
-        if create_match and current_schema:
-            table = create_match.group(1) or create_match.group(2)
-            table_to_schema[table] = current_schema
-            table_to_schema.setdefault(table.lower(), current_schema)
-
-    return table_to_schema
-
-
-def _qualify_sql_tables(sql: str, table_to_schema: dict[str, str]) -> str:
-    def replace(match: re.Match[str]) -> str:
-        keyword = match.group("keyword")
-        quote = match.group("quote") or ""
-        table = match.group("table")
-        schema = table_to_schema.get(table) or table_to_schema.get(table.lower())
-        if not schema:
-            return match.group(0)
-
-        after = match.group("after")
-        if after and after.lstrip().startswith("."):
-            return match.group(0)
-
-        if quote:
-            qualified = f'{keyword} "{schema}"."{table}"'
-        else:
-            qualified = f"{keyword} {schema}.{table}"
-        return qualified + (after or "")
-
-    pattern = re.compile(
-        r'(?P<keyword>\bFROM|\bJOIN|\bUPDATE|\bINTO)\s+'
-        r'(?P<quote>"?)(?P<table>[A-Za-z_][A-Za-z0-9_]*)'
-        r'(?P=quote)(?P<after>\s*\.)?',
-        re.IGNORECASE,
-    )
-    return pattern.sub(replace, sql)
-
-
-def _qualify_rodi_mapping_sql(content: str, cfg: EvaluationRunConfig) -> tuple[str, list[str]]:
-    schemas = discover_schemas(cfg.dump_file.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True))
-    table_to_schema = _table_schema_map_from_dump(cfg.dump_file)
-    if not table_to_schema:
-        return content, []
-
-    if schemas == [cfg.dataset_name]:
-        return content, []
-
-    replacements: list[str] = []
-
-    def replace_sql_query(match: re.Match[str]) -> str:
-        sql = match.group("sql")
-        updated = _qualify_sql_tables(sql, table_to_schema)
-        if updated != sql:
-            replacements.append("rr:sqlQuery")
-        return match.group("prefix") + updated + match.group("suffix")
-
-    def replace_table_name(match: re.Match[str]) -> str:
-        table = match.group("table")
-        schema = table_to_schema.get(table) or table_to_schema.get(table.lower())
-        if not schema:
-            return match.group(0)
-        replacements.append(f'rr:tableName "{table}"')
-        return (
-            f'{match.group("indent")}rr:logicalTable '
-            f'[ rr:sqlQuery \'\'\'SELECT * FROM "{schema}"."{table}"\'\'\' ] ;'
-        )
-
-    content = re.sub(
-        r'(?P<prefix>rr:sqlQuery\s+("""|\'\'\'))(?P<sql>.*?)(?P<suffix>\2)',
-        replace_sql_query,
-        content,
-        flags=re.DOTALL,
-    )
-    content = re.sub(
-        r'(?P<indent>^[ \t]*)rr:logicalTable\s+\[\s*rr:tableName\s+"(?P<table>[^"]+)"\s*\]\s*;',
-        replace_table_name,
-        content,
-        flags=re.MULTILINE,
-    )
-    return content, replacements
 
 
 def _ensure_rodi_layout(cfg: EvaluationRunConfig) -> None:
@@ -172,10 +49,26 @@ def _prepare_rodi_scenario_queries(cfg: EvaluationRunConfig) -> Path | None:
     for existing in scenario_queries_dir.glob("*.qpair"):
         existing.unlink()
 
+    original_queries_dir = Path("datasets") / "rodi" / cfg.dataset_name / "queries"
     copied = 0
     for source_query in sorted(source_queries_dir.glob("*.qpair")):
         destination_name = source_query.name.replace("_pg_compatible", "")
-        shutil.copy2(source_query, scenario_queries_dir / destination_name)
+        destination_path = scenario_queries_dir / destination_name
+        source_content = source_query.read_text(encoding="utf-8")
+
+        original_query = original_queries_dir / destination_name
+        if original_query.exists():
+            original_content = original_query.read_text(encoding="utf-8")
+            sparql_match = re.search(r"(\n\s*sparql\s*=\s*.*)", original_content, flags=re.DOTALL)
+            if sparql_match:
+                source_content = re.sub(
+                    r"(\n\s*sparql\s*=\s*.*)",
+                    sparql_match.group(1),
+                    source_content,
+                    flags=re.DOTALL,
+                )
+
+        destination_path.write_text(source_content, encoding="utf-8")
         copied += 1
 
     if copied == 0:
@@ -233,39 +126,38 @@ def prepare_rodi_mapping(cfg: EvaluationRunConfig) -> Path:
     content = cfg.mapping_file.read_text(encoding="utf-8")
     patched_content = content
 
-    schema_patch_lines: list[str] = []
-    patched_content, schema_replacements = _qualify_rodi_mapping_sql(patched_content, cfg)
-    if schema_replacements:
-        schema_patch_lines.append("Qualified mapping SQL with dump-derived schema names for RODI.")
-        schema_patch_lines.append(f"Total SQL/tableName rewrites: {len(schema_replacements)}")
-        print("  -> RODI schema qualification patch applied")
-        print(f"     rewrote {len(schema_replacements)} logical table declarations/queries")
-
     replacements = []
     total_replacements = 0
 
-    for source, target in _RODI_DATATYPE_PATCHES:
-        count = patched_content.count(source)
-        if count > 0:
-            patched_content = patched_content.replace(source, target)
-            replacements.append(f"{source} -> {target} ({count} occurrences)")
-            total_replacements += count
+    count_short = patched_content.count("xsd:anyURI")
+    if count_short > 0:
+        patched_content = patched_content.replace("xsd:anyURI", "xsd:string")
+        replacements.append(f"xsd:anyURI -> xsd:string ({count_short} occurrences)")
+        total_replacements += count_short
+
+    count_long = patched_content.count("http://www.w3.org/2001/XMLSchema#anyURI")
+    if count_long > 0:
+        patched_content = patched_content.replace(
+            "http://www.w3.org/2001/XMLSchema#anyURI",
+            "http://www.w3.org/2001/XMLSchema#string",
+        )
+        replacements.append(
+            "http://www.w3.org/2001/XMLSchema#anyURI -> "
+            f"http://www.w3.org/2001/XMLSchema#string ({count_long} occurrences)"
+        )
+        total_replacements += count_long
 
     if patched_content != content:
-        if replacements:
-            print("  -> RODI datatype compatibility patch applied")
-            for replacement in replacements:
-                print(f"     {replacement}")
-        header_lines = [
-            "# ------------------------------------------------------------",
-            "# RODI PATCH APPLIED",
-        ]
-        header_lines.extend(f"# {line}" for line in schema_patch_lines)
-        if total_replacements:
-            header_lines.append("# Replaced unsupported XML Schema datatypes for DB2Triples compatibility.")
-            header_lines.append(f"# Total datatype replacements: {total_replacements}")
-        header_lines.append("# ------------------------------------------------------------")
-        header = "\n".join(header_lines) + "\n\n"
+        print("  -> RODI patch applied: xsd:anyURI -> xsd:string")
+        for replacement in replacements:
+            print(f"     {replacement}")
+        header = f"""# ------------------------------------------------------------
+# RODI PATCH APPLIED
+# Replaced xsd:anyURI -> xsd:string for DB2Triples compatibility.
+# Total replacements: {total_replacements}
+# ------------------------------------------------------------
+
+"""
         patched_content = header + patched_content
         cfg.rodi_patch_file.write_text(patched_content, encoding="utf-8")
         mapping_dst.write_text(patched_content, encoding="utf-8")
@@ -301,7 +193,6 @@ def get_rodi_report_paths(cfg: EvaluationRunConfig) -> tuple[Path, Path]:
 def _base_cmd(cfg: EvaluationRunConfig) -> list[str]:
     return [
         "java",
-        *_RODI_JVM_FLAGS,
         "-cp",
         JAVA_CP,
         MAIN_CLASS,

@@ -7,7 +7,6 @@ import re
 import subprocess
 import time
 from pathlib import Path
-from threading import Thread
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
@@ -58,7 +57,7 @@ def start_ontop_endpoint(
     ontology_file: Path,
     property_file: Path,
     cfg: EvaluationRunConfig,
-) -> tuple[subprocess.Popen, Path]:
+) -> subprocess.Popen:
     ontop_exe = cfg.ontop_dir / "ontop"
     if not ontop_exe.exists():
         raise FileNotFoundError(f"Ontop executable not found: {ontop_exe}")
@@ -78,42 +77,24 @@ def start_ontop_endpoint(
     ]
     print("[EVAL] Starting Ontop endpoint...")
     print("[CMD]", " ".join(cmd))
-    log_file = cfg.output_dir / "ontop_endpoint.log"
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-    log_file.write_text("", encoding="utf-8")
-    proc = subprocess.Popen(
+    return subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
     )
-    if proc.stdout is not None:
-        def _pump_output() -> None:
-            with log_file.open("a", encoding="utf-8") as handle:
-                for line in proc.stdout:
-                    handle.write(line)
-                    handle.flush()
-
-        Thread(target=_pump_output, daemon=True).start()
-    return proc, log_file
 
 
-def wait_for_endpoint(
-    proc: subprocess.Popen,
-    cfg: EvaluationRunConfig,
-    log_file: Path,
-    timeout_seconds: int = 30,
-) -> None:
+def wait_for_endpoint(proc: subprocess.Popen, cfg: EvaluationRunConfig, timeout_seconds: int = 30) -> None:
     endpoint_url = f"http://127.0.0.1:{cfg.ontop_port}/sparql"
     print(f"[EVAL] Waiting for Ontop endpoint on {endpoint_url} ...")
     start = time.time()
     while time.time() - start < timeout_seconds:
         if proc.poll() is not None:
-            captured = log_file.read_text(encoding="utf-8") if log_file.exists() else ""
-            raise RuntimeError(
-                "Ontop endpoint terminated during startup.\n"
-                f"Startup log: {log_file}\n{captured}"
-            )
+            captured = ""
+            if proc.stdout is not None:
+                captured = proc.stdout.read()
+            raise RuntimeError("Ontop endpoint terminated during startup.\n" + captured)
 
         try:
             response = requests.get(f"http://127.0.0.1:{cfg.ontop_port}", timeout=2)
@@ -124,11 +105,7 @@ def wait_for_endpoint(
             pass
         time.sleep(1)
 
-    captured = log_file.read_text(encoding="utf-8") if log_file.exists() else ""
-    raise TimeoutError(
-        f"Ontop endpoint did not become reachable within {timeout_seconds}s.\n"
-        f"Startup log: {log_file}\n{captured}"
-    )
+    raise TimeoutError(f"Ontop endpoint did not become reachable within {timeout_seconds}s.")
 
 
 def stop_ontop_endpoint(proc: Optional[subprocess.Popen]) -> None:
@@ -415,8 +392,8 @@ def evaluate_with_ontop_like_llm4vkg(cfg: EvaluationRunConfig) -> None:
 
     proc: Optional[subprocess.Popen] = None
     try:
-        proc, log_file = start_ontop_endpoint(cfg.obda_file, cfg.ontology_file, cfg.ontop_properties_file, cfg)
-        wait_for_endpoint(proc, cfg, log_file)
+        proc = start_ontop_endpoint(cfg.obda_file, cfg.ontology_file, cfg.ontop_properties_file, cfg)
+        wait_for_endpoint(proc, cfg)
 
         json_results: List[Dict[str, Any]] = []
         qpair_files = sorted(path for path in cfg.qpair_dir.iterdir() if path.is_file() and path.suffix == ".qpair")
