@@ -151,10 +151,27 @@ def load_json_optional(path: str, label: str = "") -> Dict:
 # ============================================================
 
 def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
+    """
+    Build a prefix map from the OWL file.
+
+    For OWL/XML files: reads <Prefix name="..." IRI="..."/> elements.
+    For RDF/XML files: reads xmlns: declarations from the root element.
+
+    The empty-string key "" always holds the authoritative base IRI —
+    the namespace that actually contains the ontology's own classes.
+    This is obtained via ontology_explorer (which verifies the IRI against
+    real class counts, correcting "document IRI != class namespace" cases
+    like NPD where xml:base != the namespace of the classes).
+    """
+    import os as _os
     prefixes: Dict[str, str] = {}
+
+    # ── Step 1: collect all declared prefix→IRI pairs from the file ──────────
     try:
         tree = ET.parse(owl_file)
         root = tree.getroot()
+
+        # OWL/XML: explicit <Prefix> elements
         for elem in root.iter():
             local = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
             if local == "Prefix":
@@ -162,32 +179,73 @@ def parse_ontology_prefixes(owl_file: str) -> Dict[str, str]:
                 iri  = elem.get("IRI", "")
                 if iri:
                     prefixes[name] = iri
-        if "" not in prefixes:
-            base = (root.get("{http://www.w3.org/XML/1998/namespace}base")
-                    or root.get("ontologyIRI", ""))
-            if base:
-                prefixes[""] = base if base.endswith("#") else base.rstrip("/") + "#"
+
+        # RDF/XML: xmlns: declarations are invisible to ET — parse raw text
+        if not prefixes:
+            with open(owl_file, "r", encoding="utf-8", errors="replace") as f:
+                head = f.read(4096)
+            for m in re.finditer(
+                r'xmlns(?::([a-zA-Z0-9_\-]*))?\s*=\s*"([^"]+)"', head
+            ):
+                ns_name = m.group(1) or ""
+                ns_iri  = m.group(2)
+                if ns_iri and ns_iri not in prefixes.values():
+                    prefixes[ns_name] = ns_iri
+
     except ET.ParseError:
-        with open(owl_file, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
-        for m in re.finditer(r'<Prefix\s+name="([^"]*)"\s+IRI="([^"]+)"', content):
-            prefixes[m.group(1)] = m.group(2)
-        if "" not in prefixes:
-            m = re.search(r'ontologyIRI="([^"]+)"', content)
-            if m:
-                prefixes[""] = m.group(1) if m.group(1).endswith("#") else m.group(1).rstrip("/") + "#"
+        # Fallback: regex scan
+        try:
+            with open(owl_file, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read(4096)
+            for m in re.finditer(r'<Prefix\s+name="([^"]*)"\s+IRI="([^"]+)"', content):
+                prefixes[m.group(1)] = m.group(2)
+        except Exception:
+            pass
     except FileNotFoundError:
         print(f"  [WARN] Ontology file not found: {owl_file}")
+        return prefixes
+
+    # ── Step 2: override "" with the authoritative base IRI from ontology_explorer
+    # ontology_explorer verifies the IRI against actual class counts, so it
+    # correctly handles cases where xml:base / ontologyIRI differs from the
+    # namespace the classes actually live under (e.g. NPD: npd-v2-merge# vs npd-v2#).
+    try:
+        _prev = _os.environ.get("MPBOOT_ONTOLOGY_PATH", "")
+        _os.environ["MPBOOT_ONTOLOGY_PATH"] = owl_file
+        from parsers.ontology_explorer import (
+            _load_ontology as _oe_load,
+            _get_base_iri  as _oe_base,
+            _OWL_ONTO, _BASE_IRI,
+        )
+        import parsers.ontology_explorer as _oe_mod
+        # Reset if a different ontology was cached
+        if _oe_mod._BASE_IRI and _oe_mod.ONTOLOGY_PATH != owl_file:
+            _oe_mod._OWL_ONTO = None
+            _oe_mod._BASE_IRI = None
+            _oe_mod._LOADED_FROM = None
+            _oe_mod._ALL_ONTOLOGY_NAMESPACES.clear()
+        _oe_load()
+        authoritative_base = _oe_base()
+        if authoritative_base:
+            prefixes[""] = authoritative_base
+        if _prev:
+            _os.environ["MPBOOT_ONTOLOGY_PATH"] = _prev
+    except Exception as _e:
+        print(f"  [WARN] ontology_explorer base IRI lookup failed: {_e} — using raw prefix")
+        # Keep whatever "" we got from step 1 as fallback
+
     return prefixes
 
 
 def get_base_iri(prefixes: Dict[str, str]) -> str:
+    """Return the authoritative base IRI (always stored under key "")."""
     if "" in prefixes:
-        return prefixes[""]
+        iri = prefixes[""]
+        return iri if iri.endswith("#") else iri.rstrip("/") + "#"
     standard = {"owl", "rdf", "rdfs", "xsd", "xml", "xsp", "swrl", "swrlb", "protege"}
     for name, iri in prefixes.items():
         if name not in standard:
-            return iri
+            return iri if iri.endswith("#") else iri.rstrip("/") + "#"
     return "http://ontology#"
 
 
@@ -1068,15 +1126,52 @@ def section_header(title: str) -> str:
     ])
 
 
-def build_prefix_block(base_iri: str) -> str:
-    return "\n".join([
+def build_prefix_block(base_iri: str, extra_prefixes: Dict[str, str] = None) -> str:
+    """
+    Build the Turtle @prefix header.
+
+    Always emits the four R2RML standard prefixes plus @prefix : <base_iri>.
+    Also emits any additional ontology-specific namespaces from extra_prefixes
+    so that classes/properties from non-base namespaces (e.g. npd-v2-ptl:,
+    skos:, foaf:) are correctly resolvable in the generated TTL.
+
+    Standard W3C prefixes (owl, rdf, rdfs, xsd, xml) that duplicate the
+    already-emitted hardcoded lines are skipped to avoid duplicate declarations.
+    """
+    SKIP_NAMES = {"", "owl", "rdf", "rdfs", "xsd", "xml",
+                  "xsp", "swrl", "swrlb", "protege"}
+    SKIP_IRIS  = {
+        "http://www.w3.org/2002/07/owl#",
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+        "http://www.w3.org/2000/01/rdf-schema#",
+        "http://www.w3.org/2001/XMLSchema#",
+        "http://www.w3.org/XML/1998/namespace",
+        "http://www.w3.org/ns/r2rml#",
+    }
+
+    lines = [
         "@prefix rr:   <http://www.w3.org/ns/r2rml#> .",
         "@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .",
         "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .",
         "@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .",
         f"@prefix :     <{base_iri}> .",
-        "",
-    ])
+    ]
+
+    if extra_prefixes:
+        for name, iri in sorted(extra_prefixes.items()):
+            if name in SKIP_NAMES:
+                continue
+            ns = iri if iri.endswith("#") or iri.endswith("/") else iri + "#"
+            if ns in SKIP_IRIS or ns == base_iri:
+                continue
+            # Sanitise prefix name: Turtle prefix must be a valid NCName
+            safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", name)
+            if not safe_name:
+                continue
+            lines.append(f"@prefix {safe_name}:  <{ns}> .")
+
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _fix_id_templates(entity_entries: Dict, tables_structure: Dict) -> int:
@@ -1206,22 +1301,44 @@ def run_r2rml_generation():
     print(f"  Base IRI : {base_iri}")
 
     # Parse object vs data property names for SEw rescue (object props need joins, not literals)
+    # Supports both OWL/XML (Declaration elements) and RDF/XML (owl:ObjectProperty elements).
     ont_obj_props:  Set[str] = set()
     ont_data_props: Set[str] = set()
     try:
         _ont_root = ET.parse(ONTOLOGY_FILE).getroot()
-        for _el in _ont_root.iter():
-            _tag = _el.tag.split("}")[-1] if "}" in _el.tag else _el.tag
-            if _tag == "Declaration":
-                _ch = list(_el)
-                if _ch:
-                    _ctag = _ch[0].tag.split("}")[-1] if "}" in _ch[0].tag else _ch[0].tag
-                    _iri  = _ch[0].get("IRI", "") or _ch[0].get("abbreviatedIRI", "")
-                    _name = _iri.split("#")[-1] if "#" in _iri else _iri.split("/")[-1]
-                    if _ctag == "ObjectProperty" and _name:
-                        ont_obj_props.add(_name)
-                    elif _ctag == "DataProperty" and _name:
-                        ont_data_props.add(_name)
+        _root_tag = _ont_root.tag.split("}")[-1] if "}" in _ont_root.tag else _ont_root.tag
+
+        if _root_tag == "Ontology":
+            # OWL/XML: properties declared as <Declaration><ObjectProperty .../></Declaration>
+            for _el in _ont_root.iter():
+                _tag = _el.tag.split("}")[-1] if "}" in _el.tag else _el.tag
+                if _tag == "Declaration":
+                    _ch = list(_el)
+                    if _ch:
+                        _ctag = _ch[0].tag.split("}")[-1] if "}" in _ch[0].tag else _ch[0].tag
+                        _iri  = _ch[0].get("IRI", "") or _ch[0].get("abbreviatedIRI", "")
+                        _name = _iri.split("#")[-1] if "#" in _iri else _iri.split("/")[-1]
+                        if _ctag == "ObjectProperty" and _name:
+                            ont_obj_props.add(_name)
+                        elif _ctag == "DataProperty" and _name:
+                            ont_data_props.add(_name)
+        else:
+            # RDF/XML: properties declared as top-level <owl:ObjectProperty rdf:about="..."/>
+            # and <owl:DatatypeProperty rdf:about="..."/> elements
+            OWL_NS = "http://www.w3.org/2002/07/owl#"
+            RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+            _obj_tags  = {f"{{{OWL_NS}}}ObjectProperty"}
+            _data_tags = {f"{{{OWL_NS}}}DatatypeProperty"}
+            for _el in _ont_root:
+                _iri = _el.get(f"{{{RDF_NS}}}about") or _el.get(f"{{{RDF_NS}}}ID", "")
+                _name = _iri.split("#")[-1] if "#" in _iri else _iri.split("/")[-1]
+                if not _name:
+                    continue
+                if _el.tag in _obj_tags:
+                    ont_obj_props.add(_name)
+                elif _el.tag in _data_tags:
+                    ont_data_props.add(_name)
+
         print(f"  Object properties: {len(ont_obj_props)}, Data properties: {len(ont_data_props)}")
     except Exception as _e:
         print(f"  [WARN] Could not parse ontology properties: {_e}")
@@ -1277,7 +1394,7 @@ def run_r2rml_generation():
     # Tables with _collision_unresolved=True get a warning comment but
     # are NEVER dropped — the user's data is always emitted.
     print("\nGenerating R2RML Turtle...")
-    sections: List[str] = [build_prefix_block(base_iri)]
+    sections: List[str] = [build_prefix_block(base_iri, extra_prefixes=prefixes)]
 
     # SE
     sections.append(section_header("SE — Strong Entities"))
@@ -1556,6 +1673,48 @@ def run_r2rml_generation():
                             pass
 
                 if is_obj_prop and target_iri:
+                    # Resolve target_pk from the actual target entity rather than
+                    # using the "id" default — which is wrong whenever the target
+                    # table's PK column is named something other than "id" (e.g. "uri").
+                    #
+                    # Priority:
+                    #   1. Extract from the target entity's subject template placeholders
+                    #      (most reliable — phase 3 built it from actual PKs).
+                    #   2. Look up primary_keys in tables_structure for the target table.
+                    #   3. Keep "id" as last resort only.
+                    resolved_target_pk = None
+
+                    # Find the target entity entry to read its template
+                    for oe in entity_entries.values():
+                        if oe.get("triple_map_iri") == target_iri:
+                            tgt_tmpl = oe.get("subject", {}).get("template", "")
+                            tgt_cols = _re.findall(r'\{([^}]+)\}', tgt_tmpl)
+                            if tgt_cols:
+                                resolved_target_pk = tgt_cols[-1]  # last placeholder = PK
+                            # Also check tables_structure for the target logical table
+                            if not resolved_target_pk:
+                                tgt_tbl = oe.get("logical_table", "")
+                                tgt_pks = tables_structure.get(tgt_tbl, {}).get("primary_keys", [])
+                                if tgt_pks:
+                                    resolved_target_pk = tgt_pks[0]
+                            break
+
+                    if not resolved_target_pk and target_iri:
+                        # Fallback: derive table name from IRI suffix and check tables_structure
+                        tgt_tail = target_iri.split(":")[-1]
+                        for pfx in ("SE_SH_", "SE_", "SEw_", "SR_", "SRR_"):
+                            if tgt_tail.startswith(pfx):
+                                tgt_tail = tgt_tail[len(pfx):]
+                                break
+                        tgt_pks = tables_structure.get(tgt_tail, {}).get("primary_keys", [])
+                        if tgt_pks:
+                            resolved_target_pk = tgt_pks[0]
+
+                    if resolved_target_pk and resolved_target_pk != target_pk:
+                        print(f"  [SEw-rescue] {t}: target_pk "
+                              f"'{target_pk}' → '{resolved_target_pk}' "
+                              f"(from target entity template/tables_structure)")
+                        target_pk = resolved_target_pk
                     # Emit as OBJECT PROPERTY with join
                     rescue_block = "\n".join([
                         f"# ── SEw_{t} [property of {owner_tbl}: {data_col}] ────────────────────",
