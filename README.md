@@ -1,57 +1,401 @@
 # LLM_MPBoot
 
-LLM_MPBoot is a system that leverages Large Language Models to automatically generate mappings between relational databases and ontologies. Given a relational database schema and a target ontology, the system uses LLMs to produce candidate mappings (e.g., in R2RML or similar mapping languages) that describe how database tables and columns relate to ontology classes and properties. The pipeline supports bootstrapping ontology-based data access (OBDA) setups by reducing the manual effort traditionally required to create these mappings, and allows experimentation with different LLM models to compare mapping quality.
+LLM_MPBoot is a pipeline for generating ontology mappings from relational database dumps and target ontologies using LLMs.
 
-## Getting Started
+The current workflow is script-driven:
+- bootstrap the environment
+- optionally download the selected RODI datasets
+- generate PostgreSQL-compatible dataset copies
+- generate OWL/XML ontology files where needed
+- run the mapping pipeline for one dataset or for a full batch
+- evaluate archived mapping runs with RODI and/or Ontop
 
-### 1. Clone the Repository
+## Requirements
+
+- Python 3.9+
+- Java 11+ for ROBOT, Ontop, and RODI
+- `curl`
+- `git`
+- `unzip`
+- Docker
+- either `mvn` or Docker access to the `maven` image
+
+## Main scripts
+
+All commands below assume you are at the repository root:
 
 ```bash
-git clone https://gitlab.inf.unibz.it/in2data/mpboot_llm.git
 cd mpboot_llm
-code .
 ```
 
-### 2. Create and Activate a Virtual Environment
+### 1. Bootstrap
+
+Create the virtual environment, install Python dependencies, and install the local evaluation/tooling stack:
 
 ```bash
-python3.9 -m venv .venv
-source .venv/bin/activate
-python -m pip install -U pip
+bash scripts/bootstrap.sh
 ```
 
-### 3. Install Dependencies
+This bootstrap now also:
+
+- installs ROBOT under `.tools/robot/`
+- installs Ontop CLI under `.tools/ontop/`
+- clones and builds RODI under `.tools/rodi/`
+- installs the PostgreSQL JDBC driver under `.tools/ontop/jdbc/`
+- starts a PostgreSQL 11 Docker container named `mpboot-postgres`
+- creates a repo-local `psql` wrapper at `.tools/bin/psql_docker.sh`
+
+The Python evaluation dependencies used by `scripts/evaluation.sh`, including `requests` and `psycopg2-binary`, are also installed here.
+
+The bootstrap logic is split into smaller scripts under `scripts/` and orchestrated by `scripts/bootstrap.sh`:
+
+- `bootstrap_python_env.sh`
+- `bootstrap_robot.sh`
+- `bootstrap_ontop.sh`
+- `bootstrap_jdbc.sh`
+- `bootstrap_rodi.sh`
+- `bootstrap_postgres.sh`
+- `bootstrap_psql_wrapper.sh`
+- `bootstrap_download_rodi_datasets.sh`
+
+To also download the selected RODI benchmark datasets into `datasets/rodi/`:
 
 ```bash
-pip install -r requirements.txt
+bash scripts/bootstrap.sh --download-rodi
 ```
 
-### 4. Create a `.env` File
+The bootstrap dataset download is intentionally limited to this fixed subset:
 
-Create a `.env` file in the project root and add the required environment variables (e.g., API keys for the LLM provider you plan to use).
+- `cmt_denormalized`
+- `cmt_renamed`
+- `cmt_structured`
+- `conference_nofks`
+- `conference_renamed`
+- `conference_structured`
+- `mondial_rel`
+- `npd_atomic_tests`
+- `sigkdd_mixed`
+- `sigkdd_renamed`
+- `sigkdd_structured`
 
-### 5. Select the Python Interpreter in VS Code
+When `--download-rodi` is used, the script deletes the existing `datasets/rodi/` directory first and then repopulates it.
 
-Open the Command Palette (`Ctrl+Shift+P`) and choose **Python: Select Interpreter**, then point it to:
+### 2. Generate PostgreSQL-compatible datasets
 
-```
-.venv/bin/python
-```
-
-## Configuration
-
-The file `config/llm_config.py` controls which LLM model is used by the pipeline. Open it and update the model name or parameters to switch between different models.
-
-## Running the Pipeline
-
-Before running, clear any old results or output files:
+Build the PostgreSQL-compatible dataset tree from `datasets/rodi/`:
 
 ```bash
-python src/tests/clear_files.py --confirm
+bash scripts/create_pg_compatible_dataset.sh datasets/rodi
 ```
 
-Then run the full pipeline:
+This writes to:
+
+```text
+pg_compatible/outputs/data_pg_compatible/
+```
+
+### 3. Generate OWL/XML ontology files
+
+Some datasets provide `ontology.ttl` instead of `ontology.owl`. Generate `ontology.owl` files in OWL/XML syntax with ROBOT:
 
 ```bash
-python src/tests/pipeline_run.py
+bash scripts/generate_owlxml_ontologies.sh pg_compatible/outputs/data_pg_compatible
 ```
+
+To do this for a single dataset only:
+
+```bash
+bash scripts/generate_owlxml_ontologies.sh pg_compatible/outputs/data_pg_compatible --dataset mondial_rel
+```
+
+To overwrite already existing `ontology.owl` files:
+
+```bash
+bash scripts/generate_owlxml_ontologies.sh pg_compatible/outputs/data_pg_compatible --overwrite
+```
+
+### 4. Configure the LLM
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+Fill in the API key you want to use, for example:
+
+```text
+ANTHROPIC_API_KEY=your_real_key_here
+```
+
+The provider and model mapping are currently selected in:
+
+- [src/config/llm_config.py](src/config/llm_config.py)
+
+The two main settings are:
+
+- `SELECTED_PROVIDER`
+- `MODELS`
+
+### 5. Run mappings for a single dataset
+
+Run the mapping pipeline for one staged dataset:
+
+```bash
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/mondial_rel
+```
+
+Dry-run only:
+
+```bash
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/mondial_rel --dry-run
+```
+
+Resume from a specific phase:
+
+```bash
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/mondial_rel --from phase1
+```
+
+Run only one phase:
+
+```bash
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/mondial_rel --only phase7
+```
+
+### 6. Run mappings for all datasets
+
+Run the full batch:
+
+```bash
+bash scripts/create_all_mapping.sh pg_compatible/outputs/data_pg_compatible
+```
+
+Dry-run the full batch:
+
+```bash
+bash scripts/create_all_mapping.sh pg_compatible/outputs/data_pg_compatible --dry-run
+```
+
+Run one dataset only through the batch runner:
+
+```bash
+bash scripts/create_all_mapping.sh pg_compatible/outputs/data_pg_compatible --dataset mondial_rel
+```
+
+Continue after failures:
+
+```bash
+bash scripts/create_all_mapping.sh pg_compatible/outputs/data_pg_compatible --keep-going
+```
+
+Resume each dataset from a specific phase:
+
+```bash
+bash scripts/create_all_mapping.sh pg_compatible/outputs/data_pg_compatible --from phase1
+```
+
+### 7. Evaluate archived runs
+
+The evaluation runner works on archived dataset outputs under:
+
+```text
+outputs/<model>/<batch_timestamp>/<dataset>/
+```
+
+It supports two methods imported from the `mapping-strategy_fixes` work:
+
+- `rodi`
+- `ontop`
+
+Run both methods for a whole archived batch:
+
+```bash
+bash scripts/evaluation.sh outputs/<model>/<batch_timestamp> --method all
+```
+
+Run only one dataset:
+
+```bash
+bash scripts/evaluation.sh outputs/<model>/<batch_timestamp> \
+  --dataset mondial_rel \
+  --method all
+```
+
+Run only the Ontop-style evaluation:
+
+```bash
+bash scripts/evaluation.sh outputs/<model>/<batch_timestamp> \
+  --dataset mondial_rel \
+  --method ontop
+```
+
+Run only the RODI evaluation:
+
+```bash
+bash scripts/evaluation.sh outputs/<model>/<batch_timestamp> \
+  --dataset mondial_rel \
+  --method rodi
+```
+
+Compare the two tabular reports after running both:
+
+```bash
+bash scripts/evaluation.sh outputs/<model>/<batch_timestamp> \
+  --dataset mondial_rel \
+  --method all \
+  --compare-tabular
+```
+
+The evaluation runner uses these repo-local defaults unless you override them:
+
+- RODI root: `.tools/rodi`
+- Ontop dir: `.tools/ontop`
+- host: `localhost`
+- port: `5433`
+- database: `rodi`
+- user: `postgres`
+- password: `postgres`
+- psql command: `.tools/bin/psql_docker.sh`
+
+Database preparation modes:
+
+- `--db-setup auto`
+  - default
+  - uses RODI setup when the dataset exists in the local RODI benchmark checkout
+  - otherwise imports the archived `inputs/dump.sql`
+- `--db-setup rodi`
+  - prepares the DB using the local RODI benchmark scenario setup
+- `--db-setup dump`
+  - imports the archived `inputs/dump.sql` into PostgreSQL before Ontop evaluation
+- `--db-setup none`
+  - assumes the database is already prepared
+
+You can override the runtime with flags such as `--rodi-root`, `--ontop-dir`, `--db-host`, `--db-port`, `--db-name`, `--db-user`, `--db-password`, and `--db-cmd`.
+
+## Outputs
+
+### Live workspace during a run
+
+The pipeline writes its live intermediate files to:
+
+- `src/inputs/`
+- `src/outputs/`
+- `src/memory/`
+
+The final generated mapping file in the live workspace is:
+
+```text
+src/outputs/mappings/mappings_r2rml.ttl
+```
+
+### Archived outputs for batch runs
+
+The batch runner archives each dataset run under:
+
+```text
+outputs/<model>/<batch_timestamp>/<dataset>/
+```
+
+Example:
+
+```text
+outputs/claude-haiku-4-5-20251001/20260428_110804_786765/mondial_rel/
+```
+
+Each archived dataset directory contains:
+
+- `mappings_r2rml.ttl`
+- `run_metadata.json`
+- `run.log`
+- `evaluation/` after an evaluation run
+- `inputs/`
+- `workspace/`
+
+The complete workspace snapshot is preserved under:
+
+```text
+outputs/<model>/<batch_timestamp>/<dataset>/workspace/
+```
+
+That includes:
+
+- `workspace/inputs/`
+- `workspace/outputs/`
+- `workspace/memory/`
+
+### Logs
+
+For real batch runs, the stdout/stderr stream for each dataset is saved to:
+
+```text
+outputs/<model>/<batch_timestamp>/<dataset>/run.log
+```
+
+Dry-runs do not create archived files or logs.
+
+### Evaluation artifacts
+
+After running `scripts/evaluation.sh`, each evaluated dataset directory contains:
+
+- `evaluation/evaluation.log`
+- `evaluation/eval_rodi__report.txt` when `--method rodi` or `--method all` is used
+- `evaluation/eval_rodi__tabular.txt` when `--method rodi` or `--method all` is used
+- `evaluation/eval_ontop__metrics.json` when `--method ontop` or `--method all` is used
+- `evaluation/eval_ontop__summary.txt` when `--method ontop` or `--method all` is used
+- `evaluation/eval_ontop__tabular.txt` when `--method ontop` or `--method all` is used
+- `evaluation/eval_compare__tabular.diff` when `--compare-tabular` detects a mismatch
+
+## Script summary
+
+- [scripts/bootstrap.sh](scripts/bootstrap.sh)
+  - orchestrates the full bootstrap flow
+  - optionally downloads the selected RODI datasets
+
+- `scripts/_bootstrap_common.sh`
+  - shared bootstrap variables and helper functions
+
+- `scripts/bootstrap_python_env.sh`
+  - creates `.venv` and installs Python dependencies
+
+- `scripts/bootstrap_robot.sh`
+  - installs ROBOT
+
+- `scripts/bootstrap_ontop.sh`
+  - installs Ontop CLI
+
+- `scripts/bootstrap_jdbc.sh`
+  - installs the PostgreSQL JDBC driver into Ontop's `jdbc/` directory
+
+- `scripts/bootstrap_rodi.sh`
+  - clones and builds RODI
+
+- `scripts/bootstrap_postgres.sh`
+  - starts Docker PostgreSQL and ensures the target database exists
+
+- `scripts/bootstrap_psql_wrapper.sh`
+  - creates the repo-local `psql` wrapper used by evaluation
+
+- `scripts/bootstrap_download_rodi_datasets.sh`
+  - downloads the selected RODI datasets into `datasets/rodi`
+
+- [scripts/create_pg_compatible_dataset.sh](scripts/create_pg_compatible_dataset.sh)
+  - builds PostgreSQL-compatible dataset copies
+
+- [scripts/generate_owlxml_ontologies.sh](scripts/generate_owlxml_ontologies.sh)
+  - generates `ontology.owl` files from `ontology.ttl` using ROBOT
+
+- [scripts/create_mapping_single_dataset.sh](scripts/create_mapping_single_dataset.sh)
+  - runs the mapping pipeline for one dataset
+
+- [scripts/create_all_mapping.sh](scripts/create_all_mapping.sh)
+  - runs the mapping pipeline for a dataset batch and archives outputs
+
+- [scripts/evaluation.sh](scripts/evaluation.sh)
+  - evaluates archived mapping runs with RODI and/or Ontop
+
+## Current notes
+
+- The mapping phases still operate through the existing phase scripts under `src/agents/` and `src/parsers/`.
+- The single-dataset and batch orchestration logic now lives under `src/runners/`.
+- The bootstrapper now prepares the default local RODI, Ontop, JDBC, and Docker PostgreSQL setup used by the evaluation runner.
