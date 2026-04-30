@@ -78,7 +78,7 @@ def start_ontop_endpoint(
     ]
     print("[EVAL] Starting Ontop endpoint...")
     print("[CMD]", " ".join(cmd))
-    log_file = cfg.eval_dir / "ontop_endpoint.log"
+    log_file = cfg.output_dir / "ontop_endpoint.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_file.write_text("", encoding="utf-8")
     proc = subprocess.Popen(
