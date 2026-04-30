@@ -2,18 +2,28 @@
 """
 split_dump.py
 -------------
-Analyse a PostgreSQL dump file.  If it contains exactly two schemas, split it
-into two self-contained dump files – one per schema.  If only one schema is
-found the script prints a message and exits.
+Analyse a PostgreSQL dump file containing multiple schemas.
 
-Input : src/inputs/database/dump.sql
-Output: src/inputs/database/dump.sql   (first schema discovered)
-        src/inputs/database/dump_2.sql (second schema discovered)
+Modes:
+  1. Generic split mode:
+     If the dump contains exactly two schemas, split it into two self-contained
+     dump files – one per schema.
+
+  2. Keep-one-schema mode:
+     Keep only a requested schema and discard all other schema-specific content,
+     writing a single self-contained dump file.
+
+Default paths preserve the legacy behaviour:
+  Input : src/inputs/database/dump.sql
+  Output: src/inputs/database/dump.sql   (first schema discovered)
+          src/inputs/database/dump_2.sql (second schema discovered)
 """
 
+import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 # ── paths ──────────────────────────────────────────────────────────────────
 INPUT_PATH  = Path("src/inputs/database/dump.sql")
@@ -50,6 +60,74 @@ def is_global_setting(line: str) -> bool:
     return low.startswith("set ") and not low.startswith("set search_path")
 
 
+def _collect_schema_sections(lines: list[str], schemas: list[str]) -> tuple[list[str], list[str], dict[str, list[str]]]:
+    preamble: list[str] = []
+    postamble: list[str] = []
+    buf: dict[str, list[str]] = {schema: [] for schema in schemas}
+
+    current_schema: Optional[str] = None
+    in_copy_block = False
+    in_preamble = True
+    in_postamble = False
+
+    for line in lines:
+        if in_copy_block:
+            buf[current_schema].append(line)
+            if line.rstrip("\r\n") == "\\.":
+                in_copy_block = False
+            continue
+
+        if line.strip().lower().startswith("-- completed on"):
+            in_postamble = True
+
+        if in_postamble:
+            postamble.append(line)
+            continue
+
+        m = SP_RE.match(line)
+        if m:
+            name = m.group(1).lower()
+            if name in buf:
+                current_schema = name
+                in_preamble = False
+                buf[current_schema].append(line)
+                continue
+
+        m_ddl = SCHEMA_DDL_RE.match(line.strip())
+        if m_ddl:
+            target = m_ddl.group(4).lower()
+            if target in buf:
+                current_schema = target
+                in_preamble = False
+                buf[current_schema].append(line)
+                continue
+
+        if in_preamble:
+            preamble.append(line)
+            continue
+
+        if current_schema is None:
+            preamble.append(line)
+            continue
+
+        buf[current_schema].append(line)
+
+        if line.strip().lower().startswith("copy ") and "from stdin" in line.lower():
+            in_copy_block = True
+
+    return preamble, postamble, buf
+
+
+def _write_dump(path: Path, preamble: list[str], schema_lines: list[str], postamble: list[str]) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        for l in preamble:
+            f.write(l)
+        for l in schema_lines:
+            f.write(l)
+        for l in postamble:
+            f.write(l)
+
+
 def split_dump(input_path: Path) -> None:
     lines = input_path.read_text(encoding="utf-8").splitlines(keepends=True)
 
@@ -66,77 +144,7 @@ def split_dump(input_path: Path) -> None:
     schema_a, schema_b = schemas[0], schemas[1]
     print(f"Found 2 schemas: '{schema_a}' and '{schema_b}'")
 
-    # Buffers: preamble (global header), per-schema lines
-    preamble: list[str]        = []
-    postamble: list[str]       = []
-    buf: dict[str, list[str]]  = {schema_a: [], schema_b: []}
-
-    current_schema: str | None = None
-    in_copy_block = False          # inside COPY … FROM stdin data
-    in_preamble   = True           # before any schema-specific content
-    in_postamble  = False          # after final "-- completed on …" line
-
-    for line in lines:
-        # ── detect COPY block boundaries ──────────────────────────────
-        if in_copy_block:
-            # COPY data ends with a line that is exactly `\.` (+ newline)
-            buf[current_schema].append(line)
-            if line.rstrip("\r\n") == "\\.":
-                in_copy_block = False
-            continue
-
-        # ── detect postamble (dump-complete footer) ───────────────────
-        if line.strip().lower().startswith("-- completed on"):
-            in_postamble = True
-
-        if in_postamble:
-            postamble.append(line)
-            continue
-
-        # ── detect search_path switch ─────────────────────────────────
-        m = SP_RE.match(line)
-        if m:
-            name = m.group(1).lower()
-            if name in buf:
-                current_schema = name
-                in_preamble = False
-                buf[current_schema].append(line)
-                continue
-
-        # ── detect CREATE / DROP SCHEMA ───────────────────────────────
-        m_ddl = SCHEMA_DDL_RE.match(line.strip())
-        if m_ddl:
-            target = m_ddl.group(4).lower()
-            if target in buf:
-                in_preamble = False
-                buf[target].append(line)
-                continue
-
-        # ── TOC comment lines often name the schema ───────────────────
-        # e.g.  "-- name: airport; type: table data; schema: mondial_rel;"
-        toc_schema = None
-        if line.strip().startswith("--") and "schema:" in line.lower():
-            for s in (schema_a, schema_b):
-                if f"schema: {s}" in line.lower():
-                    toc_schema = s
-                    break
-
-        # ── global preamble (SET statements before any schema content) ─
-        if in_preamble:
-            preamble.append(line)
-            continue
-
-        # ── route the line to the active schema ───────────────────────
-        if current_schema is None:
-            # Shouldn't happen after preamble, but be safe
-            preamble.append(line)
-            continue
-
-        buf[current_schema].append(line)
-
-        # ── detect start of COPY block ────────────────────────────────
-        if line.strip().lower().startswith("copy ") and "from stdin" in line.lower():
-            in_copy_block = True
+    preamble, postamble, buf = _collect_schema_sections(lines, schemas)
 
     # ── write output files ────────────────────────────────────────────────
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -144,20 +152,8 @@ def split_dump(input_path: Path) -> None:
     out_a = OUTPUT_DIR / "dump.sql"
     out_b = OUTPUT_DIR / "dump_2.sql"
 
-    def write_dump(path: Path, schema_name: str, schema_lines: list[str]):
-        with open(path, "w", encoding="utf-8") as f:
-            # global header
-            for l in preamble:
-                f.write(l)
-            # schema-specific content
-            for l in schema_lines:
-                f.write(l)
-            # footer
-            for l in postamble:
-                f.write(l)
-
-    write_dump(out_a, schema_a, buf[schema_a])
-    write_dump(out_b, schema_b, buf[schema_b])
+    _write_dump(out_a, preamble, buf[schema_a], postamble)
+    _write_dump(out_b, preamble, buf[schema_b], postamble)
 
     # ── summary ───────────────────────────────────────────────────────────
     cnt_a = sum(1 for l in buf[schema_a] if l.strip().lower().startswith("create table"))
@@ -178,8 +174,52 @@ def split_dump(input_path: Path) -> None:
     print("\nDone.")
 
 
-if __name__ == "__main__":
-    if not INPUT_PATH.exists():
-        print(f"Error: {INPUT_PATH} not found.")
+def keep_only_schema(input_path: Path, schema_name: str, output_path: Optional[Path] = None) -> None:
+    lines = input_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    schemas = discover_schemas(lines)
+    schema_name = schema_name.lower()
+
+    if schema_name not in schemas:
+        print(f"Schema '{schema_name}' not found in dump. Found: {schemas or ['(none)']}")
         sys.exit(1)
-    split_dump(INPUT_PATH)
+
+    preamble, postamble, buf = _collect_schema_sections(lines, schemas)
+    output_path = output_path or input_path
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_dump(output_path, preamble, buf[schema_name], postamble)
+
+    table_count = sum(1 for l in buf[schema_name] if l.strip().lower().startswith("create table"))
+    copy_count = sum(1 for l in buf[schema_name] if l.strip().lower().startswith("copy "))
+
+    print(f"Kept only schema '{schema_name}' in {output_path}")
+    print(f"  tables : {table_count}")
+    print(f"  COPY   : {copy_count}")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Split a PostgreSQL dump by schema or keep only one schema.")
+    parser.add_argument("input_path", type=Path, nargs="?", default=INPUT_PATH, help="Path to dump.sql")
+    parser.add_argument(
+        "--keep-schema",
+        help="Keep only this schema in the output dump instead of performing a 2-way split",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Output file for --keep-schema mode. Defaults to overwriting the input dump.",
+    )
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    if not args.input_path.exists():
+        print(f"Error: {args.input_path} not found.")
+        sys.exit(1)
+    if args.keep_schema:
+        keep_only_schema(args.input_path, args.keep_schema, args.output)
+    else:
+        if args.output is not None:
+            print("--output is only supported together with --keep-schema.")
+            sys.exit(1)
+        split_dump(args.input_path)

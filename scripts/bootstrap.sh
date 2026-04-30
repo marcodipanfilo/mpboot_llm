@@ -41,6 +41,7 @@ main() {
   if [[ "${DOWNLOAD_RODI}" -eq 1 ]]; then
     run_step "bootstrap_download_rodi_datasets.sh"
   fi
+  run_step "bootstrap_prepare_rodi_dumps.sh"
   run_step "bootstrap_postgres.sh"
   run_step "bootstrap_psql_wrapper.sh"
 

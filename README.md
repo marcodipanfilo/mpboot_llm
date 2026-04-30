@@ -57,6 +57,7 @@ The bootstrap logic is split into smaller scripts under `scripts/` and orchestra
 - `bootstrap_postgres.sh`
 - `bootstrap_psql_wrapper.sh`
 - `bootstrap_download_rodi_datasets.sh`
+- `bootstrap_prepare_rodi_dumps.sh`
 
 To also download the selected RODI benchmark datasets into `datasets/rodi/`:
 
@@ -80,6 +81,14 @@ The bootstrap dataset download is intentionally limited to this fixed subset:
 
 When `--download-rodi` is used, the script deletes the existing `datasets/rodi/` directory first and then repopulates it.
 
+`mondial_rel` also receives a repo-specific preparation step during bootstrap. Its original RODI dump contains two schemas, but the mapping pipeline currently assumes one schema per dataset dump. The bootstrap preparation step rewrites:
+
+```text
+datasets/rodi/mondial_rel/dump.sql
+```
+
+so that it keeps only the `mondial_rdf2sql_standard` schema and discards the `mondial_rel` schema before PostgreSQL-compatible dataset generation.
+
 ### 2. Generate PostgreSQL-compatible datasets
 
 Build the PostgreSQL-compatible dataset tree from `datasets/rodi/`:
@@ -93,6 +102,8 @@ This writes to:
 ```text
 pg_compatible/outputs/data_pg_compatible/
 ```
+
+For `mondial_rel`, this step runs on the already prepared single-schema dump produced during bootstrap, so the pg-compatible dataset is generated only from `mondial_rdf2sql_standard`.
 
 ### 3. Generate OWL/XML ontology files
 
@@ -113,6 +124,18 @@ To overwrite already existing `ontology.owl` files:
 ```bash
 bash scripts/generate_owlxml_ontologies.sh pg_compatible/outputs/data_pg_compatible --overwrite
 ```
+
+This step does two things:
+
+- runs ROBOT to convert `ontology.ttl` to OWL/XML `ontology.owl`
+- applies a repo-side normalization pass afterward
+
+That normalization is especially important for `mondial_rel`. Its generated OWL/XML is rewritten so it matches the structure used by the other generated ontologies:
+
+- `ontologyIRI` is set explicitly
+- `xml:base` is set to the ontology base IRI
+- the default empty prefix is added
+- in-ontology absolute IRIs such as `IRI="http://...#AdministrativeSubdivision"` are rewritten to local IRIs such as `IRI="#AdministrativeSubdivision"`
 
 ### 4. Configure the LLM
 
@@ -379,11 +402,16 @@ After running `scripts/evaluation.sh`, each evaluated dataset directory contains
 - `scripts/bootstrap_download_rodi_datasets.sh`
   - downloads the selected RODI datasets into `datasets/rodi`
 
+- `scripts/bootstrap_prepare_rodi_dumps.sh`
+  - applies repo-specific dump preparation after bootstrap
+  - currently rewrites `datasets/rodi/mondial_rel/dump.sql` to keep only `mondial_rdf2sql_standard`
+
 - [scripts/create_pg_compatible_dataset.sh](scripts/create_pg_compatible_dataset.sh)
   - builds PostgreSQL-compatible dataset copies
 
 - [scripts/generate_owlxml_ontologies.sh](scripts/generate_owlxml_ontologies.sh)
   - generates `ontology.owl` files from `ontology.ttl` using ROBOT
+  - normalizes the generated OWL/XML afterward when needed, including the `mondial_rel` ontology fixup
 
 - [scripts/create_mapping_single_dataset.sh](scripts/create_mapping_single_dataset.sh)
   - runs the mapping pipeline for one dataset
