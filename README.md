@@ -270,6 +270,23 @@ For `mondial_rel`, the RODI evaluation path also applies two evaluation-time com
 
 These adjustments do not modify the archived mapping files under `outputs/...`.
 
+For Ontop, the evaluation path also applies temporary method-specific compatibility fixes without modifying the archived root mapping:
+
+- it patches the temporary Ontop mapping copy when ontology-declared XSD datatypes are missing or mismatched in the generated mapping
+- it generates Ontop-specific intermediate files only under `evaluation/ontop/`
+
+Known remaining issue classes are intentionally handled outside the archived root mapping:
+
+- object properties incorrectly emitted as literal/data-property mappings
+- mappings whose logical table/query is invalid against the current dump
+
+Use the helper scripts below before a large Ontop batch if you want to sanitize archived mappings explicitly:
+
+```bash
+bash scripts/check_ontop_mapping_mismatches.sh outputs/<model>/<batch_timestamp> --remove
+bash scripts/check_mapping_database_validity.sh outputs/<model>/<batch_timestamp> --remove
+```
+
 Compare the two tabular reports after running both:
 
 ```bash
@@ -370,13 +387,76 @@ Dry-runs do not create archived files or logs.
 
 After running `scripts/evaluation.sh`, each evaluated dataset directory contains:
 
-- `evaluation/evaluation.log`
-- `evaluation/eval_rodi__report.txt` when `--method rodi` or `--method all` is used
-- `evaluation/eval_rodi__tabular.txt` when `--method rodi` or `--method all` is used
-- `evaluation/eval_ontop__metrics.json` when `--method ontop` or `--method all` is used
-- `evaluation/eval_ontop__summary.txt` when `--method ontop` or `--method all` is used
-- `evaluation/eval_ontop__tabular.txt` when `--method ontop` or `--method all` is used
-- `evaluation/eval_compare__tabular.diff` when `--compare-tabular` detects a mismatch
+- `evaluation/evaluation.log` for combined `--method all` runs
+- `evaluation/rodi/evaluation.log`
+- `evaluation/rodi/mappings__r2rml_rodi_patch.ttl`
+- `evaluation/rodi/eval_rodi__report.txt`
+- `evaluation/rodi/eval_rodi__tabular.txt`
+- `evaluation/ontop/evaluation.log`
+- `evaluation/ontop/mappings__r2rml_ontop_patch.ttl` when an Ontop-only patch is needed
+- `evaluation/ontop/mappings__r2rml.obda`
+- `evaluation/ontop/config__ontop_db.properties`
+- `evaluation/ontop/ontop_endpoint.log`
+- `evaluation/ontop/eval_ontop__metrics.json`
+- `evaluation/ontop/eval_ontop__summary.txt`
+- `evaluation/ontop/eval_ontop__tabular.txt`
+- `evaluation/compare/eval_compare__tabular.diff` when `--compare-tabular` detects a mismatch
+
+## Known evaluation issues
+
+The current benchmarks expose several recurring compatibility problems. The repo now contains targeted countermeasures for them:
+
+- `mondial_rel` dump shape:
+  - bootstrap keeps only schema `mondial_rdf2sql_standard`
+  - during RODI evaluation, the temporary RODI mapping copy is schema-qualified because local RODI forces `SET SEARCH_PATH TO <scenario>`
+- ROBOT OWL/XML output:
+  - `scripts/generate_owlxml_ontologies.sh` normalizes generated `ontology.owl` files, especially for `mondial_rel`
+- RODI datatype/runtime issues:
+  - the temporary RODI mapping copy rewrites unsupported datatypes such as `xsd:anyURI`, `xsd:nonNegativeInteger`, `xsd:positiveInteger`, `xsd:unsignedLong`, and `xsd:unsignedInt`
+  - RODI is launched with `-Djava.util.Arrays.useLegacyMergeSort=true` to avoid the old OWLAPI comparator crash during reasoning
+- Ontop datatype mismatches:
+  - the temporary Ontop mapping copy restores ontology-compatible XSD datatypes such as `xsd:decimal`
+  - missing literal datatypes are inserted when the ontology declares an XSD datatype range
+- Ontop object-property mismatches:
+  - use `scripts/check_ontop_mapping_mismatches.sh` to comment out generated literal mappings for ontology object properties
+- Mapping/DB validity issues:
+  - use `scripts/check_mapping_database_validity.sh` to comment out triples maps whose SQL/table/column usage is invalid against the archived dump
+
+## Full run
+
+End-to-end full batch run:
+
+```bash
+bash scripts/bootstrap.sh --download-rodi
+bash scripts/create_pg_compatible_dataset.sh datasets/rodi
+bash scripts/generate_owlxml_ontologies.sh pg_compatible/outputs/data_pg_compatible --overwrite
+bash scripts/create_all_mapping.sh pg_compatible/outputs/data_pg_compatible --force-all --keep-going
+```
+
+After the mapping batch finishes, evaluate the archived run with Ontop first:
+
+```bash
+bash scripts/evaluation.sh outputs/<model>/<batch_timestamp> --method ontop --force-all --keep-going
+```
+
+If needed, sanitize archived mappings before or between evaluation runs:
+
+```bash
+bash scripts/check_ontop_mapping_mismatches.sh outputs/<model>/<batch_timestamp> --remove
+bash scripts/check_mapping_database_validity.sh outputs/<model>/<batch_timestamp> --remove
+```
+
+Then run the RODI evaluation:
+
+```bash
+bash scripts/evaluation.sh outputs/<model>/<batch_timestamp> --method rodi --force-all --keep-going
+```
+
+Finally, if both method outputs exist, compare the tabular reports:
+
+```bash
+bash scripts/evaluation.sh outputs/<model>/<batch_timestamp> --method all --compare-tabular
+```
 
 ## Script summary
 
