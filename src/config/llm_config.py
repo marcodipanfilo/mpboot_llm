@@ -18,12 +18,14 @@ SELECTED_PROVIDER = "claude" # or "gpt4o-mini", "claude", "gpt4o" etc.
 class LLMConfig:
     """Configuration class for LLM providers"""
 
+    ANTHROPIC_PROXY_URL = os.getenv("ANTHROPIC_PROXY_URL")
+
     # API Endpoints
     ENDPOINTS = {
         "gpt4o-mini": "https://api2.aigcbest.top/v1/chat/completions",
         "gpt4o":      "https://api2.aigcbest.top/v1/chat/completions",
         "groq":       "https://api.groq.com/openai/v1/chat/completions",
-        "claude":     "https://api.anthropic.com/v1/messages",
+        "claude":     ANTHROPIC_PROXY_URL or "https://api.anthropic.com/v1/messages",
         "gemini":     "https://generativelanguage.googleapis.com/v1beta/models"
     }
 
