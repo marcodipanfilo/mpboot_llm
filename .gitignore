@@ -226,3 +226,4 @@ outputs
 .tools
 src/inputs
 src/memory
+anthropic_mock_server/cache.sqlite3

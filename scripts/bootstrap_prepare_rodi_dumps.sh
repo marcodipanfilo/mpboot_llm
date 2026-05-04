@@ -21,3 +21,14 @@ echo "Preparing mondial_rel dump: keep only schema mondial_rdf2sql_standard"
 "${VENV_DIR}/bin/python" "${ROOT_DIR}/src/parsers/dump_split.py" \
   "${MONDIAL_DUMP}" \
   --keep-schema mondial_rdf2sql_standard
+
+echo "Rewriting kept mondial_rel dump schema from mondial_rdf2sql_standard to mondial_rel"
+python3 - <<'PY' "${MONDIAL_DUMP}"
+from pathlib import Path
+import sys
+
+dump_path = Path(sys.argv[1])
+text = dump_path.read_text(encoding="utf-8")
+text = text.replace("mondial_rdf2sql_standard", "mondial_rel")
+dump_path.write_text(text, encoding="utf-8")
+PY
