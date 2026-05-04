@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        help="Directory where the portal should be written. Defaults to outputs/summary/<system>/<timestamp>",
+        help="Directory where the portal should be written. Defaults to outputs/summary",
     )
     return parser.parse_args()
 
@@ -139,18 +139,18 @@ def _html() -> str:
       <div class="eyebrow">MPBootLLM · Results Portal</div>
       <h1>Switch between the detailed matrix and the grouped summary.</h1>
       <p class="subtitle">
-        Both generated pages live side by side in this batch summary folder. Use the buttons below to switch views
+        Both generated pages live side by side in the shared summary folder. Use the buttons below to switch views
         without leaving the current page.
       </p>
       <div class="switcher" id="switcher">
-        <button type="button" data-target="rodi_f1_site_refactored/index.html" class="active">Detailed F1 Matrix</button>
-        <button type="button" data-target="summary_table_site/index.html">Grouped Summary Table</button>
+        <button type="button" data-target="summary_table_site/index.html" class="active">Grouped Summary Table</button>
+        <button type="button" data-target="rodi_f1_site_refactored/index.html">Detailed F1 Matrix</button>
       </div>
       <div class="hint">The last selected view is remembered locally in this browser.</div>
     </section>
 
     <section class="frame-shell">
-      <iframe id="view-frame" src="rodi_f1_site_refactored/index.html" title="MPBootLLM results view"></iframe>
+      <iframe id="view-frame" src="summary_table_site/index.html" title="MPBootLLM results view"></iframe>
     </section>
   </div>
 
@@ -197,7 +197,7 @@ def main() -> int:
       raise SystemExit(f"Run path not found or not a directory: {run_path}")
 
     outputs_root = run_path.parents[1]
-    output_dir = (args.output_dir or (outputs_root / "summary" / run_path.parent.name / run_path.name)).resolve()
+    output_dir = (args.output_dir or (outputs_root / "summary")).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     index_path = output_dir / "index.html"

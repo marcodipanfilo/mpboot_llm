@@ -71,7 +71,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        help="Directory where the site should be written. Defaults to outputs/summary/<system>/<timestamp>/rodi_f1_site_refactored",
+        help="Directory where the site should be written. Defaults to outputs/summary/rodi_f1_site_refactored",
     )
     parser.add_argument(
         "--discover-root",
@@ -1176,7 +1176,7 @@ def main() -> int:
         raise SystemExit(f"Run path not found or not a directory: {run_path}")
 
     discover_root = (args.discover_root or run_path.parents[1]).resolve()
-    default_output_dir = discover_root / "summary" / run_path.parent.name / run_path.name / "rodi_f1_site_refactored"
+    default_output_dir = discover_root / "summary" / "rodi_f1_site_refactored"
     output_dir = (args.output_dir or default_output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 

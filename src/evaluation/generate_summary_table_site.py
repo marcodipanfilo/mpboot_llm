@@ -18,6 +18,122 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for direct script exe
 
 
 TABULAR_LINE_RE = re.compile(r"^(?P<label>[^|]+)\|(?P<f1>[^|]+)\|(?P<precision>[^|]+)\|(?P<recall>[^|]+)$")
+PAPER_SOURCE_SPECS: tuple[tuple[str, str, dict[str, float]], ...] = (
+    (
+        "D2RQ",
+        "D2RQ",
+        {
+            "cmt_renamed": 0.31,
+            "conference_renamed": 0.26,
+            "sigkdd_renamed": 0.38,
+            "cmt_structured": 0.14,
+            "conference_structured": 0.21,
+            "sigkdd_structured": 0.28,
+            "sigkdd_mixed": 0.21,
+            "conference_nofks": 0.18,
+            "cmt_denormalized": 0.20,
+            "mondial_rel": 0.06,
+            "npd_atomic_tests": 0.08,
+        },
+    ),
+    (
+        "MIRR.",
+        "MIRR.",
+        {
+            "cmt_renamed": 0.28,
+            "conference_renamed": 0.27,
+            "sigkdd_renamed": 0.30,
+            "cmt_structured": 0.17,
+            "conference_structured": 0.23,
+            "sigkdd_structured": 0.11,
+            "sigkdd_mixed": 0.11,
+            "conference_nofks": 0.17,
+            "cmt_denormalized": 0.22,
+            "npd_atomic_tests": 0.00,
+        },
+    ),
+    (
+        "ontop",
+        "ontop",
+        {
+            "cmt_renamed": 0.28,
+            "conference_renamed": 0.26,
+            "sigkdd_renamed": 0.38,
+            "cmt_structured": 0.14,
+            "conference_structured": 0.13,
+            "sigkdd_structured": 0.21,
+            "sigkdd_mixed": 0.21,
+            "cmt_denormalized": 0.20,
+            "npd_atomic_tests": 0.10,
+        },
+    ),
+    (
+        "COMA",
+        "COMA",
+        {
+            "cmt_renamed": 0.48,
+            "conference_renamed": 0.36,
+            "sigkdd_renamed": 0.66,
+            "cmt_structured": 0.38,
+            "conference_structured": 0.31,
+            "sigkdd_structured": 0.41,
+            "sigkdd_mixed": 0.28,
+            "conference_nofks": 0.21,
+            "npd_atomic_tests": 0.02,
+        },
+    ),
+    (
+        "IncM.",
+        "IncM.",
+        {
+            "cmt_renamed": 0.45,
+            "conference_renamed": 0.53,
+            "sigkdd_renamed": 0.76,
+            "cmt_structured": 0.44,
+            "conference_structured": 0.41,
+            "sigkdd_structured": 0.38,
+            "sigkdd_mixed": 0.38,
+            "conference_nofks": 0.41,
+            "cmt_denormalized": 0.40,
+            "mondial_rel": 0.08,
+            "npd_atomic_tests": 0.12,
+        },
+    ),
+    (
+        "B.OX",
+        "B.OX",
+        {
+            "cmt_renamed": 0.76,
+            "conference_renamed": 0.51,
+            "sigkdd_renamed": 0.86,
+            "cmt_structured": 0.41,
+            "conference_structured": 0.41,
+            "sigkdd_structured": 0.52,
+            "sigkdd_mixed": 0.48,
+            "conference_nofks": 0.33,
+            "cmt_denormalized": 0.44,
+            "mondial_rel": 0.13,
+            "npd_atomic_tests": 0.14,
+        },
+    ),
+    (
+        "LLM4VKG -paper",
+        "LLM4VKG -paper",
+        {
+            "cmt_renamed": 0.86,
+            "conference_renamed": 0.92,
+            "sigkdd_renamed": 0.93,
+            "cmt_structured": 0.55,
+            "conference_structured": 0.59,
+            "sigkdd_structured": 0.71,
+            "sigkdd_mixed": 0.72,
+            "conference_nofks": 0.51,
+            "cmt_denormalized": 0.52,
+            "mondial_rel": 0.18,
+            "npd_atomic_tests": 0.19,
+        },
+    ),
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -32,7 +148,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        help="Directory where the site should be written. Defaults to outputs/summary/<system>/<timestamp>/summary_table_site",
+        help="Directory where the site should be written. Defaults to outputs/summary/summary_table_site",
     )
     parser.add_argument(
         "--discover-root",
@@ -121,6 +237,18 @@ def _source_enabled_by_default(anchor_run: Path, source: SourceRef) -> bool:
     return anchor_run.parent.name == source.system_name and anchor_run.name == source.timestamp
 
 
+def _paper_metrics(score: float) -> dict[str, Any]:
+    return {
+        "label": "All (AVG)",
+        "f1": score,
+        "f1_raw": f"{score:.2f}",
+        "precision": None,
+        "precision_raw": "-",
+        "recall": None,
+        "recall_raw": "-",
+    }
+
+
 def _build_payload(run_path: Path, discover_root: Path) -> dict[str, object]:
     rows: list[dict[str, object]] = []
     row_index_by_dataset: dict[str, int] = {}
@@ -142,7 +270,31 @@ def _build_payload(run_path: Path, discover_root: Path) -> dict[str, object]:
 
     sources: list[dict[str, object]] = []
     source_scores: dict[str, dict[str, dict[str, Any]]] = {}
-    for source_index, source in enumerate(_discover_sources(run_path, discover_root)):
+    for source_index, (source_id, display_name, scores) in enumerate(PAPER_SOURCE_SPECS):
+        dataset_names = [dataset_name for dataset_name in scores if dataset_name in row_index_by_dataset]
+        sources.append(
+            {
+                "id": f"paper::{source_id}",
+                "system": "Paper systems",
+                "timestamp": "paper",
+                "method": "paper",
+                "default_suffix": "",
+                "enabled_by_default": True,
+                "dataset_names": dataset_names,
+                "source_index": source_index,
+                "display_name": display_name,
+                "short_label": display_name,
+                "builtin": True,
+            }
+        )
+        source_scores[f"paper::{source_id}"] = {
+            dataset_name: _paper_metrics(score)
+            for dataset_name, score in scores.items()
+            if dataset_name in row_index_by_dataset
+        }
+
+    offset = len(PAPER_SOURCE_SPECS)
+    for source_index, source in enumerate(_discover_sources(run_path, discover_root), start=offset):
         source_id = source.id
         suffix = f"R{source_index + 1}"
         sources.append(
@@ -286,6 +438,12 @@ def _html(payload_json: str) -> str:
       font-size: 14px;
       color: var(--ink);
       word-break: break-all;
+    }
+    .source-name {
+      font-size: 18px;
+      color: var(--ink);
+      font-weight: 700;
+      margin-bottom: 4px;
     }
     .source-method {
       margin-top: 6px;
@@ -714,10 +872,18 @@ def _html(payload_json: str) -> str:
       },
 
       displayLabel(source) {
+        if (source.display_name) {
+          const suffix = this.state.sourceSuffix.get(source.id) || source.default_suffix;
+          return suffix ? `${source.display_name} ${suffix}` : source.display_name;
+        }
         return `${source.system} · ${source.method} · ${this.state.sourceSuffix.get(source.id) || source.default_suffix}`;
       },
 
       shortLabel(source) {
+        if (source.short_label) {
+          const suffix = this.state.sourceSuffix.get(source.id) || source.default_suffix;
+          return suffix ? `${source.short_label} ${suffix}` : source.short_label;
+        }
         return `${this.state.sourceSuffix.get(source.id) || source.default_suffix} · ${source.method}`;
       },
 
@@ -834,6 +1000,7 @@ def _html(payload_json: str) -> str:
               <label class="source-check">
                 <input type="checkbox" ${this.state.activeSources.has(source.id) ? 'checked' : ''} />
                 <div class="source-main">
+                  <div class="source-name">${source.display_name || this.displayLabel(source)}</div>
                   <div class="source-system">${source.system}</div>
                   <div class="source-stamp">${source.timestamp}</div>
                   <div class="source-method">${source.method}</div>
@@ -1087,7 +1254,7 @@ def main() -> int:
         raise SystemExit(f"Run path not found or not a directory: {run_path}")
 
     discover_root = (args.discover_root or run_path.parents[1]).resolve()
-    default_output_dir = discover_root / "summary" / run_path.parent.name / run_path.name / "summary_table_site"
+    default_output_dir = discover_root / "summary" / "summary_table_site"
     output_dir = (args.output_dir or default_output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
