@@ -402,6 +402,55 @@ After running `scripts/evaluation.sh`, each evaluated dataset directory contains
 - `evaluation/ontop/eval_ontop__tabular.txt`
 - `evaluation/compare/eval_compare__tabular.diff` when `--compare-tabular` detects a mismatch
 
+### Generated summary webpages
+
+The repo can also generate interactive result pages under the shared top-level summary directory:
+
+```text
+outputs/summary/
+```
+
+Current generated pages:
+
+- `outputs/summary/index.html`
+  - shared entry page / portal
+  - switches between the detailed matrix and the grouped summary table
+- `outputs/summary/rodi_f1_site_refactored/index.html`
+  - interactive F1 matrix across runs and methods
+  - supports source selection, suffixes, filters, sorting, and comparison
+- `outputs/summary/summary_table_site/index.html`
+  - paper-style grouped summary table
+  - includes built-in paper baselines such as `D2RQ`, `MIRR.`, `ontop`, `COMA`, `IncM.`, `B.OX`, and `LLM4VKG -paper`
+
+Generate the detailed matrix page:
+
+```bash
+python src/evaluation/generate_rodi_f1_site_refactored.py \
+  outputs/<model>/<batch_timestamp>
+```
+
+Generate the grouped summary table:
+
+```bash
+bash scripts/generate_summary_table_site.sh \
+  outputs/<model>/<batch_timestamp>
+```
+
+Generate the shared portal page:
+
+```bash
+bash scripts/generate_summary_portal.sh \
+  outputs/<model>/<batch_timestamp>
+```
+
+The current default output location for all three is the shared root:
+
+```text
+outputs/summary/
+```
+
+so the generated webpages are not tied to one archived batch path anymore.
+
 ## Known evaluation issues
 
 The current benchmarks expose several recurring compatibility problems. The repo now contains targeted countermeasures for them:
@@ -458,6 +507,17 @@ Finally, if both method outputs exist, compare the tabular reports:
 bash scripts/evaluation.sh outputs/<model>/<batch_timestamp> --method all --compare-tabular
 ```
 
+You can then build the interactive webpages from that evaluated batch:
+
+```bash
+python src/evaluation/generate_rodi_f1_site_refactored.py \
+  outputs/<model>/<batch_timestamp>
+bash scripts/generate_summary_table_site.sh \
+  outputs/<model>/<batch_timestamp>
+bash scripts/generate_summary_portal.sh \
+  outputs/<model>/<batch_timestamp>
+```
+
 ## Script summary
 
 - [scripts/bootstrap.sh](scripts/bootstrap.sh)
@@ -511,6 +571,18 @@ bash scripts/evaluation.sh outputs/<model>/<batch_timestamp> --method all --comp
 - [scripts/evaluation.sh](scripts/evaluation.sh)
   - evaluates archived mapping runs with RODI and/or Ontop
   - for `mondial_rel`, the RODI path additionally patches the temporary RODI mapping SQL with dump-derived schema prefixes and uses the legacy Java mergesort workaround during reasoning
+
+- [scripts/generate_rodi_paper_table.sh](scripts/generate_rodi_paper_table.sh)
+  - generates static markdown / CSV / LaTeX paper-style summary tables from RODI results
+
+- [scripts/generate_summary_table_site.sh](scripts/generate_summary_table_site.sh)
+  - generates the interactive grouped summary table webpage under `outputs/summary/summary_table_site/`
+
+- [scripts/generate_summary_portal.sh](scripts/generate_summary_portal.sh)
+  - generates the shared summary portal under `outputs/summary/index.html`
+
+- `src/evaluation/generate_rodi_f1_site_refactored.py`
+  - generates the interactive detailed F1 matrix webpage under `outputs/summary/rodi_f1_site_refactored/`
 
 ## Current notes
 
