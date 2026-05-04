@@ -86,7 +86,7 @@ CONSTRAINT_META_FILE  = "src/inputs/database/constraint_metadata.json"
 
 # ===== THRESHOLDS =====
 SAMPLE_LIMIT          = 40    # max rows queried per column for distinct value discovery
-MAX_DISTINCT_FOR_DISP = 15    # type discriminator: skip if more distinct values than this
+MAX_DISTINCT_FOR_DISP = 4    # type discriminator: skip if more distinct values than this
 MIN_CONFIDENCE        = 3     # minimum LLM confidence (1-5) to accept a suggestion
 
 # ===== COLUMN CLASSIFICATION — 3-TIER SYSTEM =====
@@ -597,6 +597,94 @@ def _is_subclass_of(child: str, parent: str) -> bool:
     """Check if child IS-A parent using the pre-built index."""
     ancestors = {child} | _subclass_of_index.get(child, set())
     return parent in ancestors
+
+
+# ============================================================
+# Equivalent-class axiom helpers (C ≡ ∃p.D)
+# ============================================================
+
+def _parse_equivalent_axioms(owl_file: str) -> List[Dict]:
+    """
+    Parse OWL ``<EquivalentClasses>`` axioms whose body is a single
+    ``<ObjectSomeValuesFrom>`` restriction over a named property and a
+    named filler class. Returns a list of dicts ``{class, property, filler}``
+    describing the axiom ``C ≡ ∃p.D``. Other axiom shapes are ignored.
+
+    These axioms encode derived class membership: an instance is a ``C``
+    iff there exists at least one ``:p`` link to a ``:D`` instance. The
+    materializer below uses each axiom to emit a HIDDEN-style triple map
+    that asserts the membership explicitly, recovering subjects that the
+    base SE/SH typing maps cannot reach.
+    """
+    out: List[Dict] = []
+    try:
+        root = ET.parse(owl_file).getroot()
+    except Exception:
+        return out
+
+    for elem in root.iter():
+        tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+        if tag != "EquivalentClasses":
+            continue
+        ch = list(elem)
+        named_cls = None
+        restrs    = []
+        for c in ch:
+            ctag = c.tag.split("}")[-1] if "}" in c.tag else c.tag
+            if ctag == "Class":
+                iri = c.get("IRI", "") or c.get("abbreviatedIRI", "")
+                if iri:
+                    nc = iri.split("#")[-1] if "#" in iri else iri.split("/")[-1]
+                    if nc and not named_cls:
+                        named_cls = nc
+            elif ctag == "ObjectSomeValuesFrom":
+                restrs.append(c)
+        if not named_cls:
+            continue
+        for r in restrs:
+            rch = list(r)
+            if len(rch) < 2:
+                continue
+            ptag = rch[0].tag.split("}")[-1] if "}" in rch[0].tag else rch[0].tag
+            ftag = rch[1].tag.split("}")[-1] if "}" in rch[1].tag else rch[1].tag
+            if ptag != "ObjectProperty" or ftag != "Class":
+                continue
+            piri = rch[0].get("IRI", "") or rch[0].get("abbreviatedIRI", "")
+            firi = rch[1].get("IRI", "") or rch[1].get("abbreviatedIRI", "")
+            prop   = piri.split("#")[-1] if "#" in piri else piri.split("/")[-1]
+            filler = firi.split("#")[-1] if "#" in firi else firi.split("/")[-1]
+            if prop and filler:
+                out.append({
+                    "class":    named_cls,
+                    "property": prop,
+                    "filler":   filler,
+                })
+    return out
+
+
+def _quote_sql_id(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _quote_sql_value(value: Any, value_type: str = "integer") -> str:
+    if value is None:
+        return "NULL"
+    s = str(value)
+    if value_type.lower() in ("integer", "int", "smallint", "bigint", "tinyint",
+                              "real", "float", "double", "numeric", "decimal"):
+        return s
+    return "'" + s.replace("'", "''") + "'"
+
+
+def _iri_to_table(iri: str) -> Optional[str]:
+    """``urn:r2rml:SE_persons`` → ``persons``."""
+    if not iri or ":" not in iri:
+        return None
+    last = iri.rsplit(":", 1)[-1]
+    for prefix in ("SE_SH_", "SE_", "SH_", "SEw_", "SRR_", "SR_"):
+        if last.startswith(prefix):
+            return last[len(prefix):]
+    return last
 
 
 def _sanitize_filter_value(value: Any) -> str:
@@ -1804,6 +1892,297 @@ def apply_suggestion_to_entry(
 # Main
 # ============================================================
 
+# ============================================================
+# Equivalent-class axiom materializer
+# ============================================================
+
+def _materialize_axioms(
+    axioms:           List[Dict],
+    se_mappings:      Dict,
+    sh_mappings:      Dict,
+    sew_mappings:     Dict,
+    sr_mappings:      Dict,
+    hidden_mappings:  Dict,
+    tables_structure: Dict,
+    base_iri:         str,
+    subclass_index:   Dict[str, set],
+) -> int:
+    """
+    For each ``C ≡ ∃p.D`` axiom, find places in the existing mappings that
+    emit ``:p`` triples whose object class is ``D`` (or a descendant of
+    ``D``), and add an entry to ``hidden_mappings[via_table]
+    ['axiom_materializations']`` describing how to assert ``rdf:type :C``
+    on the subject side.
+
+    Each entry carries the ready-to-run SQL query; phase 8 must be
+    extended to compile the entry into a TriplesMap. Until then the
+    entries serve as a structural record that phase 7's simulation pass
+    can use to stop reporting axiom gaps as failures.
+
+    Returns the number of materializations added.
+    """
+    if not axioms:
+        return 0
+
+    # ── Build descendant index from subclass_index (child→ancestors) ──
+    desc_of: Dict[str, set] = {}
+    for child, ancestors in subclass_index.items():
+        for anc in ancestors:
+            desc_of.setdefault(anc, set()).add(child)
+
+    def get_descendants(cls: str) -> set:
+        return {cls} | desc_of.get(cls, set())
+
+    # ── Build class → list of {table, subject_template, td_filter} ────
+    class_to_emitter: Dict[str, List[Dict]] = {}
+
+    def _add_class_emitter(tname, entry, kind, td_filter=None,
+                            subject_template=None):
+        cls = entry.get("subject", {}).get("class", "").lstrip(":")
+        if not cls:
+            return
+        class_to_emitter.setdefault(cls, []).append({
+            "table":            tname,
+            "subject_template": subject_template
+                                if subject_template is not None
+                                else entry.get("subject", {}).get("template", ""),
+            "kind":             kind,
+            "td_filter":        td_filter,
+        })
+
+    for tname, entry in (se_mappings or {}).items():
+        _add_class_emitter(tname, entry, "se")
+    for tname, entry in (sh_mappings or {}).items():
+        _add_class_emitter(tname, entry, "sh")
+    for tname, entry in (sew_mappings or {}).items():
+        _add_class_emitter(tname, entry, "sew")
+
+    # HIDDEN_TD entries (each dispatch row is a separate class emitter)
+    for tname, entry in (hidden_mappings or {}).items():
+        for td in entry.get("type_dispatch", []) or []:
+            disc_col   = td.get("discriminator_column", "")
+            value_type = td.get("discriminator_type", "integer")
+            for d in td.get("dispatch", []) or []:
+                td_filter = {
+                    "column":     disc_col,
+                    "value":      d.get("filter_value"),
+                    "value_type": value_type,
+                }
+                _add_class_emitter(tname, d, "hidden_td",
+                                    td_filter=td_filter,
+                                    subject_template=d.get("subject", {}).get("template", ""))
+
+    # ── Collect all places where any :prop is emitted with a join target
+    emissions: List[Dict] = []
+
+    def _emission_from_pom(src_table, src_class, src_iri, src_template, pom):
+        obj  = pom.get("object", {})
+        pred = pom.get("predicate", "").lstrip(":")
+        if not pred:
+            return
+        target_table = _iri_to_table(obj.get("parent_triples_map", ""))
+        if not target_table:
+            return
+        if obj.get("type") == "join":
+            jc = obj.get("join_condition", {})
+            emissions.append({
+                "predicate":         pred,
+                "subject_table":     src_table,
+                "subject_class":     src_class,
+                "subject_iri":       src_iri,
+                "subject_template":  src_template,
+                "object_table":      target_table,
+                "sql_kind":          "direct_fk",
+                "join_child":        jc.get("child", ""),
+                "join_parent":       jc.get("parent", ""),
+            })
+        elif obj.get("type") == "junction_join":
+            sj = obj.get("subject_join", {})
+            oj = obj.get("object_join", {})
+            emissions.append({
+                "predicate":          pred,
+                "subject_table":      src_table,
+                "subject_class":      src_class,
+                "subject_iri":        src_iri,
+                "subject_template":   src_template,
+                "object_table":       target_table,
+                "sql_kind":           "junction_join",
+                "junction_table":     obj.get("junction_table", ""),
+                "subject_join_child": sj.get("child", ""),
+                "subject_join_parent":sj.get("parent", ""),
+                "object_join_child":  oj.get("child", ""),
+                "object_join_parent": oj.get("parent", ""),
+            })
+
+    for phase_map in (se_mappings, sh_mappings, sew_mappings):
+        for tname, entry in (phase_map or {}).items():
+            src_class = entry.get("subject", {}).get("class", "").lstrip(":")
+            src_iri   = entry.get("triple_map_iri", "")
+            src_tmpl  = entry.get("subject", {}).get("template", "")
+            for pom in entry.get("predicate_object_maps", []):
+                _emission_from_pom(tname, src_class, src_iri, src_tmpl, pom)
+
+    # SR mappings — each "mappings" entry is a directed SR pair
+    for jt, entry in (sr_mappings or {}).items():
+        if entry.get("pattern") != "SR":
+            continue
+        for mapping in entry.get("mappings", []):
+            pred       = mapping.get("predicate", "").lstrip(":")
+            subj_table = _iri_to_table(mapping.get("subject_triples_map", ""))
+            obj_table  = _iri_to_table(mapping.get("object_triples_map",  ""))
+            if not pred or not subj_table or not obj_table:
+                continue
+
+            subj_template = ""
+            subj_class    = ""
+            for pm in (se_mappings, sh_mappings, sew_mappings):
+                e = (pm or {}).get(subj_table)
+                if e:
+                    subj_template = e.get("subject", {}).get("template", "")
+                    subj_class    = e.get("subject", {}).get("class", "").lstrip(":")
+                    break
+
+            sj = mapping.get("subject_join", {})
+            oj = mapping.get("object_join",  {})
+            emissions.append({
+                "predicate":          pred,
+                "subject_table":      subj_table,
+                "subject_class":      subj_class,
+                "subject_iri":        mapping.get("subject_triples_map", ""),
+                "subject_template":   subj_template,
+                "object_table":       obj_table,
+                "sql_kind":           "sr_junction",
+                "junction_table":     jt,
+                "subject_join_child": sj.get("child", ""),
+                "subject_join_parent":sj.get("parent", ""),
+                "object_join_child":  oj.get("child", ""),
+                "object_join_parent": oj.get("parent", ""),
+            })
+
+    # ── Match each axiom against the emission catalogue ───────────────
+    materialized_count = 0
+    for axiom in axioms:
+        ax_class  = axiom["class"]
+        ax_prop   = axiom["property"]
+        ax_filler = axiom["filler"]
+        filler_set = get_descendants(ax_filler) | {ax_filler}
+
+        for em in emissions:
+            if em["predicate"] != ax_prop:
+                continue
+
+            matched_emitter = None
+            for cls in filler_set:
+                for emitter in class_to_emitter.get(cls, []):
+                    if emitter["table"] == em["object_table"]:
+                        matched_emitter = emitter
+                        break
+                if matched_emitter:
+                    break
+            if not matched_emitter:
+                continue
+
+            td_filter = matched_emitter.get("td_filter")
+            qid = _quote_sql_id
+
+            if em["sql_kind"] == "direct_fk":
+                src_t  = qid(em["subject_table"])
+                obj_t  = qid(em["object_table"])
+                child  = qid(em["join_child"])
+                parent = qid(em["join_parent"])
+                if td_filter and td_filter.get("column") and td_filter.get("value") is not None:
+                    where_col = qid(td_filter["column"])
+                    where_val = _quote_sql_value(td_filter["value"],
+                                                 td_filter.get("value_type", "integer"))
+                    sql = (f"SELECT DISTINCT {src_t}.{child} "
+                           f"FROM {src_t} JOIN {obj_t} "
+                           f"ON {obj_t}.{parent} = {src_t}.{child} "
+                           f"WHERE {obj_t}.{where_col} = {where_val} "
+                           f"AND {src_t}.{child} IS NOT NULL")
+                else:
+                    sql = (f"SELECT DISTINCT {src_t}.{child} "
+                           f"FROM {src_t} "
+                           f"WHERE {src_t}.{child} IS NOT NULL")
+                child_col = em["join_child"]
+                via_table = em["subject_table"]
+            else:
+                jt    = qid(em["junction_table"])
+                obj_t = qid(em["object_table"])
+                sj_c  = qid(em["subject_join_child"])
+                oj_c  = qid(em["object_join_child"])
+                oj_p  = qid(em["object_join_parent"])
+                if td_filter and td_filter.get("column") and td_filter.get("value") is not None:
+                    where_col = qid(td_filter["column"])
+                    where_val = _quote_sql_value(td_filter["value"],
+                                                 td_filter.get("value_type", "integer"))
+                    sql = (f"SELECT DISTINCT {jt}.{sj_c} "
+                           f"FROM {jt} JOIN {obj_t} "
+                           f"ON {obj_t}.{oj_p} = {jt}.{oj_c} "
+                           f"WHERE {obj_t}.{where_col} = {where_val}")
+                else:
+                    sql = f"SELECT DISTINCT {jt}.{sj_c} FROM {jt}"
+                child_col = em["subject_join_child"]
+                via_table = em["junction_table"]
+
+            new_subj_template = em.get("subject_template", "")
+            placeholder_match = re.search(r'\{([^}]+)\}', new_subj_template)
+            if placeholder_match:
+                old_placeholder = placeholder_match.group(1)
+                new_subj_template = new_subj_template.replace(
+                    "{" + old_placeholder + "}",
+                    "{" + child_col + "}",
+                    1,
+                )
+
+            axiom_iri = f"urn:r2rml:AXIOM_{ax_class}_via_{via_table}"
+
+            axiom_entry = {
+                "axiom_pattern":   "AXIOM_EQUIV",
+                "axiom":           f"{ax_class} ≡ ∃{ax_prop}.{ax_filler}",
+                "axiom_class":     f":{ax_class}",
+                "axiom_property":  f":{ax_prop}",
+                "axiom_filler":    f":{ax_filler}",
+                "triple_map_iri":  axiom_iri,
+                "subject": {
+                    "template":        new_subj_template,
+                    "class":           f":{ax_class}",
+                    "reuses_iri_from": em.get("subject_iri", ""),
+                },
+                "via": {
+                    "kind":               em["sql_kind"],
+                    "junction_table":     em.get("junction_table", ""),
+                    "subject_table":      em["subject_table"],
+                    "object_table":       em["object_table"],
+                    "subject_join_child": em.get("subject_join_child",
+                                                  em.get("join_child", "")),
+                    "subject_join_parent":em.get("subject_join_parent",
+                                                  em.get("join_parent", "")),
+                    "object_join_child":  em.get("object_join_child", ""),
+                    "object_join_parent": em.get("object_join_parent", ""),
+                },
+                "filler_filter":   td_filter,
+                "sql_query":       sql,
+            }
+
+            if via_table not in hidden_mappings:
+                hidden_mappings[via_table] = {
+                    "source_table":  via_table,
+                    "pattern":       "SR" if em["sql_kind"] == "sr_junction" else "SE",
+                    "hidden_sh":     [],
+                    "type_dispatch": [],
+                }
+            hidden_mappings[via_table].setdefault(
+                "axiom_materializations", []
+            ).append(axiom_entry)
+            materialized_count += 1
+            extra = ""
+            if td_filter and td_filter.get("column"):
+                extra = f"  [filter: {td_filter['column']}={td_filter.get('value')}]"
+            print(f"  + :{ax_class} via {via_table} ({em['sql_kind']}){extra}")
+
+    return materialized_count
+
+
 def run_hidden_mapping():
     print("=" * 57)
     print("  ONTOLOGY MAPPER — Phase 6 (Hidden Patterns)")
@@ -2216,11 +2595,31 @@ def run_hidden_mapping():
                     print(f"  + {table_name}.{suggestion['column']} "
                           f"[type_dispatch] -> {suggestion.get('value_class_map', {})}")
 
+    # ── Materialize equivalent-class axioms (C ≡ ∃p.D) ─────────────────
+    print("\nMaterializing equivalent-class axioms ...")
+    axioms = _parse_equivalent_axioms(ONTOLOGY_FILE)
+    print(f"  Parsed {len(axioms)} axiom(s) of form C ≡ ∃p.D")
+    for ax in axioms:
+        print(f"    {ax['class']} ≡ ∃{ax['property']}.{ax['filler']}")
+
+    n_axiom_mat = 0
+    if axioms:
+        sr_mappings  = load_json_optional(os.path.join(MAPPINGS_DIR, "SR_mappings.json"))
+        sew_mappings = load_json_optional(os.path.join(MAPPINGS_DIR, "SEw_mappings.json"))
+        n_axiom_mat = _materialize_axioms(
+            axioms,
+            se_mappings, sh_mappings, sew_mappings, sr_mappings,
+            hidden_mappings, tables_structure, base_iri,
+            _subclass_of_index,
+        )
+        print(f"  → {n_axiom_mat} axiom materialization(s) added")
+
     save_json(HIDDEN_MAPPINGS_FILE, hidden_mappings)
 
     total_with_hidden = sum(
         1 for v in hidden_mappings.values()
         if v.get("hidden_sh") or v.get("type_dispatch")
+        or v.get("axiom_materializations")
     )
 
     print(f"\n{'=' * 57}")
@@ -2230,6 +2629,7 @@ def run_hidden_mapping():
     print(f"  Tables with hidden pats  : {total_with_hidden}")
     print(f"  Hidden subclass / flag   : {found_sh}")
     print(f"  Type dispatch            : {found_td}")
+    print(f"  Axiom materializations   : {n_axiom_mat}")
     print(f"  LLM errors               : {len(errors)}")
     if errors:
         print(f"  Failed tables            : {errors}")
@@ -2241,6 +2641,7 @@ if __name__ == "__main__":
     try:
         run_hidden_mapping()
     except Exception as e:
-        print(f"\nFatal error: {e}")
+        print(f"\nFatal error: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
+        sys.exit(1)
