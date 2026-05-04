@@ -8,6 +8,10 @@ from pathlib import Path
 
 
 TABULAR_LINE_RE = re.compile(r"^(?P<label>[^|]+)\|(?P<f1>[^|]+)\|(?P<precision>[^|]+)\|(?P<recall>[^|]+)$")
+METHOD_TABULAR_FILES = {
+    "rodi": ("evaluation", "rodi", "eval_rodi__tabular.txt"),
+    "ontop": ("evaluation", "ontop", "eval_ontop__tabular.txt"),
+}
 
 DATASET_LABELS = {
     "cmt_denormalized": "CMT-D",
@@ -47,17 +51,22 @@ FAMILY_ORDER = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a static website that displays RODI F1 tabular results across datasets."
+        description="Generate a static website that displays F1 tabular results across datasets and runs."
     )
     parser.add_argument(
         "run_path",
         type=Path,
-        help="Batch directory under outputs/<model>/<batch_timestamp>",
+        help="Anchor batch directory under outputs/<system>/<batch_timestamp>",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
         help="Directory where the site should be written. Defaults to <run_path>/summary/rodi_f1_site",
+    )
+    parser.add_argument(
+        "--discover-root",
+        type=Path,
+        help="Root outputs directory to scan for selectable result sources. Defaults to the top-level outputs directory.",
     )
     return parser.parse_args()
 
@@ -189,75 +198,109 @@ def _dataset_family(name: str) -> str:
     return "other"
 
 
-def _build_payload(run_path: Path) -> dict[str, object]:
-    dataset_dirs = sorted(
+def _source_enabled_by_default(run_path: Path, system_name: str, timestamp: str, method: str) -> bool:
+    return run_path.parent.name == system_name and run_path.name == timestamp and method == "rodi"
+
+
+def _batch_dataset_dirs(batch_dir: Path) -> list[Path]:
+    return sorted(
         path
-        for path in run_path.iterdir()
+        for path in batch_dir.iterdir()
         if path.is_dir() and (path / "run_metadata.json").exists() and (path / "mappings_r2rml.ttl").exists()
     )
+
+
+def _build_payload(run_path: Path, discover_root: Path) -> dict[str, object]:
     datasets: list[dict[str, object]] = []
+    sources: list[dict[str, object]] = []
     first_seen_order: dict[str, int] = {}
     seen_counter = 0
     row_groups: dict[str, set[str]] = {}
+    dataset_index = 0
 
-    for dataset_index, dataset_dir in enumerate(dataset_dirs):
-        tabular_file = dataset_dir / "evaluation" / "rodi" / "eval_rodi__tabular.txt"
-        query_lookup = _read_query_manifest(dataset_dir)
-        if not tabular_file.exists():
-            datasets.append(
-                {
-                    "name": dataset_dir.name,
-                    "short_name": DATASET_LABELS.get(dataset_dir.name, dataset_dir.name),
-                    "family": _dataset_family(dataset_dir.name),
-                    "variant": _dataset_variant(dataset_dir.name),
-                    "manual_index": dataset_index,
-                    "enabled_by_default": dataset_dir.name not in DEFAULT_DISABLED_DATASETS,
-                    "has_tabular": False,
-                    "overall_f1": None,
-                    "rows": {},
-                }
-            )
+    system_dirs = sorted(path for path in discover_root.iterdir() if path.is_dir())
+    ordered_batches: list[tuple[Path, Path]] = []
+    for system_dir in system_dirs:
+        batch_dirs = sorted((path for path in system_dir.iterdir() if path.is_dir()), key=lambda p: p.name, reverse=True)
+        for batch_dir in batch_dirs:
+            if batch_dir.resolve() == run_path:
+                ordered_batches.insert(0, (system_dir, batch_dir))
+            else:
+                ordered_batches.append((system_dir, batch_dir))
+
+    for system_dir, batch_dir in ordered_batches:
+        dataset_dirs = _batch_dataset_dirs(batch_dir)
+        if not dataset_dirs:
             continue
 
-        row_entries = _read_tabular(tabular_file)
-        row_map: dict[str, dict[str, object]] = {}
-        overall_f1 = None
-        for row in row_entries:
-            label = row["label"]
-            assert isinstance(label, str)
-            query_info = query_lookup.get(label)
-            if query_info:
-                cats = query_info.get("categories")
-                if isinstance(cats, list):
-                    row_groups.setdefault(label, set()).update(str(cat) for cat in cats)
-                row.update(
+        for method, rel_parts in METHOD_TABULAR_FILES.items():
+            source_dataset_dirs = [dataset_dir for dataset_dir in dataset_dirs if (dataset_dir / Path(*rel_parts)).exists()]
+            if not source_dataset_dirs:
+                continue
+
+            source_index = len(sources)
+            source_id = f"{system_dir.name}::{batch_dir.name}::{method}"
+            suffix = f"R{source_index + 1}"
+            sources.append(
+                {
+                    "id": source_id,
+                    "system": system_dir.name,
+                    "timestamp": batch_dir.name,
+                    "method": method,
+                    "default_suffix": suffix,
+                    "enabled_by_default": _source_enabled_by_default(run_path, system_dir.name, batch_dir.name, method),
+                    "dataset_names": [dataset_dir.name for dataset_dir in source_dataset_dirs],
+                }
+            )
+
+            for dataset_dir in source_dataset_dirs:
+                tabular_file = dataset_dir / Path(*rel_parts)
+                query_lookup = _read_query_manifest(dataset_dir)
+                row_entries = _read_tabular(tabular_file)
+                row_map: dict[str, dict[str, object]] = {}
+                overall_f1 = None
+                for row in row_entries:
+                    label = row["label"]
+                    assert isinstance(label, str)
+                    query_info = query_lookup.get(label)
+                    if query_info:
+                        cats = query_info.get("categories")
+                        if isinstance(cats, list):
+                            row_groups.setdefault(label, set()).update(str(cat) for cat in cats)
+                        row.update(
+                            {
+                                "query_id": query_info.get("id"),
+                                "categories": query_info.get("categories"),
+                                "sql_query": query_info.get("sql_query"),
+                                "sparql_query": query_info.get("sparql_query"),
+                            }
+                        )
+                    row_map[label] = row
+                    if label not in first_seen_order:
+                        first_seen_order[label] = seen_counter
+                        seen_counter += 1
+                    if label == "All (AVG)":
+                        overall_f1 = row["f1"]
+
+                datasets.append(
                     {
-                        "query_id": query_info.get("id"),
-                        "categories": query_info.get("categories"),
-                        "sql_query": query_info.get("sql_query"),
-                        "sparql_query": query_info.get("sparql_query"),
+                        "id": f"{source_id}::{dataset_dir.name}",
+                        "source_id": source_id,
+                        "base_name": dataset_dir.name,
+                        "short_base": DATASET_LABELS.get(dataset_dir.name, dataset_dir.name),
+                        "name": dataset_dir.name,
+                        "family": _dataset_family(dataset_dir.name),
+                        "variant": _dataset_variant(dataset_dir.name),
+                        "manual_index": dataset_index,
+                        "source_index": source_index,
+                        "enabled_by_default": dataset_dir.name not in DEFAULT_DISABLED_DATASETS
+                        and _source_enabled_by_default(run_path, system_dir.name, batch_dir.name, method),
+                        "has_tabular": True,
+                        "overall_f1": overall_f1,
+                        "rows": row_map,
                     }
                 )
-            row_map[label] = row
-            if label not in first_seen_order:
-                first_seen_order[label] = seen_counter
-                seen_counter += 1
-            if label == "All (AVG)":
-                overall_f1 = row["f1"]
-
-        datasets.append(
-            {
-                "name": dataset_dir.name,
-                "short_name": DATASET_LABELS.get(dataset_dir.name, dataset_dir.name),
-                "family": _dataset_family(dataset_dir.name),
-                "variant": _dataset_variant(dataset_dir.name),
-                "manual_index": dataset_index,
-                "enabled_by_default": dataset_dir.name not in DEFAULT_DISABLED_DATASETS,
-                "has_tabular": True,
-                "overall_f1": overall_f1,
-                "rows": row_map,
-            }
-        )
+                dataset_index += 1
 
     all_labels = sorted(first_seen_order.keys(), key=lambda label: _row_order_key(label, first_seen_order))
     query_groups: list[str] = []
@@ -278,8 +321,10 @@ def _build_payload(run_path: Path) -> dict[str, object]:
 
     return {
         "run_path": str(run_path),
+        "discover_root": str(discover_root),
         "row_defs": row_defs,
         "query_groups": query_groups,
+        "sources": sources,
         "datasets": datasets,
     }
 
@@ -356,7 +401,7 @@ def _html(payload_json: str) -> str:
 
     .controls {
       display: grid;
-      grid-template-columns: minmax(240px, 1.2fr) repeat(3, minmax(140px, 0.45fr));
+      grid-template-columns: minmax(240px, 1.2fr) repeat(4, minmax(140px, 0.45fr));
       gap: 12px;
       margin: 18px 0 20px;
     }
@@ -394,6 +439,98 @@ def _html(payload_json: str) -> str:
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 8px;
       margin: 0 0 18px;
+    }
+
+    .source-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 10px;
+      margin: 0 0 18px;
+    }
+
+    .source-card {
+      background: rgba(255, 250, 240, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px 14px;
+      box-shadow: 0 10px 24px rgba(73, 48, 28, 0.04);
+    }
+
+    .source-top {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .source-check {
+      display: flex;
+      gap: 10px;
+      align-items: start;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .source-check input[type="checkbox"] {
+      margin-top: 2px;
+    }
+
+    .source-main {
+      min-width: 0;
+    }
+
+    .source-system {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+
+    .source-stamp {
+      font-size: 14px;
+      color: var(--ink);
+      word-break: break-all;
+    }
+
+    .source-method {
+      margin-top: 6px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .source-suffix {
+      width: 88px;
+      flex: 0 0 auto;
+    }
+
+    .source-suffix label {
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .source-suffix input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff8ee;
+      padding: 6px 8px;
+      font: inherit;
+      color: var(--ink);
+    }
+
+    .source-meta {
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
     }
 
     .panel-title {
@@ -672,6 +809,18 @@ def _html(payload_json: str) -> str:
       min-width: 64px;
     }
 
+    td.compare-better {
+      box-shadow:
+        inset 0 0 0 3px rgba(43, 138, 62, 0.92),
+        inset 0 -4px 0 #2b8a3e;
+    }
+
+    td.compare-worse {
+      box-shadow:
+        inset 0 0 0 3px rgba(180, 35, 24, 0.92),
+        inset 0 -4px 0 #b42318;
+    }
+
     .legend {
       display: flex;
       align-items: center;
@@ -694,6 +843,57 @@ def _html(payload_json: str) -> str:
       color: var(--muted);
       font-size: 13px;
     }
+
+    .compare-report {
+      margin-top: 16px;
+      background: rgba(255, 250, 240, 0.94);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px 16px;
+      box-shadow: 0 10px 24px rgba(73, 48, 28, 0.05);
+    }
+
+    .compare-report.hidden {
+      display: none;
+    }
+
+    .compare-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .compare-summary {
+      font-size: 14px;
+      color: var(--ink);
+      margin-bottom: 10px;
+    }
+
+    .compare-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .compare-item {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      border-top: 1px solid rgba(200, 186, 164, 0.45);
+      padding-top: 8px;
+      font-size: 13px;
+    }
+
+    .compare-item:first-child {
+      border-top: none;
+      padding-top: 0;
+    }
+
+    .compare-delta.pos { color: #2b8a3e; }
+    .compare-delta.neg { color: #b42318; }
+    .compare-delta.zero { color: var(--muted); }
 
     .tooltip {
       position: fixed;
@@ -787,6 +987,15 @@ def _html(payload_json: str) -> str:
     </section>
 
     <section>
+      <div class="panel-title">Result selection</div>
+      <div class="group-panel" style="margin: 0 0 12px;">
+        <div class="group-panel-title">System groups</div>
+        <div class="group-buttons" id="system-groups"></div>
+      </div>
+      <section class="source-grid" id="source-selection"></section>
+    </section>
+
+    <section>
       <div class="panel-title">Dataset selection</div>
       <section class="legend-grid" id="dataset-legend"></section>
     </section>
@@ -841,6 +1050,13 @@ def _html(payload_json: str) -> str:
           <option value="type">By type</option>
         </select>
       </div>
+      <div class="control">
+        <label for="compare-mode">Compare</label>
+        <select id="compare-mode">
+          <option value="off">Off</option>
+          <option value="first-two">First two active sources</option>
+        </select>
+      </div>
     </section>
 
     <section class="table-shell">
@@ -854,6 +1070,11 @@ def _html(payload_json: str) -> str:
     </section>
 
     <p class="footer-note" id="footer-note"></p>
+    <section class="compare-report hidden" id="compare-report">
+      <div class="compare-title">Run comparison</div>
+      <div class="compare-summary" id="compare-summary"></div>
+      <div class="compare-list" id="compare-list"></div>
+    </section>
   </div>
 
   <div class="tooltip" id="tooltip"></div>
@@ -916,7 +1137,7 @@ def _html(payload_json: str) -> str:
 
     function compareDataset(a, b, mode) {
       if (mode === 'alpha') {
-        return compareNatural(a.name, b.name);
+        return compareNatural(a.base_name, b.base_name) || (a.source_index - b.source_index);
       }
       if (mode === 'type') {
         const rank = {
@@ -932,13 +1153,15 @@ def _html(payload_json: str) -> str:
         const ar = rank[a.variant] ?? 999;
         const br = rank[b.variant] ?? 999;
         if (ar !== br) return ar - br;
-        return compareNatural(a.name, b.name);
+        return compareNatural(a.base_name, b.base_name) || (a.source_index - b.source_index);
       }
       return a.manual_index - b.manual_index;
     }
 
     function main() {
       const data = DATA;
+      const sourceSelection = document.getElementById('source-selection');
+      const systemGroups = document.getElementById('system-groups');
       const legend = document.getElementById('dataset-legend');
       const familyGroups = document.getElementById('family-groups');
       const typeGroups = document.getElementById('type-groups');
@@ -950,51 +1173,91 @@ def _html(payload_json: str) -> str:
       const rowKind = document.getElementById('row-kind');
       const hideEmpty = document.getElementById('hide-empty');
       const datasetSort = document.getElementById('dataset-sort');
+      const compareMode = document.getElementById('compare-mode');
       const footer = document.getElementById('footer-note');
+      const compareReport = document.getElementById('compare-report');
+      const compareSummary = document.getElementById('compare-summary');
+      const compareList = document.getElementById('compare-list');
       const tooltip = document.getElementById('tooltip');
+      const sourceById = new Map(data.sources.map(source => [source.id, source]));
       const datasetByName = new Map(data.datasets.map(dataset => [dataset.name, dataset]));
+      const datasetById = new Map(data.datasets.map(dataset => [dataset.id, dataset]));
+      const activeSources = new Set(
+        data.sources.filter(source => source.enabled_by_default !== false).map(source => source.id)
+      );
+      const sourceSuffix = new Map(
+        data.sources.map(source => [source.id, source.default_suffix])
+      );
       const activeDatasets = new Set(
-        data.datasets.filter(dataset => dataset.enabled_by_default !== false).map(dataset => dataset.name)
+        data.datasets.filter(dataset => dataset.enabled_by_default !== false).map(dataset => dataset.id)
       );
       const activeQueryGroups = new Set(data.query_groups);
       let manualDatasetOrder = [...data.datasets]
         .sort((a, b) => a.manual_index - b.manual_index)
-        .map(dataset => dataset.name);
+        .map(dataset => dataset.id);
       let draggedDatasetName = null;
       let rowSort = { key: null, dir: 'asc' };
       let currentRowOrder = data.row_defs.map(row => row.label);
       const familyRank = { cmt: 0, conference: 1, sigkdd: 2, mondial: 3, npd: 4, other: 99 };
       const typeRank = { renamed: 0, structured: 1, mixed: 2, nofks: 3, denormalized: 4, rel: 5, atomic: 6, other: 99 };
+      const sourceCards = new Map();
+      const systemButtons = new Map();
       const familyButtons = new Map();
       const typeButtons = new Map();
       const queryGroupButtons = new Map();
 
+      function datasetDisplayName(dataset) {
+        return `${dataset.base_name}_${sourceSuffix.get(dataset.source_id) || sourceById.get(dataset.source_id)?.default_suffix || 'R?'}`;
+      }
+
+      function datasetDisplayShort(dataset) {
+        return `${dataset.short_base}_${sourceSuffix.get(dataset.source_id) || sourceById.get(dataset.source_id)?.default_suffix || 'R?'}`;
+      }
+
+      function datasetSourceLabel(dataset) {
+        const source = sourceById.get(dataset.source_id);
+        if (!source) return '';
+        return `${source.system} · ${source.timestamp} · ${source.method}`;
+      }
+
+      function sourceDisplayLabel(source) {
+        return `${source.system} · ${source.timestamp} · ${source.method} · ${sourceSuffix.get(source.id) || source.default_suffix}`;
+      }
+
       function sortedAllDatasets() {
         if (datasetSort.value === 'manual') {
-          return manualDatasetOrder.map(name => datasetByName.get(name)).filter(Boolean);
+          return manualDatasetOrder.map(id => datasetById.get(id)).filter(Boolean);
         }
         return [...data.datasets].sort((a, b) => compareDataset(a, b, datasetSort.value));
       }
 
       function visibleDatasets() {
-        return sortedAllDatasets().filter(dataset => activeDatasets.has(dataset.name));
+        return sortedAllDatasets().filter(dataset => activeSources.has(dataset.source_id) && activeDatasets.has(dataset.id));
+      }
+
+      function datasetsFromActiveSources() {
+        return sortedAllDatasets().filter(dataset => activeSources.has(dataset.source_id));
+      }
+
+      function sourcesForSystem(system) {
+        return data.sources.filter(source => source.system === system);
       }
 
       function datasetsForFamily(family) {
-        return data.datasets.filter(dataset => dataset.family === family);
+        return datasetsFromActiveSources().filter(dataset => dataset.family === family);
       }
 
       function datasetsForType(variant) {
-        return data.datasets.filter(dataset => dataset.variant === variant);
+        return datasetsFromActiveSources().filter(dataset => dataset.variant === variant);
       }
 
       function toggleDatasetGroup(datasetsInGroup) {
-        const allActive = datasetsInGroup.every(dataset => activeDatasets.has(dataset.name));
+        const anyActive = datasetsInGroup.some(dataset => activeDatasets.has(dataset.id));
         datasetsInGroup.forEach(dataset => {
-          if (allActive) {
-            activeDatasets.delete(dataset.name);
+          if (anyActive) {
+            activeDatasets.delete(dataset.id);
           } else {
-            activeDatasets.add(dataset.name);
+            activeDatasets.add(dataset.id);
           }
         });
       }
@@ -1007,17 +1270,30 @@ def _html(payload_json: str) -> str:
         }
       }
 
+      function toggleSystemGroup(systemSources) {
+        const anyActive = systemSources.some(source => activeSources.has(source.id));
+        systemSources.forEach(source => {
+          if (anyActive) {
+            activeSources.delete(source.id);
+          } else {
+            activeSources.add(source.id);
+          }
+        });
+      }
+
       function rowMatchesActiveQueryGroups(row) {
         if (!row) return true;
         if (row.kind === 'overall') return true;
         if (row.kind !== 'aggregate') return true;
-        if (!Array.isArray(row.groups) || row.groups.length === 0) return true;
+        if (!Array.isArray(row.groups) || row.groups.length === 0) {
+          return activeQueryGroups.size === data.query_groups.length;
+        }
         return row.groups.some(group => activeQueryGroups.has(group));
       }
 
       function cellMatchesActiveQueryGroups(value) {
         if (!value || !Array.isArray(value.categories) || value.categories.length === 0) {
-          return true;
+          return activeQueryGroups.size === data.query_groups.length;
         }
         return value.categories.some(group => activeQueryGroups.has(group));
       }
@@ -1048,23 +1324,72 @@ def _html(payload_json: str) -> str:
       data.datasets.forEach(dataset => {
         const chip = document.createElement('article');
         chip.className = 'legend-chip';
-        chip.innerHTML = `
-          <div class="short">${dataset.short_name}</div>
-          <div class="full">${dataset.name}</div>
-          <div class="meta">${dataset.variant}</div>
-        `;
-        chip.title = activeDatasets.has(dataset.name) ? 'Click to hide dataset' : 'Click to show dataset';
+        chip.title = activeDatasets.has(dataset.id) ? 'Click to hide dataset' : 'Click to show dataset';
         chip.addEventListener('click', () => {
-          if (activeDatasets.has(dataset.name)) {
-            activeDatasets.delete(dataset.name);
+          if (activeDatasets.has(dataset.id)) {
+            activeDatasets.delete(dataset.id);
           } else {
-            activeDatasets.add(dataset.name);
+            activeDatasets.add(dataset.id);
           }
           render();
         });
         dataset._chip = chip;
         legend.appendChild(chip);
       });
+
+      data.sources.forEach(source => {
+        const card = document.createElement('article');
+        card.className = 'source-card';
+        card.innerHTML = `
+          <div class="source-top">
+            <label class="source-check">
+              <input type="checkbox" ${activeSources.has(source.id) ? 'checked' : ''} />
+              <div class="source-main">
+                <div class="source-system">${source.system}</div>
+                <div class="source-stamp">${source.timestamp}</div>
+                <div class="source-method">${source.method}</div>
+              </div>
+            </label>
+            <div class="source-suffix">
+              <label>Suffix</label>
+              <input type="text" value="${source.default_suffix}" />
+            </div>
+          </div>
+          <div class="source-meta">${source.dataset_names.length} datasets</div>
+        `;
+        const checkbox = card.querySelector('input[type="checkbox"]');
+        const suffixInput = card.querySelector('.source-suffix input');
+        checkbox.addEventListener('input', () => {
+          if (checkbox.checked) {
+            activeSources.add(source.id);
+          } else {
+            activeSources.delete(source.id);
+          }
+          render();
+        });
+        suffixInput.addEventListener('input', () => {
+          const next = suffixInput.value.trim() || source.default_suffix;
+          sourceSuffix.set(source.id, next);
+          render();
+        });
+        sourceCards.set(source.id, { card, checkbox, suffixInput });
+        sourceSelection.appendChild(card);
+      });
+
+      [...new Set(data.sources.map(source => source.system))]
+        .sort(compareNatural)
+        .forEach(system => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'group-button';
+          button.textContent = system;
+          button.addEventListener('click', () => {
+            toggleSystemGroup(sourcesForSystem(system));
+            render();
+          });
+          systemButtons.set(system, button);
+          systemGroups.appendChild(button);
+        });
 
       [...new Set(data.datasets.map(dataset => dataset.family))]
         .sort((a, b) => (familyRank[a] ?? 999) - (familyRank[b] ?? 999) || compareNatural(a, b))
@@ -1158,6 +1483,114 @@ def _html(payload_json: str) -> str:
         return rank;
       }
 
+      function buildCompareContext(datasets) {
+        if (compareMode.value !== 'first-two') return null;
+        const activeSourceList = data.sources.filter(source => activeSources.has(source.id));
+        if (activeSourceList.length < 2) {
+          return { error: 'Select at least two result sources to compare.' };
+        }
+        const [sourceA, sourceB] = activeSourceList;
+        const indexByDatasetId = new Map();
+        const sourceAByBase = new Map();
+        const sourceBByBase = new Map();
+        datasets.forEach((dataset, index) => {
+          indexByDatasetId.set(dataset.id, index);
+          if (dataset.source_id === sourceA.id) sourceAByBase.set(dataset.base_name, { dataset, index });
+          if (dataset.source_id === sourceB.id) sourceBByBase.set(dataset.base_name, { dataset, index });
+        });
+        const pairs = new Map();
+        const report = [];
+        for (const [baseName, left] of sourceAByBase.entries()) {
+          const right = sourceBByBase.get(baseName);
+          if (!right) continue;
+          pairs.set(left.dataset.id, { baseName, role: 'a', self: left, other: right });
+          pairs.set(right.dataset.id, { baseName, role: 'b', self: right, other: left });
+          const leftOverall = left.dataset.rows['All (AVG)'];
+          const rightOverall = right.dataset.rows['All (AVG)'];
+          const relation = compareValues(leftOverall, true, rightOverall, true);
+          if (relation) {
+            report.push({
+              baseName,
+              leftLabel: datasetDisplayName(left.dataset),
+              rightLabel: datasetDisplayName(right.dataset),
+              leftValue: leftOverall?.f1_raw ?? null,
+              rightValue: rightOverall?.f1_raw ?? null,
+              relation,
+            });
+          }
+        }
+        report.sort((a, b) => comparePriority(b.relation) - comparePriority(a.relation)
+          || Math.abs(b.relation.delta ?? 0) - Math.abs(a.relation.delta ?? 0)
+          || compareNatural(a.baseName, b.baseName));
+        return { sourceA, sourceB, pairs, report, indexByDatasetId };
+      }
+
+      function explicitNaN(value) {
+        return !!(value && String(value.f1_raw).toLowerCase() === 'nan');
+      }
+
+      function compareValueState(value, rowAllowed) {
+        if (!value || !rowAllowed) return 'missing';
+        if (typeof value.f1 === 'number') return 'number';
+        if (explicitNaN(value)) return 'nan';
+        return 'missing';
+      }
+
+      function compareValues(leftValue, leftAllowed, rightValue, rightAllowed) {
+        const leftState = compareValueState(leftValue, leftAllowed);
+        const rightState = compareValueState(rightValue, rightAllowed);
+        if (leftState === 'missing' || rightState === 'missing') return null;
+        if (leftState === 'number' && rightState === 'number') {
+          return { kind: 'numeric', delta: leftValue.f1 - rightValue.f1 };
+        }
+        if (leftState === 'number' && rightState === 'nan') {
+          return { kind: 'left-better-nan', delta: null };
+        }
+        if (leftState === 'nan' && rightState === 'number') {
+          return { kind: 'left-worse-nan', delta: null };
+        }
+        if (leftState === 'nan' && rightState === 'nan') {
+          return { kind: 'both-nan', delta: null };
+        }
+        return null;
+      }
+
+      function comparePriority(relation) {
+        if (!relation) return 0;
+        if (relation.kind === 'left-better-nan' || relation.kind === 'left-worse-nan') return 3;
+        if (relation.kind === 'numeric') return 2;
+        if (relation.kind === 'both-nan') return 1;
+        return 0;
+      }
+
+      function compareDeltaClass(delta) {
+        if (delta > 1e-9) return 'compare-better';
+        if (delta < -1e-9) return 'compare-worse';
+        return '';
+      }
+
+      function compareDeltaText(delta) {
+        const sign = delta > 0 ? '+' : '';
+        return `${sign}${delta.toFixed(2)}`;
+      }
+
+      function compareRelationClass(relation) {
+        if (!relation) return '';
+        if (relation.kind === 'left-better-nan') return 'compare-better';
+        if (relation.kind === 'left-worse-nan') return 'compare-worse';
+        if (relation.kind === 'numeric') return compareDeltaClass(relation.delta);
+        return '';
+      }
+
+      function compareRelationText(relation, otherValue) {
+        if (!relation) return '';
+        if (relation.kind === 'numeric') return compareDeltaText(relation.delta);
+        if (relation.kind === 'left-better-nan') return `better than NaN`;
+        if (relation.kind === 'left-worse-nan') return `worse than ${formatMetric(otherValue?.f1_raw)}`;
+        if (relation.kind === 'both-nan') return 'both NaN';
+        return '';
+      }
+
       function sortRows(result, datasets) {
         const rank = stableRankMap(result);
         if (!rowSort.key) {
@@ -1176,7 +1609,7 @@ def _html(payload_json: str) -> str:
           });
         }
         const datasetName = rowSort.key.replace('dataset:', '');
-        const datasetIndex = datasets.findIndex(d => d.name === datasetName);
+        const datasetIndex = datasets.findIndex(d => d.id === datasetName);
         return result.sort((a, b) => {
           const avRaw = datasetIndex >= 0 ? a.values[datasetIndex] : null;
           const bvRaw = datasetIndex >= 0 ? b.values[datasetIndex] : null;
@@ -1204,7 +1637,7 @@ def _html(payload_json: str) -> str:
           .replaceAll('>', '&gt;');
       }
 
-      function tooltipHtml(rowLabel, datasetName, value, rowAllowed) {
+      function tooltipHtml(rowLabel, datasetName, value, rowAllowed, compareNote = null) {
         if (!value) {
           return `<div class="title">${escapeHtml(datasetName)} · ${escapeHtml(rowLabel)}</div><div class="metrics">No matching row in this dataset.</div>`;
         }
@@ -1216,6 +1649,9 @@ def _html(payload_json: str) -> str:
           `<div class="title">${escapeHtml(datasetName)} · ${escapeHtml(rowLabel)}</div>`,
           `<div class="metrics">${escapeHtml(metrics)}</div>`,
         ];
+        if (compareNote) {
+          parts.push(`<div class="metrics">${escapeHtml(compareNote)}</div>`);
+        }
         if (Array.isArray(value.categories) && value.categories.length) {
           parts.push(`<div class="metrics">Groups: ${escapeHtml(value.categories.join(' · '))}</div>`);
         }
@@ -1246,8 +1682,8 @@ def _html(payload_json: str) -> str:
         tooltip.style.top = `${Math.max(margin, top)}px`;
       }
 
-      function showTooltip(event, rowLabel, datasetName, value, rowAllowed) {
-        tooltip.innerHTML = tooltipHtml(rowLabel, datasetName, value, rowAllowed);
+      function showTooltip(event, rowLabel, datasetName, value, rowAllowed, compareNote = null) {
+        tooltip.innerHTML = tooltipHtml(rowLabel, datasetName, value, rowAllowed, compareNote);
         tooltip.classList.add('visible');
         placeTooltip(event);
       }
@@ -1283,26 +1719,49 @@ def _html(payload_json: str) -> str:
         const datasets = visibleDatasets();
         const rows = buildRows(datasets);
         const visibleRows = filteredRows(rows, datasets);
+        const compareContext = buildCompareContext(datasets);
         updateCurrentRowOrder(visibleRows);
-        const legendDatasets = sortedAllDatasets();
+        const legendDatasets = datasetsFromActiveSources();
+        sourceCards.forEach(({ card, checkbox, suffixInput }, sourceId) => {
+          const source = sourceById.get(sourceId);
+          const active = activeSources.has(sourceId);
+          checkbox.checked = active;
+          if (suffixInput !== document.activeElement) {
+            suffixInput.value = sourceSuffix.get(sourceId) || source?.default_suffix || '';
+          }
+          card.style.opacity = active ? '1' : '0.62';
+        });
+        systemButtons.forEach((button, system) => {
+          const systemSources = sourcesForSystem(system);
+          const allActive = systemSources.every(source => activeSources.has(source.id));
+          const anyActive = systemSources.some(source => activeSources.has(source.id));
+          button.classList.toggle('active', allActive);
+          button.classList.toggle('inactive', !anyActive);
+          button.title = allActive ? `Click to hide all ${system} sources` : `Click to show all ${system} sources`;
+        });
         data.datasets.forEach(dataset => {
-          const active = activeDatasets.has(dataset.name);
+          const active = activeDatasets.has(dataset.id);
           dataset._chip.classList.toggle('active', active);
           dataset._chip.classList.toggle('inactive', !active);
-          dataset._chip.title = active ? 'Click to hide dataset' : 'Click to show dataset';
+          dataset._chip.title = `${datasetDisplayName(dataset)} · ${datasetSourceLabel(dataset)} · ${active ? 'Click to hide dataset' : 'Click to show dataset'}`;
+          dataset._chip.innerHTML = `
+            <div class="short">${datasetDisplayShort(dataset)}</div>
+            <div class="full">${datasetDisplayName(dataset)}</div>
+            <div class="meta">${dataset.variant} · ${sourceById.get(dataset.source_id)?.method ?? ''}</div>
+          `;
         });
         familyButtons.forEach((button, family) => {
           const familyDatasets = datasetsForFamily(family);
-          const allActive = familyDatasets.every(dataset => activeDatasets.has(dataset.name));
-          const anyActive = familyDatasets.some(dataset => activeDatasets.has(dataset.name));
+          const allActive = familyDatasets.every(dataset => activeDatasets.has(dataset.id));
+          const anyActive = familyDatasets.some(dataset => activeDatasets.has(dataset.id));
           button.classList.toggle('active', allActive);
           button.classList.toggle('inactive', !anyActive);
           button.title = allActive ? `Click to hide all ${family} datasets` : `Click to show all ${family} datasets`;
         });
         typeButtons.forEach((button, variant) => {
           const variantDatasets = datasetsForType(variant);
-          const allActive = variantDatasets.every(dataset => activeDatasets.has(dataset.name));
-          const anyActive = variantDatasets.some(dataset => activeDatasets.has(dataset.name));
+          const allActive = variantDatasets.every(dataset => activeDatasets.has(dataset.id));
+          const anyActive = variantDatasets.some(dataset => activeDatasets.has(dataset.id));
           button.classList.toggle('active', allActive);
           button.classList.toggle('inactive', !anyActive);
           button.title = allActive ? `Click to hide all ${variant} datasets` : `Click to show all ${variant} datasets`;
@@ -1316,7 +1775,7 @@ def _html(payload_json: str) -> str:
         legend.replaceChildren(...legendDatasets.map(dataset => dataset._chip));
         const thead = document.createElement('thead');
         const hr = document.createElement('tr');
-        ['Query', 'Type', ...datasets.map(d => d.short_name)].forEach((label, idx) => {
+        ['Query', 'Type', ...datasets.map(d => datasetDisplayShort(d))].forEach((label, idx) => {
           const th = document.createElement('th');
           const wrap = document.createElement('span');
           wrap.className = 'th-inner';
@@ -1339,15 +1798,15 @@ def _html(payload_json: str) -> str:
           th.appendChild(wrap);
           if (idx >= 2) {
             const dataset = datasets[idx - 2];
-            th.title = `${dataset.name} · drag left/right to reorder`;
+            th.title = `${datasetDisplayName(dataset)} · ${datasetSourceLabel(dataset)} · drag left/right to reorder`;
             th.classList.add('dataset-col');
             th.draggable = true;
             th.addEventListener('dragstart', event => {
-              draggedDatasetName = dataset.name;
+              draggedDatasetName = dataset.id;
               th.classList.add('dragging');
               if (event.dataTransfer) {
                 event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('text/plain', dataset.name);
+                event.dataTransfer.setData('text/plain', dataset.id);
               }
             });
             th.addEventListener('dragend', () => {
@@ -1356,7 +1815,7 @@ def _html(payload_json: str) -> str:
               thead.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
             });
             th.addEventListener('dragover', event => {
-              if (!draggedDatasetName || draggedDatasetName === dataset.name) return;
+              if (!draggedDatasetName || draggedDatasetName === dataset.id) return;
               event.preventDefault();
               th.classList.add('drag-over');
               if (event.dataTransfer) {
@@ -1369,7 +1828,7 @@ def _html(payload_json: str) -> str:
             th.addEventListener('drop', event => {
               event.preventDefault();
               th.classList.remove('drag-over');
-              reorderManualDataset(draggedDatasetName, dataset.name);
+              reorderManualDataset(draggedDatasetName, dataset.id);
               render();
             });
           }
@@ -1392,8 +1851,10 @@ def _html(payload_json: str) -> str:
 
           row.values.forEach((value, index) => {
             const td = document.createElement('td');
-            const datasetName = datasets[index].name;
+            const dataset = datasets[index];
+            const datasetName = datasetDisplayName(dataset);
             const rowAllowed = cellMatchesActiveQueryGroups(value);
+            let compareNote = null;
             if (!value || !rowAllowed) {
               td.textContent = '—';
               td.className = 'blank';
@@ -1402,11 +1863,37 @@ def _html(payload_json: str) -> str:
               td.className = 'heat';
               td.style.background = colorForValue(value.f1);
               td.style.color = textColorForValue(value.f1);
+              if (compareContext && !compareContext.error) {
+                const pair = compareContext.pairs.get(dataset.id);
+                if (pair && pair.role === 'a') {
+                  const otherValue = row.values[pair.other.index];
+                  const otherAllowed = cellMatchesActiveQueryGroups(otherValue);
+                  const relation = compareValues(value, rowAllowed, otherValue, otherAllowed);
+                  if (relation) {
+                    const deltaClass = compareRelationClass(relation);
+                    if (deltaClass) td.classList.add(deltaClass);
+                    compareNote = `vs ${datasetDisplayName(pair.other.dataset)}: ${compareRelationText(relation, otherValue)}`;
+                  }
+                }
+              }
             } else {
               td.textContent = value.f1_raw;
               td.className = 'nan';
+              if (compareContext && !compareContext.error) {
+                const pair = compareContext.pairs.get(dataset.id);
+                if (pair && pair.role === 'a') {
+                  const otherValue = row.values[pair.other.index];
+                  const otherAllowed = cellMatchesActiveQueryGroups(otherValue);
+                  const relation = compareValues(value, rowAllowed, otherValue, otherAllowed);
+                  if (relation) {
+                    const deltaClass = compareRelationClass(relation);
+                    if (deltaClass) td.classList.add(deltaClass);
+                    compareNote = `vs ${datasetDisplayName(pair.other.dataset)}: ${compareRelationText(relation, otherValue)}`;
+                  }
+                }
+              }
             }
-            td.addEventListener('mouseenter', event => showTooltip(event, row.label, datasetName, value, rowAllowed));
+            td.addEventListener('mouseenter', event => showTooltip(event, row.label, datasetName, value, rowAllowed, compareNote));
             td.addEventListener('mousemove', placeTooltip);
             td.addEventListener('mouseleave', hideTooltip);
             tr.appendChild(td);
@@ -1416,10 +1903,46 @@ def _html(payload_json: str) -> str:
         });
 
         matrix.replaceChildren(thead, tbody);
-        footer.textContent = `${visibleRows.length} rows shown · ${datasets.length}/${data.datasets.length} datasets active · source ${data.run_path}`;
+        footer.textContent = `${visibleRows.length} rows shown · ${datasets.length}/${data.datasets.length} dataset columns active · ${activeSources.size}/${data.sources.length} sources active · anchor ${data.run_path}`;
+
+        compareList.replaceChildren();
+        if (!compareContext) {
+          compareReport.classList.add('hidden');
+        } else if (compareContext.error) {
+          compareReport.classList.remove('hidden');
+          compareSummary.textContent = compareContext.error;
+        } else {
+          compareReport.classList.remove('hidden');
+          compareSummary.textContent = `Comparing ${sourceDisplayLabel(compareContext.sourceA)} against ${sourceDisplayLabel(compareContext.sourceB)}. Highlights are applied to the first source, and NaN is treated as the worst result.`;
+          if (compareContext.report.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'compare-item';
+            empty.textContent = 'No matching dataset pairs with comparable All (AVG) scores in the current selection.';
+            compareList.appendChild(empty);
+          } else {
+            compareContext.report.slice(0, 24).forEach(item => {
+              const row = document.createElement('div');
+              row.className = 'compare-item';
+              const deltaClass = item.relation.kind === 'left-better-nan'
+                ? 'pos'
+                : item.relation.kind === 'left-worse-nan'
+                ? 'neg'
+                : item.relation.kind === 'numeric' && item.relation.delta > 1e-9
+                ? 'pos'
+                : item.relation.kind === 'numeric' && item.relation.delta < -1e-9
+                ? 'neg'
+                : 'zero';
+              row.innerHTML = `
+                <div>${item.baseName}: ${formatMetric(item.leftValue)} vs ${formatMetric(item.rightValue)}</div>
+                <div class="compare-delta ${deltaClass}">${compareRelationText(item.relation, { f1_raw: item.rightValue })}</div>
+              `;
+              compareList.appendChild(row);
+            });
+          }
+        }
       }
 
-      [search, rowKind, hideEmpty, datasetSort].forEach(el => el.addEventListener('input', render));
+      [search, rowKind, hideEmpty, datasetSort, compareMode].forEach(el => el.addEventListener('input', render));
       render();
     }
 
@@ -1443,7 +1966,8 @@ def main() -> int:
     output_dir = (args.output_dir or (run_path / "summary" / "rodi_f1_site")).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    payload = _build_payload(run_path)
+    discover_root = (args.discover_root or run_path.parents[1]).resolve()
+    payload = _build_payload(run_path, discover_root)
     payload_json = json.dumps(payload, indent=2)
     (output_dir / "data.json").write_text(payload_json, encoding="utf-8")
     (output_dir / "index.html").write_text(_html(payload_json), encoding="utf-8")
