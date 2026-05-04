@@ -6,7 +6,9 @@ import math
 import re
 import subprocess
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
+from threading import Thread
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
@@ -14,18 +16,127 @@ import psycopg2
 import requests
 
 from evaluation.common import EvaluationRunConfig
+from evaluation.query_artifacts import (
+    archive_query_artifacts,
+    extract_qpair_metadata,
+    extract_sparql_from_qpair,
+    extract_sql_from_qpair,
+)
+from parsers.dump_split import discover_schemas
+from parsers.ontology_explorer import _extract_base_iri_from_owl
+
+
+def _primary_schema_from_dump(cfg: EvaluationRunConfig) -> str:
+    lines = cfg.dump_file.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+    schemas = discover_schemas(lines)
+    if schemas:
+        return schemas[0]
+    return cfg.dataset_name
 
 
 def create_properties_file(file_path: Path, *, cfg: EvaluationRunConfig) -> None:
+    schema = _primary_schema_from_dump(cfg)
     jdbc = (
         f"jdbc.url=jdbc:postgresql://{cfg.db_host}:{cfg.db_port}/{cfg.db_name}"
-        f"?options=-c%20search_path%3D{quote(cfg.dataset_name)}\n"
+        f"?currentSchema={quote(schema)}&options=-c%20search_path%3D{quote(schema)}%2Cpublic\n"
         f"jdbc.driver=org.postgresql.Driver\n"
         f"jdbc.password={cfg.db_password}\n"
         f"jdbc.user={cfg.db_user}\n"
     )
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_text(jdbc, encoding="utf-8")
+
+
+def _xsd_range_predicates(cfg: EvaluationRunConfig) -> dict[str, str]:
+    base_iri = _extract_base_iri_from_owl(str(cfg.ontology_file))
+    if not base_iri:
+        return {}
+
+    predicates: dict[str, str] = {}
+    try:
+        root = ET.parse(str(cfg.ontology_file)).getroot()
+    except Exception:
+        return predicates
+
+    def expand_prop_iri(elem: ET.Element) -> str | None:
+        iri = elem.get("IRI")
+        if iri:
+            if iri.startswith("#"):
+                return base_iri + iri[1:]
+            return iri
+        abbreviated = elem.get("abbreviatedIRI")
+        if abbreviated:
+            if abbreviated.startswith(":"):
+                return base_iri + abbreviated[1:]
+            return abbreviated
+        about = elem.get("{http://www.w3.org/1999/02/22-rdf-syntax-ns#}about")
+        if about:
+            if about.startswith("#"):
+                return base_iri + about[1:]
+            return about
+        resource = elem.get("{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource")
+        if resource:
+            if resource.startswith("#"):
+                return base_iri + resource[1:]
+            return resource
+        return None
+
+    def datatype_to_xsd(elem: ET.Element) -> str | None:
+        abbreviated = elem.get("abbreviatedIRI")
+        if abbreviated and abbreviated.startswith("xsd:"):
+            return abbreviated
+        iri = elem.get("IRI")
+        if iri and iri.startswith("http://www.w3.org/2001/XMLSchema#"):
+            return "xsd:" + iri.rsplit("#", 1)[-1]
+        resource = elem.get("{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource")
+        if resource and resource.startswith("http://www.w3.org/2001/XMLSchema#"):
+            return "xsd:" + resource.rsplit("#", 1)[-1]
+        return None
+
+    root_tag = root.tag.split("}")[-1] if "}" in root.tag else root.tag
+    if root_tag == "Ontology":
+        for axiom in root:
+            tag = axiom.tag.split("}")[-1] if "}" in axiom.tag else axiom.tag
+            if tag != "DataPropertyRange":
+                continue
+            children = list(axiom)
+            if len(children) < 2:
+                continue
+            prop_iri = expand_prop_iri(children[0])
+            xsd = datatype_to_xsd(children[1])
+            if prop_iri and xsd:
+                predicates[prop_iri] = xsd
+
+    ns = {
+        "owl": "http://www.w3.org/2002/07/owl#",
+        "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+        "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    }
+    for prop in root.findall(".//owl:DatatypeProperty", ns):
+        prop_iri = expand_prop_iri(prop)
+        if not prop_iri:
+            continue
+        for range_elem in prop.findall("rdfs:range", ns):
+            xsd = datatype_to_xsd(range_elem)
+            if xsd:
+                predicates[prop_iri] = xsd
+                break
+    return predicates
+
+
+def _prefixes_from_ttl(text: str) -> dict[str, str]:
+    prefixes: dict[str, str] = {}
+    for match in re.finditer(r"@prefix\s+([A-Za-z_][\w-]*|):\s*<([^>]+)>\s*\.", text):
+        prefixes[match.group(1)] = match.group(2)
+    return prefixes
+
+
+def prepare_ontop_mapping(cfg: EvaluationRunConfig) -> Path:
+    return cfg.mapping_file
+
+
+def harmonize_obda_datatypes(cfg: EvaluationRunConfig, obda_file: Path) -> None:
+    return
 
 
 def convert_ttl_to_obda(input_ttl: Path, output_obda: Path, ontop_dir: Path) -> None:
@@ -57,7 +168,7 @@ def start_ontop_endpoint(
     ontology_file: Path,
     property_file: Path,
     cfg: EvaluationRunConfig,
-) -> subprocess.Popen:
+) -> tuple[subprocess.Popen, Path]:
     ontop_exe = cfg.ontop_dir / "ontop"
     if not ontop_exe.exists():
         raise FileNotFoundError(f"Ontop executable not found: {ontop_exe}")
@@ -77,24 +188,42 @@ def start_ontop_endpoint(
     ]
     print("[EVAL] Starting Ontop endpoint...")
     print("[CMD]", " ".join(cmd))
-    return subprocess.Popen(
+    log_file = cfg.ontop_output_dir / "ontop_endpoint.log"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    log_file.write_text("", encoding="utf-8")
+    proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
     )
+    if proc.stdout is not None:
+        def _pump_output() -> None:
+            with log_file.open("a", encoding="utf-8") as handle:
+                for line in proc.stdout:
+                    handle.write(line)
+                    handle.flush()
+
+        Thread(target=_pump_output, daemon=True).start()
+    return proc, log_file
 
 
-def wait_for_endpoint(proc: subprocess.Popen, cfg: EvaluationRunConfig, timeout_seconds: int = 30) -> None:
+def wait_for_endpoint(
+    proc: subprocess.Popen,
+    cfg: EvaluationRunConfig,
+    log_file: Path,
+    timeout_seconds: int = 30,
+) -> None:
     endpoint_url = f"http://127.0.0.1:{cfg.ontop_port}/sparql"
     print(f"[EVAL] Waiting for Ontop endpoint on {endpoint_url} ...")
     start = time.time()
     while time.time() - start < timeout_seconds:
         if proc.poll() is not None:
-            captured = ""
-            if proc.stdout is not None:
-                captured = proc.stdout.read()
-            raise RuntimeError("Ontop endpoint terminated during startup.\n" + captured)
+            captured = log_file.read_text(encoding="utf-8") if log_file.exists() else ""
+            raise RuntimeError(
+                "Ontop endpoint terminated during startup.\n"
+                f"Startup log: {log_file}\n{captured}"
+            )
 
         try:
             response = requests.get(f"http://127.0.0.1:{cfg.ontop_port}", timeout=2)
@@ -105,7 +234,11 @@ def wait_for_endpoint(proc: subprocess.Popen, cfg: EvaluationRunConfig, timeout_
             pass
         time.sleep(1)
 
-    raise TimeoutError(f"Ontop endpoint did not become reachable within {timeout_seconds}s.")
+    captured = log_file.read_text(encoding="utf-8") if log_file.exists() else ""
+    raise TimeoutError(
+        f"Ontop endpoint did not become reachable within {timeout_seconds}s.\n"
+        f"Startup log: {log_file}\n{captured}"
+    )
 
 
 def stop_ontop_endpoint(proc: Optional[subprocess.Popen]) -> None:
@@ -120,30 +253,6 @@ def stop_ontop_endpoint(proc: Optional[subprocess.Popen]) -> None:
             proc.kill()
             proc.wait(timeout=10)
     print("[EVAL] Ontop endpoint stopped.")
-
-
-def extract_sparql_from_qpair(file_path: Path) -> str:
-    content = file_path.read_text(encoding="utf-8")
-    match = re.search(r"sparql\s*=\s*(.*?)(\ncategories=|\n\s*$)", content, re.DOTALL)
-    if not match:
-        match = re.search(r"sparql.*=.*?(pre.*)=?", content, re.DOTALL)
-    if not match:
-        raise ValueError(f"Could not extract SPARQL from {file_path}")
-    sparql = match.group(1).strip()
-    sparql = sparql.replace("\\n", "\n").replace("\\", "").strip()
-    if "}" in sparql and not sparql.endswith("}"):
-        sparql = sparql[: sparql.rindex("}") + 1]
-    return sparql
-
-
-def extract_sql_from_qpair(file_path: Path) -> str:
-    content = file_path.read_text(encoding="utf-8")
-    match = re.search(r"sql\s*=\s*(.*?)(?=\n\s*sparql\s*=|\Z)", content, re.DOTALL)
-    if not match:
-        raise ValueError(f"Could not extract SQL from {file_path}")
-    sql = match.group(1).strip()
-    sql = sql.replace("\\n", " ").replace("\\", "").strip()
-    return sql
 
 
 def execute_sparql_query(cfg: EvaluationRunConfig, sparql_query: str) -> List[Any]:
@@ -184,6 +293,7 @@ def execute_sparql_query(cfg: EvaluationRunConfig, sparql_query: str) -> List[An
 
 
 def execute_sql_query(cfg: EvaluationRunConfig, sql_query: str) -> List[Any]:
+    schema = _primary_schema_from_dump(cfg)
     conn = psycopg2.connect(
         dbname=cfg.db_name,
         user=cfg.db_user,
@@ -194,7 +304,7 @@ def execute_sql_query(cfg: EvaluationRunConfig, sql_query: str) -> List[Any]:
     try:
         with conn:
             with conn.cursor() as cur:
-                cur.execute(f"SET search_path TO {cfg.dataset_name}, public;")
+                cur.execute(f"SET search_path TO {schema}, public;")
                 cur.execute(sql_query)
                 rows = cur.fetchall()
     finally:
@@ -243,57 +353,6 @@ def _fmt_metric(value: Any) -> str:
             return "NaN"
         return f"{value:.4f}"
     return str(value)
-
-
-def extract_qpair_metadata(file_path: Path) -> Dict[str, Any]:
-    content = file_path.read_text(encoding="utf-8")
-    qid = file_path.stem
-    label = None
-
-    for pattern in [
-        r"(?m)^\s*title\s*=\s*(.+?)\s*$",
-        r"(?m)^\s*name\s*=\s*(.+?)\s*$",
-        r"(?m)^\s*description\s*=\s*(.+?)\s*$",
-    ]:
-        match = re.search(pattern, content)
-        if match:
-            raw = match.group(1).strip()
-            if raw:
-                label = raw
-                break
-
-    if label is None:
-        for pattern in [
-            r'(?m)^\s*#\s*"?(Q\d+\s*\(.+?\))"?\s*$',
-            r'(?m)^\s*//\s*"?(Q\d+\s*\(.+?\))"?\s*$',
-        ]:
-            match = re.search(pattern, content)
-            if match:
-                label = match.group(1).strip()
-                break
-
-    if label is None:
-        label = qid
-    elif not label.startswith(qid):
-        label = f"{qid} ({label})"
-
-    categories: List[str] = []
-    match = re.search(r"(?m)^\s*categories\s*=\s*(.+?)\s*$", content)
-    if match:
-        categories = [value.strip() for value in match.group(1).strip().split(",") if value.strip()]
-
-    disabled = None
-    match = re.search(r"(?m)^\s*disabled\s*=\s*(.*?)\s*$", content)
-    if match:
-        value = match.group(1).strip()
-        disabled = value if value else True
-
-    return {
-        "qid": qid,
-        "label": label,
-        "categories": categories,
-        "disabled": disabled,
-    }
 
 
 def rodi_f1(precision: float, recall: float) -> float:
@@ -382,22 +441,28 @@ def evaluate_with_ontop_like_llm4vkg(cfg: EvaluationRunConfig) -> None:
     if not cfg.ontop_dir.exists():
         raise FileNotFoundError(f"Ontop directory not found: {cfg.ontop_dir}")
 
-    cfg.output_dir.mkdir(parents=True, exist_ok=True)
+    cfg.evaluation_dir.mkdir(parents=True, exist_ok=True)
+    cfg.ontop_output_dir.mkdir(parents=True, exist_ok=True)
 
     print("[EVAL] Creating JDBC properties file...")
     create_properties_file(cfg.ontop_properties_file, cfg=cfg)
     print(f"[EVAL] JDBC properties written to: {cfg.ontop_properties_file}")
 
-    convert_ttl_to_obda(cfg.mapping_file, cfg.obda_file, cfg.ontop_dir)
+    ontop_mapping_file = prepare_ontop_mapping(cfg)
+    convert_ttl_to_obda(ontop_mapping_file, cfg.obda_file, cfg.ontop_dir)
+    harmonize_obda_datatypes(cfg, cfg.obda_file)
 
     proc: Optional[subprocess.Popen] = None
     try:
-        proc = start_ontop_endpoint(cfg.obda_file, cfg.ontology_file, cfg.ontop_properties_file, cfg)
-        wait_for_endpoint(proc, cfg)
+        proc, log_file = start_ontop_endpoint(cfg.obda_file, cfg.ontology_file, cfg.ontop_properties_file, cfg)
+        wait_for_endpoint(proc, cfg, log_file)
 
         json_results: List[Dict[str, Any]] = []
+        query_timings: List[Dict[str, Any]] = []
         qpair_files = sorted(path for path in cfg.qpair_dir.iterdir() if path.is_file() and path.suffix == ".qpair")
         print(f"[EVAL] Evaluating {len(qpair_files)} qpair files from {cfg.qpair_dir} ...")
+        queries_dir = archive_query_artifacts(cfg, qpair_files)
+        print(f"[EVAL] Query artifacts written to: {queries_dir}")
 
         for qpair_file in qpair_files:
             metadata = extract_qpair_metadata(qpair_file)
@@ -409,7 +474,9 @@ def evaluate_with_ontop_like_llm4vkg(cfg: EvaluationRunConfig) -> None:
             sparql_query = extract_sparql_from_qpair(qpair_file)
 
             try:
+                sql_started_at = time.perf_counter()
                 sql_results = execute_sql_query(cfg, sql_query)
+                sql_elapsed_seconds = time.perf_counter() - sql_started_at
             except psycopg2.errors.UndefinedTable:
                 print(f"[EVAL] Skipping {qpair_file.name}: undefined table")
                 continue
@@ -417,9 +484,16 @@ def evaluate_with_ontop_like_llm4vkg(cfg: EvaluationRunConfig) -> None:
                 print(f"[EVAL] Skipping {qpair_file.name}: undefined column")
                 continue
 
+            sparql_started_at = time.perf_counter()
             sparql_results = execute_sparql_query(cfg, sparql_query)
+            sparql_elapsed_seconds = time.perf_counter() - sparql_started_at
+            total_elapsed_seconds = sql_elapsed_seconds + sparql_elapsed_seconds
             precision, recall, f1 = calculate_precision_recall_f1(sparql_results, sql_results)
-            print(f"[EVAL] {metadata['label']}: F1={f1:.4f} P={precision:.4f} R={recall:.4f}")
+            print(
+                f"[EVAL] {metadata['label']}: "
+                f"F1={f1:.4f} P={precision:.4f} R={recall:.4f} "
+                f"SQL={sql_elapsed_seconds:.3f}s SPARQL={sparql_elapsed_seconds:.3f}s"
+            )
 
             json_results.append(
                 {
@@ -434,6 +508,22 @@ def evaluate_with_ontop_like_llm4vkg(cfg: EvaluationRunConfig) -> None:
                     "precision": precision,
                     "recall": recall,
                     "f1": f1,
+                    "sql_elapsed_seconds": sql_elapsed_seconds,
+                    "sparql_elapsed_seconds": sparql_elapsed_seconds,
+                    "total_elapsed_seconds": total_elapsed_seconds,
+                }
+            )
+            query_timings.append(
+                {
+                    "id": metadata["qid"],
+                    "label": metadata["label"],
+                    "qpair_file": qpair_file.name,
+                    "categories": metadata["categories"],
+                    "sql_elapsed_seconds": sql_elapsed_seconds,
+                    "sparql_elapsed_seconds": sparql_elapsed_seconds,
+                    "total_elapsed_seconds": total_elapsed_seconds,
+                    "sql_result_count": len(sql_results),
+                    "sparql_result_count": len(sparql_results),
                 }
             )
 
@@ -462,6 +552,10 @@ def evaluate_with_ontop_like_llm4vkg(cfg: EvaluationRunConfig) -> None:
             f"Average Recall: {avg_recall:.4f}\n",
             encoding="utf-8",
         )
+        cfg.query_ontop_timings_file.write_text(
+            json.dumps(query_timings, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
         write_rodi_like_tabular_report(json_results, cfg.eval_ontop_tabular_file)
 
         print(f"[EVAL] Average F1 Score: {avg_f1:.4f}")
@@ -470,5 +564,6 @@ def evaluate_with_ontop_like_llm4vkg(cfg: EvaluationRunConfig) -> None:
         print(f"[EVAL] Metrics JSON: {cfg.eval_ontop_metrics_file}")
         print(f"[EVAL] F1 summary:   {cfg.eval_ontop_summary_file}")
         print(f"[EVAL] Tabular report:{cfg.eval_ontop_tabular_file}")
+        print(f"[EVAL] Query timings: {cfg.query_ontop_timings_file}")
     finally:
         stop_ontop_endpoint(proc)

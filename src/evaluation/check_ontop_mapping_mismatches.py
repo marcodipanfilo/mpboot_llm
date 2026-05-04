@@ -16,6 +16,7 @@ if str(SRC_DIR) not in sys.path:
 
 try:
     from parsers import ontology_explorer as oe  # noqa: E402
+    from evaluation.common import EvaluationRunConfig  # noqa: E402
 except ModuleNotFoundError as exc:
     if exc.name == "owlready2":
         raise SystemExit(
@@ -32,6 +33,7 @@ class Mismatch:
     block_start: int
     block_end: int
     terminator: str
+    reason_lines: List[str]
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,7 +49,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--remove",
         action="store_true",
-        help="Remove literal rr:predicateObjectMap blocks for predicates declared as object properties",
+        help="Remove predicateObjectMap blocks whose object/data-vs-literal/object usage contradicts the ontology",
     )
     parser.add_argument(
         "--output",
@@ -75,7 +77,7 @@ def _expand_predicate(token: str, prefixes: Dict[str, str]) -> Optional[str]:
     return None
 
 
-def _object_property_iris(ontology_file: Path) -> set[str]:
+def _property_kinds(ontology_file: Path) -> tuple[set[str], set[str]]:
     os.environ["MPBOOT_ONTOLOGY_PATH"] = str(ontology_file.resolve())
     oe._OWL_ONTO = None
     oe._BASE_IRI = None
@@ -83,10 +85,13 @@ def _object_property_iris(ontology_file: Path) -> set[str]:
     oe._ALL_ONTOLOGY_NAMESPACES.clear()
     onto = oe._load_ontology()
     meta = oe._prop_meta(onto)
-    return {item["property_iri"] for item in meta["object_properties"]}
+    return (
+        {item["property_iri"] for item in meta["object_properties"]},
+        {item["property_iri"] for item in meta["data_properties"]},
+    )
 
 
-def _scan_pom_blocks(text: str, object_property_iris: set[str]) -> List[Mismatch]:
+def _scan_pom_blocks(text: str, object_property_iris: set[str], data_property_iris: set[str]) -> List[Mismatch]:
     prefixes = _prefixes_from_text(text)
     lines = text.splitlines()
     mismatches: List[Mismatch] = []
@@ -126,6 +131,15 @@ def _scan_pom_blocks(text: str, object_property_iris: set[str]) -> List[Mismatch
                 "rr:termType rr:Literal",
             )
         )
+        block_is_object_like = any(
+            marker in block_text
+            for marker in (
+                "rr:parentTriplesMap",
+                "rr:joinCondition",
+                "rr:termType rr:IRI",
+                "rr:template",
+            )
+        )
         terminator = "."
         for j in range(end, start - 1, -1):
             stripped = lines[j].strip()
@@ -136,17 +150,37 @@ def _scan_pom_blocks(text: str, object_property_iris: set[str]) -> List[Mismatch
                 terminator = ";"
                 break
 
-        if predicate_token and predicate_iri and predicate_iri in object_property_iris and block_is_literal:
-            mismatches.append(
-                Mismatch(
-                    predicate_token=predicate_token,
-                    predicate_iri=predicate_iri,
-                    line_no=start + 1,
-                    block_start=start,
-                    block_end=end,
-                    terminator=terminator,
+        if predicate_token and predicate_iri:
+            if predicate_iri in object_property_iris and block_is_literal:
+                mismatches.append(
+                    Mismatch(
+                        predicate_token=predicate_token,
+                        predicate_iri=predicate_iri,
+                        line_no=start + 1,
+                        block_start=start,
+                        block_end=end,
+                        terminator=terminator,
+                        reason_lines=[
+                            f"{predicate_token} is declared as an object property",
+                            "in the ontology, but this generated block mapped it as a literal data property.",
+                        ],
+                    )
                 )
-            )
+            elif predicate_iri in data_property_iris and block_is_object_like:
+                mismatches.append(
+                    Mismatch(
+                        predicate_token=predicate_token,
+                        predicate_iri=predicate_iri,
+                        line_no=start + 1,
+                        block_start=start,
+                        block_end=end,
+                        terminator=terminator,
+                        reason_lines=[
+                            f"{predicate_token} is declared as a data property",
+                            "in the ontology, but this generated block mapped it as an object property.",
+                        ],
+                    )
+                )
         i += 1
     return mismatches
 
@@ -160,8 +194,7 @@ def _apply_removals(text: str, mismatches: List[Mismatch]) -> str:
             for line in lines[mm.block_start : mm.block_end + 1]
         ]
         replacement = [
-            f"{indent}# Auto-removed for Ontop: {mm.predicate_token} is declared as an object property",
-            f"{indent}# in the ontology, but this generated block mapped it as a literal data property.",
+            *[f"{indent}# Auto-removed for Ontop: {line}" if idx == 0 else f"{indent}# {line}" for idx, line in enumerate(mm.reason_lines)],
             *commented_block,
             f"{indent}{mm.terminator}",
         ]
@@ -208,18 +241,18 @@ def _process_dataset(dataset_dir: Path, *, remove: bool, output_file: Optional[P
     print(f"\nDataset: {dataset_dir.name}")
     text = mapping_file.read_text(encoding="utf-8")
     try:
-        object_property_iris = _object_property_iris(ontology_file)
+        object_property_iris, data_property_iris = _property_kinds(ontology_file)
     except Exception as exc:
         print(f"  Failed to load ontology for mismatch checking: {type(exc).__name__}: {exc}")
         return 1
 
-    mismatches = _scan_pom_blocks(text, object_property_iris)
+    mismatches = _scan_pom_blocks(text, object_property_iris, data_property_iris)
 
     if not mismatches:
-        print("  No object-property-as-literal mismatches found.")
+        print("  No ontology property-kind mismatches found.")
         return 0
 
-    print("  Found Ontop-breaking object/data property mismatches:")
+    print("  Found Ontop-breaking property-kind mismatches:")
     for mm in mismatches:
         print(f"    line {mm.line_no}: {mm.predicate_token}  ({mm.predicate_iri})")
 
@@ -228,7 +261,27 @@ def _process_dataset(dataset_dir: Path, *, remove: bool, output_file: Optional[P
         return 1
 
     sanitized = _apply_removals(text, mismatches)
-    destination = output_file.resolve() if output_file else mapping_file
+    if output_file:
+        destination = output_file.resolve()
+    else:
+        cfg = EvaluationRunConfig(
+            dataset_dir=dataset_dir,
+            dataset_name=dataset_dir.name,
+            mapping_file=mapping_file,
+            ontology_file=ontology_file,
+            dump_file=(dataset_dir / "inputs" / "dump.sql").resolve(),
+            output_dir=(dataset_dir / "evaluation").resolve(),
+            rodi_root=Path("."),
+            ontop_dir=Path("."),
+            db_host="",
+            db_port=0,
+            db_name="",
+            db_user="",
+            db_password="",
+            db_cmd=Path("."),
+        )
+        destination = (cfg.shared_output_dir / "mappings__r2rml_ontop_kind_sanitized.ttl").resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(sanitized, encoding="utf-8")
     print(f"  Wrote sanitized mapping to: {destination}")
     return 0

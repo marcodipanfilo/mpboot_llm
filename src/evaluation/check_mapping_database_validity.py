@@ -448,10 +448,8 @@ def _process_dataset(dataset_dir: Path, args: argparse.Namespace, *, output_file
     if output_file:
         destination = output_file.resolve()
     else:
-        destination = mapping_file
-        broken_file = _broken_mapping_path(mapping_file)
-        broken_file.write_text(text, encoding="utf-8")
-        print(f"  Preserved original mapping as: {broken_file}")
+        destination = (cfg.shared_output_dir / "mappings__r2rml_db_valid_sanitized.ttl").resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(sanitized, encoding="utf-8")
     print(f"  Wrote sanitized mapping to: {destination}")
     return 0

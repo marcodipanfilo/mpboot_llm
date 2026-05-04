@@ -70,6 +70,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--compare-tabular", action="store_true", help="Compare Ontop and RODI tabular reports")
     parser.add_argument("--keep-going", action="store_true", help="Continue with later datasets after a failure")
+    parser.add_argument(
+        "--no-log-file",
+        action="store_true",
+        help="Do not write evaluation.log; print only to the terminal",
+    )
+    parser.add_argument(
+        "--force-all",
+        action="store_true",
+        help="Evaluate all selected datasets, including ones that already have the expected evaluation artifacts",
+    )
     return parser.parse_args()
 
 
@@ -154,11 +164,32 @@ def _build_config(dataset_dir: Path, args: argparse.Namespace) -> EvaluationRunC
     )
 
 
+def _has_existing_evaluation(cfg: EvaluationRunConfig, args: argparse.Namespace) -> bool:
+    if args.method == "rodi":
+        return cfg.eval_rodi_report_file.exists() and cfg.eval_rodi_tabular_file.exists()
+    if args.method == "ontop":
+        return (
+            cfg.eval_ontop_metrics_file.exists()
+            and cfg.eval_ontop_summary_file.exists()
+            and cfg.eval_ontop_tabular_file.exists()
+        )
+    if args.method == "all":
+        return (
+            cfg.eval_rodi_report_file.exists()
+            and cfg.eval_rodi_tabular_file.exists()
+            and cfg.eval_ontop_metrics_file.exists()
+            and cfg.eval_ontop_summary_file.exists()
+            and cfg.eval_ontop_tabular_file.exists()
+        )
+    return False
+
+
 def _run_compare(cfg: EvaluationRunConfig) -> None:
     from evaluation.utils_compare import build_tabular_diff
 
     diff_text = build_tabular_diff(cfg.eval_ontop_tabular_file, cfg.eval_rodi_tabular_file)
     if diff_text:
+        cfg.compare_output_dir.mkdir(parents=True, exist_ok=True)
         cfg.comparison_diff_file.write_text(diff_text + "\n", encoding="utf-8")
         raise RuntimeError(f"Tabular reports differ. Diff saved to: {cfg.comparison_diff_file}")
     if cfg.comparison_diff_file.exists():
@@ -169,6 +200,10 @@ def _run_compare(cfg: EvaluationRunConfig) -> None:
 def _resolve_db_setup(cfg: EvaluationRunConfig, args: argparse.Namespace) -> str:
     if args.db_setup != "auto":
         return args.db_setup
+    if args.method == "ontop":
+        return "dump"
+    if args.method == "rodi":
+        return "rodi"
     return "rodi" if cfg.qpair_dir.exists() else "dump"
 
 
@@ -177,53 +212,107 @@ def _run_dataset(cfg: EvaluationRunConfig, args: argparse.Namespace) -> None:
     from evaluation.rodi import run_rodi, run_rodi_setup
     from evaluation.database import ensure_dataset_database_ready, prepare_database_from_dump
 
-    cfg.output_dir.mkdir(parents=True, exist_ok=True)
-    log_file = cfg.output_dir / "evaluation.log"
+    cfg.evaluation_dir.mkdir(parents=True, exist_ok=True)
+    if args.method == "rodi":
+        log_dir = cfg.rodi_output_dir
+    elif args.method == "ontop":
+        log_dir = cfg.ontop_output_dir
+    else:
+        log_dir = cfg.evaluation_dir
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "evaluation.log"
     db_setup = _resolve_db_setup(cfg, args)
 
-    with open(log_file, "w", encoding="utf-8") as fh:
+    redirect_ctx: contextlib.AbstractContextManager[object]
+    if args.no_log_file:
+        redirect_ctx = contextlib.nullcontext()
+    else:
+        stack = contextlib.ExitStack()
+        fh = stack.enter_context(open(log_file, "w", encoding="utf-8"))
         tee_out = TeeStream(sys.stdout, fh)
         tee_err = TeeStream(sys.stderr, fh)
-        with contextlib.redirect_stdout(tee_out), contextlib.redirect_stderr(tee_err):
-            print(f"\n{'=' * 72}")
-            print(f"Dataset   : {cfg.dataset_name}")
-            print(f"Run dir   : {cfg.dataset_dir}")
-            print(f"Method    : {args.method}")
-            print(f"DB setup  : {db_setup}")
-            print(f"RODI root : {cfg.rodi_root}")
-            print(f"Ontop dir : {cfg.ontop_dir}")
-            print(f"DB        : {cfg.db_user}@{cfg.db_host}:{cfg.db_port}/{cfg.db_name}")
+        stack.enter_context(contextlib.redirect_stdout(tee_out))
+        stack.enter_context(contextlib.redirect_stderr(tee_err))
+        redirect_ctx = stack
+
+    with redirect_ctx:
+        print(f"\n{'=' * 72}")
+        print(f"Dataset   : {cfg.dataset_name}")
+        print(f"Run dir   : {cfg.dataset_dir}")
+        print(f"Method    : {args.method}")
+        print(f"DB setup  : {db_setup}")
+        print(f"RODI root : {cfg.rodi_root}")
+        print(f"Ontop dir : {cfg.ontop_dir}")
+        print(f"DB        : {cfg.db_user}@{cfg.db_host}:{cfg.db_port}/{cfg.db_name}")
+        if args.no_log_file:
+            print("Log file  : disabled (--no-log-file)")
+        else:
             print(f"Log file  : {log_file}")
-            print(f"{'=' * 72}")
+        print(f"{'=' * 72}")
 
-            if args.method == "rodi":
-                run_rodi(cfg, include_setup=True)
+        if args.method == "ontop" and db_setup == "rodi":
+            raise ValueError("RODI DB setup is not allowed with --method ontop. Use --db-setup dump or none.")
+
+        if args.method == "rodi":
+            if db_setup == "dump":
+                prepare_database_from_dump(cfg)
+            elif db_setup == "none":
+                ensure_dataset_database_ready(cfg)
+            elif db_setup != "rodi":
+                raise ValueError(f"Unsupported db setup mode: {db_setup}")
+            run_rodi(cfg, include_setup=True)
+        else:
+            if db_setup == "rodi":
+                run_rodi_setup(cfg)
+            elif db_setup == "dump":
+                prepare_database_from_dump(cfg)
+            elif db_setup == "none":
+                ensure_dataset_database_ready(cfg)
+            elif db_setup != "none":
+                raise ValueError(f"Unsupported db setup mode: {db_setup}")
+
+        if args.method in {"all", "ontop"}:
+            evaluate_with_ontop_like_llm4vkg(cfg)
+        if args.method == "all":
+            if db_setup == "rodi":
+                run_rodi(cfg, include_setup=False)
             else:
-                if db_setup == "rodi":
-                    run_rodi_setup(cfg)
-                elif db_setup == "dump":
-                    prepare_database_from_dump(cfg)
-                elif db_setup == "none":
-                    ensure_dataset_database_ready(cfg)
-                elif db_setup != "none":
-                    raise ValueError(f"Unsupported db setup mode: {db_setup}")
+                run_rodi(cfg, include_setup=True)
+        if args.compare_tabular and args.method == "all":
+            _run_compare(cfg)
 
-            if args.method in {"all", "ontop"}:
-                evaluate_with_ontop_like_llm4vkg(cfg)
-            if args.method == "all":
-                if db_setup == "rodi":
-                    run_rodi(cfg, include_setup=False)
-                else:
-                    run_rodi(cfg, include_setup=True)
-            if args.compare_tabular and args.method == "all":
-                _run_compare(cfg)
-
-            print(f"\nSaved evaluation artifacts under: {cfg.output_dir}\n")
+        if args.method == "rodi":
+            saved_dir = cfg.rodi_output_dir
+        elif args.method == "ontop":
+            saved_dir = cfg.ontop_output_dir
+        else:
+            saved_dir = cfg.evaluation_dir
+        print(f"\nSaved evaluation artifacts under: {saved_dir}\n")
 
 
 def main() -> None:
     args = parse_args()
     dataset_dirs = _select_dataset_dirs(args.run_path, args.dataset)
+
+    if not args.force_all:
+        skipped_existing = []
+        filtered_dataset_dirs = []
+        for dataset_dir in dataset_dirs:
+            cfg = _build_config(dataset_dir, args)
+            if _has_existing_evaluation(cfg, args):
+                skipped_existing.append(dataset_dir.name)
+            else:
+                filtered_dataset_dirs.append(dataset_dir)
+
+        if skipped_existing:
+            print("Skipping datasets with existing evaluation artifacts:")
+            for name in skipped_existing:
+                print(f"  - {name}")
+
+        dataset_dirs = filtered_dataset_dirs
+        if not dataset_dirs:
+            print("No datasets left to evaluate after skipping existing evaluation artifacts.")
+            sys.exit(0)
 
     overall_ok = True
     for dataset_dir in dataset_dirs:
