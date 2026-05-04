@@ -506,6 +506,14 @@ def _html(payload_json: str) -> str:
       flex: 0 0 auto;
     }
 
+    .source-controls {
+      width: 110px;
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
     .source-suffix label {
       display: block;
       font-size: 10px;
@@ -523,6 +531,29 @@ def _html(payload_json: str) -> str:
       padding: 6px 8px;
       font: inherit;
       color: var(--ink);
+    }
+
+    .source-baseline {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff8ee;
+      padding: 8px;
+    }
+
+    .source-baseline label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .source-baseline input[type="checkbox"] {
+      margin: 0;
     }
 
     .source-meta {
@@ -1135,9 +1166,11 @@ def _html(payload_json: str) -> str:
       return 0;
     }
 
-    function compareDataset(a, b, mode) {
+    function compareDataset(a, b, mode, sourceSuffix, sourceById) {
+      const displayedA = `${a.base_name}_${sourceSuffix.get(a.source_id) || sourceById.get(a.source_id)?.default_suffix || 'R?'}`;
+      const displayedB = `${b.base_name}_${sourceSuffix.get(b.source_id) || sourceById.get(b.source_id)?.default_suffix || 'R?'}`;
       if (mode === 'alpha') {
-        return compareNatural(a.base_name, b.base_name) || (a.source_index - b.source_index);
+        return compareNatural(displayedA, displayedB) || (a.source_index - b.source_index);
       }
       if (mode === 'type') {
         const rank = {
@@ -1153,7 +1186,7 @@ def _html(payload_json: str) -> str:
         const ar = rank[a.variant] ?? 999;
         const br = rank[b.variant] ?? 999;
         if (ar !== br) return ar - br;
-        return compareNatural(a.base_name, b.base_name) || (a.source_index - b.source_index);
+        return compareNatural(displayedA, displayedB) || (a.source_index - b.source_index);
       }
       return a.manual_index - b.manual_index;
     }
@@ -1185,6 +1218,10 @@ def _html(payload_json: str) -> str:
       const activeSources = new Set(
         data.sources.filter(source => source.enabled_by_default !== false).map(source => source.id)
       );
+      let activeSourceOrder = data.sources
+        .filter(source => source.enabled_by_default !== false)
+        .map(source => source.id);
+      let baselineSourceId = activeSourceOrder[0] || null;
       const sourceSuffix = new Map(
         data.sources.map(source => [source.id, source.default_suffix])
       );
@@ -1228,7 +1265,7 @@ def _html(payload_json: str) -> str:
         if (datasetSort.value === 'manual') {
           return manualDatasetOrder.map(id => datasetById.get(id)).filter(Boolean);
         }
-        return [...data.datasets].sort((a, b) => compareDataset(a, b, datasetSort.value));
+        return [...data.datasets].sort((a, b) => compareDataset(a, b, datasetSort.value, sourceSuffix, sourceById));
       }
 
       function visibleDatasets() {
@@ -1262,6 +1299,38 @@ def _html(payload_json: str) -> str:
         });
       }
 
+      function activateSource(sourceId) {
+        if (!activeSources.has(sourceId)) {
+          activeSources.add(sourceId);
+        }
+        activeSourceOrder = activeSourceOrder.filter(id => id !== sourceId);
+        activeSourceOrder.push(sourceId);
+        if (!baselineSourceId) {
+          baselineSourceId = sourceId;
+        }
+      }
+
+      function deactivateSource(sourceId) {
+        activeSources.delete(sourceId);
+        activeSourceOrder = activeSourceOrder.filter(id => id !== sourceId);
+        if (baselineSourceId === sourceId) {
+          baselineSourceId = activeSourceOrder[0] || null;
+        }
+      }
+
+      function setBaselineSource(sourceId) {
+        if (!activeSources.has(sourceId)) return;
+        baselineSourceId = sourceId;
+      }
+
+      function getBaselineSource() {
+        if (baselineSourceId && activeSources.has(baselineSourceId)) {
+          return sourceById.get(baselineSourceId) || null;
+        }
+        baselineSourceId = activeSourceOrder[0] || null;
+        return baselineSourceId ? sourceById.get(baselineSourceId) || null : null;
+      }
+
       function toggleQueryGroup(group) {
         if (activeQueryGroups.has(group)) {
           activeQueryGroups.delete(group);
@@ -1274,9 +1343,9 @@ def _html(payload_json: str) -> str:
         const anyActive = systemSources.some(source => activeSources.has(source.id));
         systemSources.forEach(source => {
           if (anyActive) {
-            activeSources.delete(source.id);
+            deactivateSource(source.id);
           } else {
-            activeSources.add(source.id);
+            activateSource(source.id);
           }
         });
       }
@@ -1350,20 +1419,26 @@ def _html(payload_json: str) -> str:
                 <div class="source-method">${source.method}</div>
               </div>
             </label>
-            <div class="source-suffix">
-              <label>Suffix</label>
-              <input type="text" value="${source.default_suffix}" />
+            <div class="source-controls">
+              <div class="source-suffix">
+                <label>Suffix</label>
+                <input type="text" value="${source.default_suffix}" />
+              </div>
+              <div class="source-baseline">
+                <label><input type="checkbox" /> Baseline</label>
+              </div>
             </div>
           </div>
           <div class="source-meta">${source.dataset_names.length} datasets</div>
         `;
         const checkbox = card.querySelector('input[type="checkbox"]');
         const suffixInput = card.querySelector('.source-suffix input');
+        const baselineInput = card.querySelector('.source-baseline input');
         checkbox.addEventListener('input', () => {
           if (checkbox.checked) {
-            activeSources.add(source.id);
+            activateSource(source.id);
           } else {
-            activeSources.delete(source.id);
+            deactivateSource(source.id);
           }
           render();
         });
@@ -1372,7 +1447,13 @@ def _html(payload_json: str) -> str:
           sourceSuffix.set(source.id, next);
           render();
         });
-        sourceCards.set(source.id, { card, checkbox, suffixInput });
+        baselineInput.addEventListener('input', () => {
+          if (baselineInput.checked) {
+            setBaselineSource(source.id);
+          }
+          render();
+        });
+        sourceCards.set(source.id, { card, checkbox, suffixInput, baselineInput });
         sourceSelection.appendChild(card);
       });
 
@@ -1485,11 +1566,14 @@ def _html(payload_json: str) -> str:
 
       function buildCompareContext(datasets) {
         if (compareMode.value !== 'first-two') return null;
-        const activeSourceList = data.sources.filter(source => activeSources.has(source.id));
-        if (activeSourceList.length < 2) {
+        const sourceA = getBaselineSource();
+        const sourceB = activeSourceOrder
+          .filter(sourceId => sourceId !== sourceA?.id && activeSources.has(sourceId))
+          .map(sourceId => sourceById.get(sourceId))
+          .find(Boolean) || null;
+        if (!sourceA || !sourceB) {
           return { error: 'Select at least two result sources to compare.' };
         }
-        const [sourceA, sourceB] = activeSourceList;
         const indexByDatasetId = new Map();
         const sourceAByBase = new Map();
         const sourceBByBase = new Map();
@@ -1536,12 +1620,16 @@ def _html(payload_json: str) -> str:
         return 'missing';
       }
 
+      function roundCompareValue(num) {
+        return Math.round((num + Number.EPSILON) * 100) / 100;
+      }
+
       function compareValues(leftValue, leftAllowed, rightValue, rightAllowed) {
         const leftState = compareValueState(leftValue, leftAllowed);
         const rightState = compareValueState(rightValue, rightAllowed);
         if (leftState === 'missing' || rightState === 'missing') return null;
         if (leftState === 'number' && rightState === 'number') {
-          return { kind: 'numeric', delta: leftValue.f1 - rightValue.f1 };
+          return { kind: 'numeric', delta: roundCompareValue(leftValue.f1) - roundCompareValue(rightValue.f1) };
         }
         if (leftState === 'number' && rightState === 'nan') {
           return { kind: 'left-better-nan', delta: null };
@@ -1722,10 +1810,12 @@ def _html(payload_json: str) -> str:
         const compareContext = buildCompareContext(datasets);
         updateCurrentRowOrder(visibleRows);
         const legendDatasets = datasetsFromActiveSources();
-        sourceCards.forEach(({ card, checkbox, suffixInput }, sourceId) => {
+        sourceCards.forEach(({ card, checkbox, suffixInput, baselineInput }, sourceId) => {
           const source = sourceById.get(sourceId);
           const active = activeSources.has(sourceId);
           checkbox.checked = active;
+          baselineInput.checked = active && sourceId === baselineSourceId;
+          baselineInput.disabled = !active;
           if (suffixInput !== document.activeElement) {
             suffixInput.value = sourceSuffix.get(sourceId) || source?.default_suffix || '';
           }
@@ -1913,7 +2003,7 @@ def _html(payload_json: str) -> str:
           compareSummary.textContent = compareContext.error;
         } else {
           compareReport.classList.remove('hidden');
-          compareSummary.textContent = `Comparing ${sourceDisplayLabel(compareContext.sourceA)} against ${sourceDisplayLabel(compareContext.sourceB)}. Highlights are applied to the first source, and NaN is treated as the worst result.`;
+          compareSummary.textContent = `Baseline ${sourceDisplayLabel(compareContext.sourceA)} compared against ${sourceDisplayLabel(compareContext.sourceB)}. Highlights are applied to the baseline source, and NaN is treated as the worst result.`;
           if (compareContext.report.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'compare-item';
