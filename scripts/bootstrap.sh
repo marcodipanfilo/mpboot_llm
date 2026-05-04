@@ -5,6 +5,7 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_bootstrap_common.sh"
 
 DOWNLOAD_RODI=0
+SELECTED_DATASETS=()
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -13,13 +14,26 @@ parse_args() {
         DOWNLOAD_RODI=1
         shift
         ;;
+      --dataset)
+        if [[ $# -lt 2 ]]; then
+          echo "Missing value for --dataset" >&2
+          exit 1
+        fi
+        SELECTED_DATASETS+=("$2")
+        shift 2
+        ;;
       *)
         echo "Unknown option: $1" >&2
-        echo "Usage: bash scripts/bootstrap.sh [--download-rodi]" >&2
+        echo "Usage: bash scripts/bootstrap.sh [--download-rodi] [--dataset <name>]..." >&2
         exit 1
         ;;
     esac
   done
+
+  if [[ "${#SELECTED_DATASETS[@]}" -gt 0 && "${DOWNLOAD_RODI}" -ne 1 ]]; then
+    echo "--dataset can only be used together with --download-rodi" >&2
+    exit 1
+  fi
 }
 
 main() {
@@ -35,7 +49,15 @@ main() {
   bash "${ROOT_DIR}/scripts/bootstrap_psql_wrapper.sh"
 
   if [[ "${DOWNLOAD_RODI}" -eq 1 ]]; then
-    bash "${ROOT_DIR}/scripts/bootstrap_download_rodi_datasets.sh"
+    if [[ "${#SELECTED_DATASETS[@]}" -gt 0 ]]; then
+      dataset_args=()
+      for dataset in "${SELECTED_DATASETS[@]}"; do
+        dataset_args+=("--dataset" "${dataset}")
+      done
+      bash "${ROOT_DIR}/scripts/bootstrap_download_rodi_datasets.sh" "${dataset_args[@]}"
+    else
+      bash "${ROOT_DIR}/scripts/bootstrap_download_rodi_datasets.sh"
+    fi
   fi
 
   if [[ -d "${DATASETS_DIR}/mondial_rel" ]]; then

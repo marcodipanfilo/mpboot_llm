@@ -58,11 +58,18 @@ The bootstrap logic is split into smaller scripts under `scripts/` and orchestra
 - `bootstrap_psql_wrapper.sh`
 - `bootstrap_download_rodi_datasets.sh`
 - `bootstrap_prepare_rodi_dumps.sh`
+- `start_anthropic_mock_server.sh`
 
 To also download the selected RODI benchmark datasets into `datasets/rodi/`:
 
 ```bash
 bash scripts/bootstrap.sh --download-rodi
+```
+
+To download only one benchmark dataset during bootstrap:
+
+```bash
+bash scripts/bootstrap.sh --download-rodi --dataset mondial_rel
 ```
 
 The bootstrap dataset download is intentionally limited to this fixed subset:
@@ -186,6 +193,49 @@ Run only one phase:
 
 ```bash
 bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/mondial_rel --only phase7
+```
+
+### 5b. Run one dataset end to end
+
+To go from bootstrap prerequisites to archived mapping outputs, evaluation, and regenerated summary webpages in one command:
+
+```bash
+bash scripts/run_end_to_end_dataset.sh mondial_rel
+```
+
+This wrapper:
+
+- bootstraps missing tools only when needed
+- downloads only the requested RODI dataset when it is missing
+- rebuilds only that dataset’s PostgreSQL-compatible copy
+- regenerates only that dataset’s OWL/XML ontology
+- starts the Anthropic cache server for the mapping phase and stops it afterward
+- archives a fresh mapping batch for that dataset
+- runs evaluation for that dataset
+- regenerates the shared summary webpages under `outputs/summary/`
+
+Use a different evaluation mode if needed:
+
+```bash
+bash scripts/run_end_to_end_dataset.sh mondial_rel --method rodi
+```
+
+Stop after mapping generation:
+
+```bash
+bash scripts/run_end_to_end_dataset.sh mondial_rel --skip-evaluation --skip-summary
+```
+
+To start the Anthropic cache/mock server manually:
+
+```bash
+bash scripts/start_anthropic_mock_server.sh
+```
+
+For example, to run it in replay mode on a different port:
+
+```bash
+bash scripts/start_anthropic_mock_server.sh --mode replay --port 8001
 ```
 
 ### 6. Run mappings for all datasets

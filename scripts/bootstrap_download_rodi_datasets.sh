@@ -6,7 +6,60 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_bootstrap_common.sh"
 
 require_command git
 
-rm -rf "${DATASETS_DIR}"
+SELECTED_DATASETS=()
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dataset)
+        if [[ $# -lt 2 ]]; then
+          echo "Missing value for --dataset" >&2
+          exit 1
+        fi
+        SELECTED_DATASETS+=("$2")
+        shift 2
+        ;;
+      *)
+        echo "Unknown option: $1" >&2
+        echo "Usage: bash scripts/bootstrap_download_rodi_datasets.sh [--dataset <name>]..." >&2
+        exit 1
+        ;;
+    esac
+  done
+}
+
+validate_selected_datasets() {
+  local dataset known
+  for dataset in "${SELECTED_DATASETS[@]}"; do
+    known=0
+    for allowed in "${RODI_DATASETS[@]}"; do
+      if [[ "${dataset}" == "${allowed}" ]]; then
+        known=1
+        break
+      fi
+    done
+    if [[ "${known}" -ne 1 ]]; then
+      echo "Unsupported dataset: ${dataset}" >&2
+      echo "Allowed datasets: ${RODI_DATASETS[*]}" >&2
+      exit 1
+    fi
+  done
+}
+
+selected_downloads() {
+  if [[ "${#SELECTED_DATASETS[@]}" -gt 0 ]]; then
+    printf '%s\n' "${SELECTED_DATASETS[@]}"
+  else
+    printf '%s\n' "${RODI_DATASETS[@]}"
+  fi
+}
+
+parse_args "$@"
+validate_selected_datasets
+
+if [[ "${#SELECTED_DATASETS[@]}" -eq 0 ]]; then
+  rm -rf "${DATASETS_DIR}"
+fi
 mkdir -p "${DATASETS_DIR}"
 
 echo "Downloading selected RODI datasets into ${DATASETS_DIR}"
@@ -24,12 +77,14 @@ else
   (
     cd "${tmp_dir}/rodi"
     git sparse-checkout init --cone
-    git sparse-checkout set "${RODI_DATASETS[@]/#/data/}"
+    mapfile -t dataset_list < <(selected_downloads)
+    git sparse-checkout set "${dataset_list[@]/#/data/}"
   )
   source_rodi_dir="${tmp_dir}/rodi"
 fi
 
-for dataset in "${RODI_DATASETS[@]}"; do
+mapfile -t dataset_list < <(selected_downloads)
+for dataset in "${dataset_list[@]}"; do
   rm -rf "${DATASETS_DIR:?}/${dataset}"
   if [[ ! -d "${source_rodi_dir}/data/${dataset}" ]]; then
     echo "Missing dataset ${dataset} under ${source_rodi_dir}/data" >&2
