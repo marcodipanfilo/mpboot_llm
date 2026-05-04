@@ -17,6 +17,36 @@ if [[ ! -f "${MONDIAL_DUMP}" ]]; then
   exit 0
 fi
 
+CURRENT_SCHEMA="$("${VENV_DIR}/bin/python" - <<'PY' "${MONDIAL_DUMP}"
+from pathlib import Path
+import re
+import sys
+
+dump_path = Path(sys.argv[1])
+text = dump_path.read_text(encoding="utf-8", errors="replace")
+schemas = []
+for line in text.splitlines():
+    if "SET search_path =" not in line:
+        continue
+    match = re.search(r"SET search_path = ([^,\s;]+)", line)
+    if not match:
+        continue
+    schema = match.group(1).strip('"')
+    if schema not in schemas:
+        schemas.append(schema)
+
+if "mondial_rdf2sql_standard" in schemas:
+    print("mondial_rdf2sql_standard")
+elif "mondial_rel" in schemas:
+    print("mondial_rel")
+PY
+)"
+
+if [[ "${CURRENT_SCHEMA}" == "mondial_rel" ]]; then
+  echo "mondial_rel dump already prepared; skipping schema rewrite"
+  exit 0
+fi
+
 echo "Preparing mondial_rel dump: keep only schema mondial_rdf2sql_standard"
 "${VENV_DIR}/bin/python" "${ROOT_DIR}/src/parsers/dump_split.py" \
   "${MONDIAL_DUMP}" \
