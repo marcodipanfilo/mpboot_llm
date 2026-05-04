@@ -129,6 +129,9 @@ main() {
   if [[ "${DOWNLOAD_RODI}" -eq 1 ]]; then
     download_rodi_datasets
   fi
+  if [[ -d "${DATASETS_DIR}/mondial_rel" ]]; then
+    bash "${ROOT_DIR}/scripts/bootstrap_prepare_rodi_dumps.sh"
+  fi
 
   cat <<EOF
 
