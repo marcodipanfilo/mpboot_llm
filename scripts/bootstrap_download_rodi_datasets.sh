@@ -7,6 +7,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_bootstrap_common.sh"
 require_command git
 
 SELECTED_DATASETS=()
+DATASET_LIST=()
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -48,14 +49,15 @@ validate_selected_datasets() {
 
 selected_downloads() {
   if [[ "${#SELECTED_DATASETS[@]}" -gt 0 ]]; then
-    printf '%s\n' "${SELECTED_DATASETS[@]}"
+    DATASET_LIST=("${SELECTED_DATASETS[@]}")
   else
-    printf '%s\n' "${RODI_DATASETS[@]}"
+    DATASET_LIST=("${RODI_DATASETS[@]}")
   fi
 }
 
 parse_args "$@"
 validate_selected_datasets
+selected_downloads
 
 if [[ "${#SELECTED_DATASETS[@]}" -eq 0 ]]; then
   rm -rf "${DATASETS_DIR}"
@@ -77,14 +79,12 @@ else
   (
     cd "${tmp_dir}/rodi"
     git sparse-checkout init --cone
-    mapfile -t dataset_list < <(selected_downloads)
-    git sparse-checkout set "${dataset_list[@]/#/data/}"
+    git sparse-checkout set "${DATASET_LIST[@]/#/data/}"
   )
   source_rodi_dir="${tmp_dir}/rodi"
 fi
 
-mapfile -t dataset_list < <(selected_downloads)
-for dataset in "${dataset_list[@]}"; do
+for dataset in "${DATASET_LIST[@]}"; do
   rm -rf "${DATASETS_DIR:?}/${dataset}"
   if [[ ! -d "${source_rodi_dir}/data/${dataset}" ]]; then
     echo "Missing dataset ${dataset} under ${source_rodi_dir}/data" >&2
