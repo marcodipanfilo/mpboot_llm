@@ -43,7 +43,8 @@ class LLMConfig:
         "gpt4o-mini": "gpt-4o-mini",
         "gpt4o":      "gpt-4o",
         "groq":       "openai/gpt-oss-120b",
-        "claude":     "claude-haiku-4-5-20251001",
+#        "claude":     "claude-haiku-4-5-20251001",
+        "claude":     "claude-sonnet-4-6",
         "gemini":     "gemini-2.0-flash-exp"
     }
 
