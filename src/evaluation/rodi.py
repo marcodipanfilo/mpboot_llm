@@ -300,7 +300,8 @@ def _prepare_rodi_scenario_queries(cfg: EvaluationRunConfig) -> Path | None:
     copied = 0
     for source_query in sorted(source_queries_dir.glob("*.qpair")):
         destination_name = source_query.name.replace("_pg_compatible", "")
-        shutil.copy2(source_query, scenario_queries_dir / destination_name)
+        destination_path = scenario_queries_dir / destination_name
+        shutil.copy2(source_query, destination_path)
         copied += 1
 
     if copied == 0:

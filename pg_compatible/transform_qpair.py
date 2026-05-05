@@ -8,6 +8,16 @@ TOP_LEVEL_KEY_RE = re.compile(r"^\s*[A-Za-z][A-Za-z0-9_]*\s*=")
 SQL_KEY_RE = re.compile(r"^\s*sql\s*=", re.IGNORECASE)
 
 
+def strip_dataset_schema_prefixes(sql: str, input_path: Path) -> str:
+    dataset_dir = input_path.parent.parent
+    if dataset_dir.name != "mondial_rel":
+        return sql
+
+    for schema_name in ("mondial_rdf2sql_standard", "mondial_rel"):
+        sql = re.sub(rf"\b{re.escape(schema_name)}\.", "", sql, flags=re.IGNORECASE)
+    return sql
+
+
 def extract_sql_block(lines):
     """
     Finds the sql block in a qpair file.
@@ -54,6 +64,7 @@ def make_qpair_pg_compatible_file(input_path: Path, output_path: Path):
     sql_content = sql_block[len(prefix):]
 
     new_sql, mapping, collisions = transform_sql_for_qpair(sql_content)
+    new_sql = strip_dataset_schema_prefixes(new_sql, input_path)
 
     lines[start:end] = [prefix + new_sql]
     output_path.write_text("".join(lines), encoding="utf-8")
