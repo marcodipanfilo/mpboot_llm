@@ -226,6 +226,26 @@ Stop after mapping generation:
 bash scripts/run_end_to_end_dataset.sh mondial_rel --skip-evaluation --skip-summary
 ```
 
+### 5c. Run all datasets end to end
+
+To execute the full batch from bootstrap prerequisites to mapping generation, evaluation, and shared summary webpages:
+
+```bash
+bash scripts/run_end_to_end_all.sh
+```
+
+To evaluate only with RODI after batch mapping generation:
+
+```bash
+bash scripts/run_end_to_end_all.sh --method rodi
+```
+
+To stop after archived mapping generation:
+
+```bash
+bash scripts/run_end_to_end_all.sh --skip-evaluation --skip-summary
+```
+
 To start the Anthropic cache/mock server manually:
 
 ```bash
