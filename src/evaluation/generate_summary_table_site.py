@@ -344,7 +344,7 @@ def _html(payload_json: str) -> str:
       --accent: #8a3b12;
       --panel: #fffaf0;
       --best: #dff2d6;
-      --nan: #f3d0c5;
+      --nan: #d9dee4;
       --missing: #f3ecdf;
     }
     * { box-sizing: border-box; }
@@ -607,7 +607,7 @@ def _html(payload_json: str) -> str:
     }
     td.value.nan {
       background: var(--nan);
-      color: #7f1d1d;
+      color: #4b5563;
       font-weight: 700;
     }
     td.value.missing {
@@ -625,6 +625,14 @@ def _html(payload_json: str) -> str:
       color: var(--muted);
       letter-spacing: 0.08em;
       margin-top: 4px;
+    }
+    thead th.dragging {
+      opacity: 0.45;
+    }
+    thead th.drag-over {
+      outline: 2px solid rgba(138,59,18,0.5);
+      outline-offset: -3px;
+      background: rgba(255, 238, 214, 0.98);
     }
     .th-bottom strong {
       color: var(--ink);
@@ -851,6 +859,7 @@ def _html(payload_json: str) -> str:
         this.state = {
           activeSources: new Set(defaultSourceIds),
           activeSourceOrder: [...defaultSourceIds],
+          draggedSourceId: null,
           sourceSuffix: new Map(this.data.sources.map(source => [source.id, source.default_suffix])),
           activeGroups: new Set(this.data.groups),
           activeDomains: new Set(this.data.domains),
@@ -916,6 +925,16 @@ def _html(payload_json: str) -> str:
           if (anyActive) this.deactivateSource(sourceId);
           else this.activateSource(sourceId);
         });
+      },
+
+      reorderManualSource(draggedId, targetId) {
+        if (!draggedId || !targetId || draggedId === targetId) return;
+        const order = this.state.activeSourceOrder.filter(id => id !== draggedId);
+        const targetIndex = order.indexOf(targetId);
+        if (targetIndex === -1) order.push(draggedId);
+        else order.splice(targetIndex, 0, draggedId);
+        this.state.activeSourceOrder = order;
+        this.dom.columnOrder.value = 'manual';
       },
 
       sortedSources() {
@@ -1164,8 +1183,35 @@ def _html(payload_json: str) -> str:
         hr.appendChild(thScenario);
         sources.forEach(source => {
           const th = document.createElement('th');
-          th.title = this.displayLabel(source);
+          th.title = `${this.displayLabel(source)} · drag left/right to reorder`;
           th.innerHTML = `<span class="th-top">${this.shortLabel(source)}</span><span class="th-bottom">${source.system}</span>`;
+          th.draggable = true;
+          th.addEventListener('dragstart', event => {
+            this.state.draggedSourceId = source.id;
+            th.classList.add('dragging');
+            if (event.dataTransfer) {
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', source.id);
+            }
+          });
+          th.addEventListener('dragend', () => {
+            this.state.draggedSourceId = null;
+            th.classList.remove('dragging');
+            thead.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+          });
+          th.addEventListener('dragover', event => {
+            if (!this.state.draggedSourceId || this.state.draggedSourceId === source.id) return;
+            event.preventDefault();
+            th.classList.add('drag-over');
+            if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+          });
+          th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
+          th.addEventListener('drop', event => {
+            event.preventDefault();
+            th.classList.remove('drag-over');
+            this.reorderManualSource(this.state.draggedSourceId, source.id);
+            this.render();
+          });
           hr.appendChild(th);
         });
         thead.appendChild(hr);

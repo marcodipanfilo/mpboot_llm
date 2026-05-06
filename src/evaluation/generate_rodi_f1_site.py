@@ -830,12 +830,12 @@ def _html(payload_json: str) -> str:
     td.nan {
       background: repeating-linear-gradient(
         -45deg,
-        #a7461a,
-        #a7461a 10px,
-        #c96e31 10px,
-        #c96e31 20px
+        #8f98a3,
+        #8f98a3 10px,
+        #c7ced6 10px,
+        #c7ced6 20px
       );
-      color: #fff7ea;
+      color: #2f3944;
       font-weight: 700;
       min-width: 64px;
     }
