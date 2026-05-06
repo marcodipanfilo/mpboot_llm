@@ -6,6 +6,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 try:
     from src.evaluation.generate_rodi_f1_site import (
@@ -20,7 +21,6 @@ try:
         _read_query_manifest,
         _read_tabular,
         _row_order_key,
-        _source_enabled_by_default,
     )
 except ModuleNotFoundError:  # pragma: no cover - fallback for direct script execution
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -36,7 +36,6 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for direct script exe
         _read_query_manifest,
         _read_tabular,
         _row_order_key,
-        _source_enabled_by_default,
     )
 
 
@@ -65,8 +64,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "run_path",
+        nargs="?",
         type=Path,
-        help="Anchor batch directory under outputs/<system>/<batch_timestamp>",
+        help="Optional batch directory under outputs/<system>/<batch_timestamp> used only to prioritize source ordering.",
     )
     parser.add_argument(
         "--output-dir",
@@ -89,7 +89,7 @@ def _batch_dataset_dirs(batch_dir: Path) -> list[Path]:
     return sorted(path for path in batch_dir.iterdir() if _is_dataset_archive_dir(path))
 
 
-def _ordered_batches(run_path: Path, discover_root: Path) -> list[BatchRef]:
+def _ordered_batches(run_path: Optional[Path], discover_root: Path) -> list[BatchRef]:
     prioritized: list[BatchRef] = []
     others: list[BatchRef] = []
 
@@ -97,7 +97,7 @@ def _ordered_batches(run_path: Path, discover_root: Path) -> list[BatchRef]:
         batch_dirs = sorted((path for path in system_dir.iterdir() if path.is_dir()), key=lambda p: p.name, reverse=True)
         for batch_dir in batch_dirs:
             ref = BatchRef(system_dir=system_dir, batch_dir=batch_dir)
-            if batch_dir.resolve() == run_path:
+            if run_path is not None and batch_dir.resolve() == run_path:
                 prioritized.append(ref)
             else:
                 others.append(ref)
@@ -105,7 +105,7 @@ def _ordered_batches(run_path: Path, discover_root: Path) -> list[BatchRef]:
     return prioritized + others
 
 
-def _discover_sources(run_path: Path, discover_root: Path) -> list[SourceRef]:
+def _discover_sources(run_path: Optional[Path], discover_root: Path) -> list[SourceRef]:
     sources: list[SourceRef] = []
     for batch in _ordered_batches(run_path, discover_root):
         dataset_dirs = _batch_dataset_dirs(batch.batch_dir)
@@ -130,7 +130,7 @@ def _discover_sources(run_path: Path, discover_root: Path) -> list[SourceRef]:
 
 
 class PayloadBuilder:
-    def __init__(self, run_path: Path, discover_root: Path) -> None:
+    def __init__(self, run_path: Optional[Path], discover_root: Path) -> None:
         self.run_path = run_path
         self.discover_root = discover_root
         self.datasets: list[dict[str, object]] = []
@@ -147,7 +147,7 @@ class PayloadBuilder:
                 self._append_dataset(source, source_index, dataset_dir)
 
         return {
-            "run_path": str(self.run_path),
+            "run_path": str(self.run_path) if self.run_path else "",
             "discover_root": str(self.discover_root),
             "row_defs": self._build_row_defs(),
             "query_groups": self._build_query_groups(),
@@ -163,9 +163,7 @@ class PayloadBuilder:
                 "timestamp": source.timestamp,
                 "method": source.method,
                 "default_suffix": f"R{source_index + 1}",
-                "enabled_by_default": _source_enabled_by_default(
-                    self.run_path, source.system_name, source.timestamp, source.method
-                ),
+                "enabled_by_default": False,
                 "dataset_names": [dataset_dir.name for dataset_dir in source.dataset_dirs],
             }
         )
@@ -196,8 +194,7 @@ class PayloadBuilder:
                 "variant": _dataset_variant(dataset_dir.name),
                 "manual_index": self._dataset_index,
                 "source_index": source_index,
-                "enabled_by_default": dataset_dir.name not in DEFAULT_DISABLED_DATASETS
-                and _source_enabled_by_default(self.run_path, source.system_name, source.timestamp, source.method),
+                "enabled_by_default": False,
                 "has_tabular": True,
                 "overall_f1": overall_f1,
                 "rows": row_map,
@@ -254,7 +251,7 @@ class PayloadBuilder:
         return ordered_groups
 
 
-def build_payload(run_path: Path, discover_root: Path) -> dict[str, object]:
+def build_payload(run_path: Optional[Path], discover_root: Path) -> dict[str, object]:
     return PayloadBuilder(run_path, discover_root).build()
 
 
@@ -1149,7 +1146,8 @@ def _javascript_refactored() -> str:
         this.logic.updateCurrentRowOrder(visibleRows);
         this.renderStatePanels();
         this.renderMatrix(datasets, visibleRows, compareContext);
-        this.dom.footer.textContent = `${visibleRows.length} rows shown · ${datasets.length}/${this.data.datasets.length} dataset columns active · ${this.state.activeSources.size}/${this.data.sources.length} sources active · anchor ${this.data.run_path}`;
+        const scopeLabel = this.data.run_path ? `anchor ${this.data.run_path}` : `discover root ${this.data.discover_root}`;
+        this.dom.footer.textContent = `${visibleRows.length} rows shown · ${datasets.length}/${this.data.datasets.length} dataset columns active · ${this.state.activeSources.size}/${this.data.sources.length} sources active · ${scopeLabel}`;
         this.renderCompareReport(compareContext);
       },
     };
@@ -1171,11 +1169,12 @@ def _html_refactored(payload_json: str) -> str:
 
 def main() -> int:
     args = parse_args()
-    run_path = args.run_path.resolve()
-    if not run_path.exists() or not run_path.is_dir():
+    repo_root = Path(__file__).resolve().parents[2]
+    run_path = args.run_path.resolve() if args.run_path else None
+    if run_path is not None and (not run_path.exists() or not run_path.is_dir()):
         raise SystemExit(f"Run path not found or not a directory: {run_path}")
 
-    discover_root = (args.discover_root or run_path.parents[1]).resolve()
+    discover_root = (args.discover_root or (run_path.parents[1] if run_path else (repo_root / "outputs"))).resolve()
     default_output_dir = discover_root / "summary" / "rodi_f1_site_refactored"
     output_dir = (args.output_dir or default_output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -10,8 +10,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "run_path",
+        nargs="?",
         type=Path,
-        help="Anchor batch directory under outputs/<system>/<batch_timestamp>",
+        help="Optional batch directory under outputs/<system>/<batch_timestamp> used only to infer the outputs root when needed.",
     )
     parser.add_argument(
         "--output-dir",
@@ -192,11 +193,12 @@ def _html() -> str:
 
 def main() -> int:
     args = parse_args()
-    run_path = args.run_path.resolve()
-    if not run_path.exists() or not run_path.is_dir():
+    repo_root = Path(__file__).resolve().parents[2]
+    run_path = args.run_path.resolve() if args.run_path else None
+    if run_path is not None and (not run_path.exists() or not run_path.is_dir()):
       raise SystemExit(f"Run path not found or not a directory: {run_path}")
 
-    outputs_root = run_path.parents[1]
+    outputs_root = run_path.parents[1] if run_path else (repo_root / "outputs")
     output_dir = (args.output_dir or (outputs_root / "summary")).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 

@@ -142,8 +142,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "run_path",
+        nargs="?",
         type=Path,
-        help="Anchor batch directory under outputs/<system>/<batch_timestamp>",
+        help="Optional batch directory under outputs/<system>/<batch_timestamp> used only to prioritize source ordering.",
     )
     parser.add_argument(
         "--output-dir",
@@ -233,10 +234,6 @@ def _variant_key(dataset_name: Optional[str]) -> str:
     return "other"
 
 
-def _source_enabled_by_default(anchor_run: Path, source: SourceRef) -> bool:
-    return anchor_run.parent.name == source.system_name and anchor_run.name == source.timestamp
-
-
 def _paper_metrics(score: float) -> dict[str, Any]:
     return {
         "label": "All (AVG)",
@@ -249,7 +246,7 @@ def _paper_metrics(score: float) -> dict[str, Any]:
     }
 
 
-def _build_payload(run_path: Path, discover_root: Path) -> dict[str, object]:
+def _build_payload(run_path: Optional[Path], discover_root: Path) -> dict[str, object]:
     rows: list[dict[str, object]] = []
     row_index_by_dataset: dict[str, int] = {}
     for row_index, row in enumerate(PAPER_ROWS):
@@ -304,7 +301,7 @@ def _build_payload(run_path: Path, discover_root: Path) -> dict[str, object]:
                 "timestamp": source.timestamp,
                 "method": source.method,
                 "default_suffix": suffix,
-                "enabled_by_default": _source_enabled_by_default(run_path, source),
+                "enabled_by_default": False,
                 "dataset_names": [dataset_dir.name for dataset_dir in source.dataset_dirs],
                 "source_index": source_index,
             }
@@ -319,7 +316,7 @@ def _build_payload(run_path: Path, discover_root: Path) -> dict[str, object]:
         source_scores[source_id] = value_map
 
     return {
-        "run_path": str(run_path),
+        "run_path": str(run_path) if run_path else "",
         "discover_root": str(discover_root),
         "rows": rows,
         "sources": sources,
@@ -913,6 +910,14 @@ def _html(payload_json: str) -> str:
         });
       },
 
+      toggleActiveSourceGroup(sourceIds) {
+        const anyActive = sourceIds.some(sourceId => this.state.activeSources.has(sourceId));
+        sourceIds.forEach(sourceId => {
+          if (anyActive) this.deactivateSource(sourceId);
+          else this.activateSource(sourceId);
+        });
+      },
+
       sortedSources() {
         const active = this.data.sources.filter(source => this.state.activeSources.has(source.id));
         const order = this.dom.columnOrder.value;
@@ -1034,8 +1039,7 @@ def _html(payload_json: str) -> str:
           button.className = 'group-button';
           button.textContent = system;
           button.addEventListener('click', () => {
-            this.toggleGroup(this.state.activeSources, this.data.sources.filter(source => source.system === system).map(source => source.id));
-            this.state.activeSourceOrder = this.state.activeSourceOrder.filter(id => this.state.activeSources.has(id));
+            this.toggleActiveSourceGroup(this.data.sources.filter(source => source.system === system).map(source => source.id));
             this.render();
           });
           this.view.systemButtons.set(system, button);
@@ -1048,8 +1052,7 @@ def _html(payload_json: str) -> str:
           button.className = 'group-button';
           button.textContent = method;
           button.addEventListener('click', () => {
-            this.toggleGroup(this.state.activeSources, this.data.sources.filter(source => source.method === method).map(source => source.id));
-            this.state.activeSourceOrder = this.state.activeSourceOrder.filter(id => this.state.activeSources.has(id));
+            this.toggleActiveSourceGroup(this.data.sources.filter(source => source.method === method).map(source => source.id));
             this.render();
           });
           this.view.methodButtons.set(method, button);
@@ -1232,7 +1235,8 @@ def _html(payload_json: str) -> str:
         this.renderState();
         this.renderTable(sources, rows);
         this.renderSummary(sources, rows);
-        this.dom.footer.textContent = `${rows.length} rows shown · ${sources.length}/${this.data.sources.length} sources active · anchor ${this.data.run_path}`;
+        const scopeLabel = this.data.run_path ? `anchor ${this.data.run_path}` : `discover root ${this.data.discover_root}`;
+        this.dom.footer.textContent = `${rows.length} rows shown · ${sources.length}/${this.data.sources.length} sources active · ${scopeLabel}`;
       },
     };
 
@@ -1249,11 +1253,12 @@ def _html(payload_json: str) -> str:
 
 def main() -> int:
     args = parse_args()
-    run_path = args.run_path.resolve()
-    if not run_path.exists() or not run_path.is_dir():
+    repo_root = Path(__file__).resolve().parents[2]
+    run_path = args.run_path.resolve() if args.run_path else None
+    if run_path is not None and (not run_path.exists() or not run_path.is_dir()):
         raise SystemExit(f"Run path not found or not a directory: {run_path}")
 
-    discover_root = (args.discover_root or run_path.parents[1]).resolve()
+    discover_root = (args.discover_root or (run_path.parents[1] if run_path else (repo_root / "outputs"))).resolve()
     default_output_dir = discover_root / "summary" / "summary_table_site"
     output_dir = (args.output_dir or default_output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
