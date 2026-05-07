@@ -220,3 +220,11 @@ ENV/
 /site
 
 # End of https://www.gitignore.io/api/macos,linux,django,python,pycharm
+datasets
+pg_compatible/outputs
+outputs
+.tools
+src/inputs
+src/memory
+anthropic_mock_server/cache.sqlite3
+outputs_folder_backup

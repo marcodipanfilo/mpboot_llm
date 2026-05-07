@@ -1,0 +1,3 @@
+rdflib
+owlready2
+python-dotenv

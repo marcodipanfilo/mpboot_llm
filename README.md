@@ -1,93 +1,321 @@
-# mpboot_llm
+# LLM_MPBoot
 
+LLM_MPBoot generates R2RML mappings from relational database dumps and target ontologies with an LLM-driven pipeline. The repo also includes a local evaluation stack for [RODI](https://www.semantic-web-journal.net/system/files/swj1439.pdf)-style benchmarks, Ontop-based checking, and shared result webpages.
 
+## Requirements
 
-## Getting started
+- Python 3.9+
+- Java 11+
+- `git`
+- `curl`
+- `unzip`
+- Docker
+- either `mvn` or Docker access to the `maven` image
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+All commands below assume you are at the repository root:
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.inf.unibz.it/in2data/mpboot_llm.git
-git branch -M main
-git push -uf origin main
+```bash
+cd mpboot_llm
 ```
 
-## Integrate with your tools
+## Environment Setup
 
-- [ ] [Set up project integrations](https://gitlab.inf.unibz.it/in2data/mpboot_llm/-/settings/integrations)
+Bootstrap the local toolchain:
 
-## Collaborate with your team
+```bash
+bash scripts/bootstrap.sh
+```
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+This installs or prepares:
 
-## Test and Deploy
+- `.venv`
+- `.tools/robot`
+- `.tools/ontop`
+- `.tools/rodi`
+- `.tools/ontop/jdbc`
+- `.tools/bin/psql_docker.sh`
+- the local PostgreSQL Docker container
 
-Use the built-in continuous integration in GitLab.
+Then create `.env`:
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+```bash
+cp .env.example .env
+```
 
-***
+At minimum, set the API key for the provider you want to use. The active provider/model is configured in [src/config/llm_config.py](src/config/llm_config.py).
 
-# Editing this README
+Useful environment variables:
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+- `ANTHROPIC_API_KEY`
+- `ANTHROPIC_PROXY_URL`
+- `ANTHROPIC_MOCK_LOG_LEVEL`
+- `MPBOOT_DB_PORT`
+- `MPBOOT_DB_NAME`
+- `MPBOOT_R2RML_FORCE_DOUBLE_FOR_DECIMALS`
 
-## Suggestions for a good README
+## Workflow 1: Full RODI Pipeline
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+This is the workflow for the bundled RODI benchmark datasets under `datasets/rodi/`.
 
-## Name
-Choose a self-explaining name for your project.
+### One command for one dataset
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+Run everything for one dataset:
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+```bash
+bash scripts/run_end_to_end_dataset.sh mondial_rel --method all
+```
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Variants:
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+```bash
+bash scripts/run_end_to_end_dataset.sh mondial_rel --method rodi
+bash scripts/run_end_to_end_dataset.sh mondial_rel --skip-evaluation --skip-summary
+```
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+This wrapper will:
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+1. bootstrap missing tools
+2. download the requested RODI dataset if missing
+3. normalize `mondial_rel` if needed
+4. build the PostgreSQL-compatible dataset copy
+5. generate `ontology.owl` if needed
+6. start the local Anthropic cache server
+7. run mapping generation
+8. stop the cache server
+9. run evaluation
+10. regenerate the shared summary webpages
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### One command for all datasets
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+Run the full batch:
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+```bash
+bash scripts/run_end_to_end_all.sh
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+Variants:
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```bash
+bash scripts/run_end_to_end_all.sh --method rodi
+bash scripts/run_end_to_end_all.sh --skip-evaluation --skip-summary
+```
 
-## License
-For open source projects, say how it is licensed.
+### Manual step-by-step RODI workflow
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+If you want the individual steps instead of the wrapper:
+
+1. Download the selected benchmark datasets:
+
+```bash
+bash scripts/bootstrap.sh --download-rodi
+```
+
+Download only one dataset:
+
+```bash
+bash scripts/bootstrap.sh --download-rodi --dataset mondial_rel
+```
+
+2. Build PostgreSQL-compatible dataset copies:
+
+```bash
+bash scripts/create_pg_compatible_dataset.sh datasets/rodi
+```
+
+3. Generate OWL/XML where needed:
+
+```bash
+bash scripts/generate_owlxml_ontologies.sh pg_compatible/outputs/data_pg_compatible
+```
+
+4. Run mapping generation:
+
+```bash
+bash scripts/create_all_mapping.sh pg_compatible/outputs/data_pg_compatible --keep-going
+```
+
+Or one dataset only:
+
+```bash
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/mondial_rel
+```
+
+5. Evaluate an archived batch:
+
+```bash
+bash scripts/evaluation.sh outputs/<model>/<timestamp> --method all --keep-going
+```
+
+Only one dataset:
+
+```bash
+bash scripts/evaluation.sh outputs/<model>/<timestamp> --dataset mondial_rel --method all
+```
+
+6. Regenerate the shared webpages:
+
+```bash
+bash scripts/generate_summary_portal.sh
+```
+
+You can still pass an archived batch path if you want to anchor discovery to one run:
+
+```bash
+bash scripts/generate_summary_portal.sh outputs/<model>/<timestamp>
+```
+
+### Notes about `mondial_rel`
+
+`mondial_rel` needs one repo-specific normalization step. During bootstrap preparation, the repo:
+
+- keeps only the relevant schema from the original dump
+- renames the schema to `mondial_rel`
+- strips obsolete schema prefixes from the Mondial `.qpair` SQL
+
+That normalization is handled by [scripts/bootstrap_prepare_rodi_dumps.sh](scripts/bootstrap_prepare_rodi_dumps.sh).
+
+## Workflow 2: Generate Mappings From Your Own Dump And Ontology
+
+If you already have a relational dump and an ontology, you do not need the RODI dataset download path. The mapping pipeline expects a dataset directory containing:
+
+- `dump.sql` or `dump_pg_compatible.sql`
+- `ontology.ttl` or `ontology.owl`
+- optionally `queries/*.qpair` if you also want RODI-style evaluation later
+
+### Minimal directory layout
+
+Example:
+
+```text
+my_input/
+  my_dataset/
+    dump.sql
+    ontology.ttl
+```
+
+### Convert your dataset to the repo's PostgreSQL-compatible format
+
+```bash
+bash scripts/create_pg_compatible_dataset.sh my_input pg_compatible/outputs/data_pg_compatible
+```
+
+That will create:
+
+```text
+pg_compatible/outputs/data_pg_compatible/my_dataset/
+```
+
+with:
+
+- `dump_pg_compatible.sql`
+- `ontology.ttl` or copied `ontology.owl`
+- copied extra files such as `queries/`
+
+If you only want to process a single dataset directory directly:
+
+```bash
+bash scripts/create_pg_compatible_dataset.sh my_input/my_dataset pg_compatible/outputs/data_pg_compatible/my_dataset
+```
+
+### Generate `ontology.owl` if your ontology is Turtle
+
+```bash
+bash scripts/generate_owlxml_ontologies.sh pg_compatible/outputs/data_pg_compatible --dataset my_dataset
+```
+
+If `ontology.owl` already exists, this step can be skipped unless you want to overwrite it:
+
+```bash
+bash scripts/generate_owlxml_ontologies.sh pg_compatible/outputs/data_pg_compatible --dataset my_dataset --overwrite
+```
+
+### Run mapping generation for that dataset
+
+```bash
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/my_dataset
+```
+
+The runner will stage the dataset into the live workspace:
+
+- [src/inputs/database](src/inputs/database)
+- [src/inputs/ontology](src/inputs/ontology)
+
+and then execute the mapping phases.
+
+Useful variants:
+
+```bash
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/my_dataset --dry-run
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/my_dataset --from phase1
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/my_dataset --only phase7
+```
+
+### Evaluate your own dataset
+
+Evaluation is optional. If you also provide `queries/*.qpair`, you can evaluate an archived run later with:
+
+```bash
+bash scripts/evaluation.sh outputs/<model>/<timestamp> --dataset my_dataset --method all
+```
+
+If you have no qpair queries, the mapping-generation workflow still works; only the RODI query evaluation path is unavailable.
+
+## Outputs
+
+### Live workspace during a run
+
+The active workspace used by the mapping agents is:
+
+- [src/inputs](src/inputs)
+- [src/outputs](src/outputs)
+- [src/memory](src/memory)
+
+The live generated mapping ends up at:
+
+- [src/outputs/mappings/mappings_r2rml.ttl](src/outputs/mappings/mappings_r2rml.ttl)
+
+### Archived runs
+
+Each completed run is archived under:
+
+```text
+outputs/<model>/<timestamp>/<dataset>/
+```
+
+Typical contents:
+
+- `mappings_r2rml.ttl`
+- `run_metadata.json`
+- `run.log`
+- `inputs/`
+- `workspace/`
+- `evaluation/` after evaluation
+
+### Shared summary webpages
+
+Generated result pages live under:
+
+- [outputs/summary/index.html](outputs/summary/index.html)
+- [outputs/summary/rodi_f1_site_refactored/index.html](outputs/summary/rodi_f1_site_refactored/index.html)
+- [outputs/summary/summary_table_site/index.html](outputs/summary/summary_table_site/index.html)
+
+Regenerate them with:
+
+```bash
+bash scripts/generate_summary_portal.sh
+```
+
+## Script Reference
+
+Main entrypoints:
+
+- [scripts/bootstrap.sh](scripts/bootstrap.sh)
+- [scripts/run_end_to_end_dataset.sh](scripts/run_end_to_end_dataset.sh)
+- [scripts/run_end_to_end_all.sh](scripts/run_end_to_end_all.sh)
+- [scripts/create_pg_compatible_dataset.sh](scripts/create_pg_compatible_dataset.sh)
+- [scripts/generate_owlxml_ontologies.sh](scripts/generate_owlxml_ontologies.sh)
+- [scripts/create_mapping_single_dataset.sh](scripts/create_mapping_single_dataset.sh)
+- [scripts/create_all_mapping.sh](scripts/create_all_mapping.sh)
+- [scripts/evaluation.sh](scripts/evaluation.sh)
+- [scripts/generate_summary_portal.sh](scripts/generate_summary_portal.sh)
+- [scripts/start_anthropic_mock_server.sh](scripts/start_anthropic_mock_server.sh)
