@@ -1,0 +1,42 @@
+{
+  "title": "mpboot_llm",
+  "description": "<p>Source code for <code>mpboot_llm</code>, a pipeline for generating R2RML mappings from relational database dumps and ontologies with LLM-based agents, together with scripts for benchmark preparation, evaluation, and result summary generation.</p><p>Authors are listed in paper order.</p>",
+  "license": "cc-by-sa-4.0",
+  "creators": [
+    {
+      "name": "Kamal Hamaz",
+      "orcid": "0000-0001-6796-630X",
+      "affiliation": "Faculty of Engineering, Free University of Bozen-Bolzano, 39100 Bolzano, Italy"
+    },
+    {
+      "name": "Marco Di Panfilo",
+      "orcid": "0000-0002-9284-2488",
+      "affiliation": "Faculty of Engineering, Free University of Bozen-Bolzano, 39100 Bolzano, Italy"
+    },
+    {
+      "name": "Davide Lanti",
+      "orcid": "0000-0003-1097-2965",
+      "affiliation": "Faculty of Engineering, Free University of Bozen-Bolzano, 39100 Bolzano, Italy"
+    },
+    {
+      "name": "Diego Calvanese",
+      "orcid": "0000-0001-5174-9693",
+      "affiliation": "Faculty of Engineering, Free University of Bozen-Bolzano, 39100 Bolzano, Italy"
+    },
+    {
+      "name": "Lin Ren",
+      "orcid": "0009-0008-3992-6325",
+      "affiliation": "School of Computer Science and Engineering, Southeast University, Nanjing, China"
+    },
+    {
+      "name": "Haohan Xue",
+      "orcid": "0009-0000-2241-4149",
+      "affiliation": "School of Computer Science and Engineering, Southeast University, Nanjing, China"
+    },
+    {
+      "name": "Guohui Xiao",
+      "orcid": "0000-0002-0298-6710",
+      "affiliation": "School of Computer Science and Engineering, Southeast University, Nanjing, China"
+    }
+  ]
+}
