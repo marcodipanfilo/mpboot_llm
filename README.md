@@ -318,3 +318,10 @@ Main entrypoints:
 - [scripts/evaluation.sh](scripts/evaluation.sh)
 - [scripts/generate_summary_portal.sh](scripts/generate_summary_portal.sh)
 - [scripts/start_anthropic_mock_server.sh](scripts/start_anthropic_mock_server.sh)
+
+# Reference metadata
+
+[![DOI](https://zenodo.org/badge/1232011513.svg)](https://doi.org/10.5281/zenodo.20073239)
+
+This repository is archived on Zenodo at [10.5281/zenodo.20073239](https://doi.org/10.5281/zenodo.20073239).
+
