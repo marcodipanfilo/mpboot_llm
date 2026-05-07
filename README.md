@@ -1,4 +1,4 @@
-# LLM_MPBoot
+# MPBoot_LLM
 
 LLM_MPBoot generates R2RML mappings from relational database dumps and target ontologies with an LLM-driven pipeline. The repo also includes a local evaluation stack for [RODI](https://www.semantic-web-journal.net/system/files/swj1439.pdf)-style benchmarks and shared result webpages.
 
