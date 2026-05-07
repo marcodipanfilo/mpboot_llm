@@ -321,7 +321,7 @@ Main entrypoints:
 
 # Reference metadata
 
-[![DOI](https://zenodo.org/badge/1232011513.svg)](https://doi.org/10.5281/zenodo.20073239)
+DOI: 10.5281/zenodo.20073239
 
 This repository is archived on Zenodo at [10.5281/zenodo.20073239](https://doi.org/10.5281/zenodo.20073239).
 
