@@ -10,7 +10,6 @@ from pathlib import Path
 TABULAR_LINE_RE = re.compile(r"^(?P<label>[^|]+)\|(?P<f1>[^|]+)\|(?P<precision>[^|]+)\|(?P<recall>[^|]+)$")
 METHOD_TABULAR_FILES = {
     "rodi": ("evaluation", "rodi", "eval_rodi__tabular.txt"),
-    "ontop": ("evaluation", "ontop", "eval_ontop__tabular.txt"),
 }
 
 DATASET_LABELS = {

@@ -28,7 +28,7 @@ Runs the full dataset-scoped workflow:
   8. regenerate the shared summary webpages
 
 Options:
-  --method {all,rodi,ontop}  Evaluation method to run (default: all)
+  --method {all,rodi}        Evaluation method to run (default: all)
   --skip-evaluation          Stop after archived mapping generation
   --skip-summary             Do not regenerate the summary webpages
 EOF
@@ -81,7 +81,7 @@ parse_args() {
   done
 
   case "${EVAL_METHOD}" in
-    all|rodi|ontop) ;;
+    all|rodi) ;;
     *)
       echo "Invalid --method: ${EVAL_METHOD}" >&2
       exit 1
@@ -103,9 +103,6 @@ ensure_bootstrap() {
     need_bootstrap=1
   fi
   if [[ ! -x "${ROBOT_BIN}" ]]; then
-    need_bootstrap=1
-  fi
-  if [[ ! -x "${ONTOP_DIR}/ontop" ]]; then
     need_bootstrap=1
   fi
   if [[ ! -d "${RODI_DIR}" ]]; then

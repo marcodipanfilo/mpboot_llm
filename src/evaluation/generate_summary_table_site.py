@@ -53,21 +53,6 @@ PAPER_SOURCE_SPECS: tuple[tuple[str, str, dict[str, float]], ...] = (
         },
     ),
     (
-        "ontop",
-        "ontop",
-        {
-            "cmt_renamed": 0.28,
-            "conference_renamed": 0.26,
-            "sigkdd_renamed": 0.38,
-            "cmt_structured": 0.14,
-            "conference_structured": 0.13,
-            "sigkdd_structured": 0.21,
-            "sigkdd_mixed": 0.21,
-            "cmt_denormalized": 0.20,
-            "npd_atomic_tests": 0.10,
-        },
-    ),
-    (
         "COMA",
         "COMA",
         {
@@ -138,7 +123,7 @@ PAPER_SOURCE_SPECS: tuple[tuple[str, str, dict[str, float]], ...] = (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a grouped summary comparison website from RODI/Ontop overall tabular results."
+        description="Generate a grouped summary comparison website from RODI overall tabular results."
     )
     parser.add_argument(
         "run_path",

@@ -44,7 +44,6 @@ main() {
 
   bash "${ROOT_DIR}/scripts/bootstrap_python_env.sh"
   bash "${ROOT_DIR}/scripts/bootstrap_robot.sh"
-  bash "${ROOT_DIR}/scripts/bootstrap_ontop.sh"
   bash "${ROOT_DIR}/scripts/bootstrap_jdbc.sh"
   bash "${ROOT_DIR}/scripts/bootstrap_rodi.sh"
   bash "${ROOT_DIR}/scripts/bootstrap_postgres.sh"
@@ -78,7 +77,6 @@ Activate it with:
 
 Installed tools:
   ROBOT  : ${ROBOT_BIN}
-  Ontop  : ${ONTOP_DIR}/ontop
   RODI   : ${RODI_DIR}
   psql   : ${PSQL_WRAPPER}
 

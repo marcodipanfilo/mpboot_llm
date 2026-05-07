@@ -12,28 +12,28 @@ from typing import Iterable, Optional
 class PaperRow:
     group: str
     scenario: str
-    baselines: tuple[Optional[float], Optional[float], Optional[float], Optional[float], Optional[float], Optional[float]]
+    baselines: tuple[Optional[float], ...]
     dataset_name: Optional[str]
 
 
-BASELINE_HEADERS = ("B.OX", "IncM.", "ontop", "MIRR.", "COMA", "D2RQ")
+BASELINE_HEADERS = ("B.OX", "IncM.", "MIRR.", "COMA", "D2RQ")
 MPBOOT_HEADER = "MPBootLLM (Haiku)"
 TABULAR_PATTERN = re.compile(r"^All \(AVG\)\|([^|]+)\|")
 
 
 PAPER_ROWS: tuple[PaperRow, ...] = (
-    PaperRow("Conference domain, adjusted naming", "CMT", (0.76, 0.45, 0.28, 0.28, 0.48, 0.31), "cmt_renamed"),
-    PaperRow("Conference domain, adjusted naming", "Conference", (0.51, 0.53, 0.26, 0.27, 0.36, 0.26), "conference_renamed"),
-    PaperRow("Conference domain, adjusted naming", "SIGKDD", (0.86, 0.76, 0.38, 0.30, 0.66, 0.38), "sigkdd_renamed"),
-    PaperRow("Conference domain, restructured", "CMT", (0.41, 0.44, 0.14, 0.17, 0.38, 0.14), "cmt_structured"),
-    PaperRow("Conference domain, restructured", "Conference", (0.41, 0.41, 0.13, 0.23, 0.31, 0.21), "conference_structured"),
-    PaperRow("Conference domain, restructured", "SIGKDD", (0.52, 0.38, 0.21, 0.11, 0.41, 0.28), "sigkdd_structured"),
-    PaperRow("Conference domain, combined case", "SIGKDD", (0.48, 0.38, 0.21, 0.11, 0.28, 0.21), "sigkdd_mixed"),
-    PaperRow("Conference domain, missing FKs", "Conference", (0.33, 0.41, None, 0.17, 0.21, 0.18), "conference_nofks"),
-    PaperRow("Conference domain, denormalized", "CMT", (0.44, 0.40, 0.20, 0.22, None, 0.20), "cmt_denormalized"),
-    PaperRow("Geodata", "Classic Rel.", (0.13, 0.08, None, None, None, 0.06), "mondial_rel"),
-    PaperRow("Oil & gas domain", "User Queries", (0.00, 0.00, 0.00, 0.00, None, 0.00), None),
-    PaperRow("Oil & gas domain", "Atomic", (0.14, 0.12, 0.10, 0.00, 0.02, 0.08), "npd_atomic_tests"),
+    PaperRow("Conference domain, adjusted naming", "CMT", (0.76, 0.45, 0.28, 0.48, 0.31), "cmt_renamed"),
+    PaperRow("Conference domain, adjusted naming", "Conference", (0.51, 0.53, 0.27, 0.36, 0.26), "conference_renamed"),
+    PaperRow("Conference domain, adjusted naming", "SIGKDD", (0.86, 0.76, 0.30, 0.66, 0.38), "sigkdd_renamed"),
+    PaperRow("Conference domain, restructured", "CMT", (0.41, 0.44, 0.17, 0.38, 0.14), "cmt_structured"),
+    PaperRow("Conference domain, restructured", "Conference", (0.41, 0.41, 0.23, 0.31, 0.21), "conference_structured"),
+    PaperRow("Conference domain, restructured", "SIGKDD", (0.52, 0.38, 0.11, 0.41, 0.28), "sigkdd_structured"),
+    PaperRow("Conference domain, combined case", "SIGKDD", (0.48, 0.38, 0.11, 0.28, 0.21), "sigkdd_mixed"),
+    PaperRow("Conference domain, missing FKs", "Conference", (0.33, 0.41, 0.17, 0.21, 0.18), "conference_nofks"),
+    PaperRow("Conference domain, denormalized", "CMT", (0.44, 0.40, 0.22, None, 0.20), "cmt_denormalized"),
+    PaperRow("Geodata", "Classic Rel.", (0.13, 0.08, None, None, 0.06), "mondial_rel"),
+    PaperRow("Oil & gas domain", "User Queries", (0.00, 0.00, 0.00, None, 0.00), None),
+    PaperRow("Oil & gas domain", "Atomic", (0.14, 0.12, 0.00, 0.02, 0.08), "npd_atomic_tests"),
 )
 
 
@@ -158,9 +158,9 @@ def _latex_table(rows: tuple[PaperRow, ...], scores: dict[str, Optional[float]],
         r"\label{tab:rodi-mpbootllm-haiku}",
         r"\setlength{\tabcolsep}{5pt}",
         r"\renewcommand{\arraystretch}{1.15}",
-        r"\begin{tabular}{lrrrrrrr}",
+        r"\begin{tabular}{lrrrrrr}",
         r"\hline",
-        r"\textbf{Scenario} & \textbf{B.OX} & \textbf{IncM.} & \textbf{ontop} & \textbf{MIRR.} & \textbf{COMA} & \textbf{D2RQ} & \textbf{" + _tex_escape(mpboot_header) + r"} \\",
+        r"\textbf{Scenario} & \textbf{B.OX} & \textbf{IncM.} & \textbf{MIRR.} & \textbf{COMA} & \textbf{D2RQ} & \textbf{" + _tex_escape(mpboot_header) + r"} \\",
         r"\hline",
     ]
     current_group: Optional[str] = None
@@ -168,7 +168,7 @@ def _latex_table(rows: tuple[PaperRow, ...], scores: dict[str, Optional[float]],
         if row.group != current_group:
             if current_group is not None:
                 lines.append(r"\hline")
-            lines.append(r"\multicolumn{8}{c}{\textbf{" + _tex_escape(row.group) + r"}} \\")
+            lines.append(r"\multicolumn{7}{c}{\textbf{" + _tex_escape(row.group) + r"}} \\")
             current_group = row.group
 
         values = list(row.baselines) + [scores.get(row.dataset_name) if row.dataset_name else None]

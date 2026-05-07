@@ -60,7 +60,7 @@ class SourceRef:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Refactored alternative generator for the RODI/ontop F1 comparison site."
+        description="Refactored alternative generator for the RODI F1 comparison site."
     )
     parser.add_argument(
         "run_path",

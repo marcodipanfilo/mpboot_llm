@@ -1,4 +1,4 @@
-"""Evaluate archived mapping runs with RODI and/or Ontop."""
+"""Evaluate archived mapping outputs with RODI."""
 
 from __future__ import annotations
 
@@ -40,16 +40,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset", action="append", default=[], help="Only evaluate a specific dataset name")
     parser.add_argument(
         "--method",
-        choices=["all", "rodi", "ontop"],
+        choices=["all", "rodi"],
         default="all",
-        help="Which evaluation method to run",
+        help="Which evaluation method to run. 'all' currently maps to the full supported set, i.e. RODI.",
     )
     parser.add_argument("--rodi-root", type=Path, default=Path(os.environ.get("MPBOOT_RODI_ROOT", ".tools/rodi")))
-    parser.add_argument(
-        "--ontop-dir",
-        type=Path,
-        default=Path(os.environ.get("MPBOOT_ONTOP_DIR", ".tools/ontop")),
-    )
     parser.add_argument("--db-host", default=os.environ.get("MPBOOT_DB_HOST", "localhost"))
     parser.add_argument("--db-port", type=int, default=int(os.environ.get("MPBOOT_DB_PORT", "5433")))
     parser.add_argument("--db-name", default=os.environ.get("MPBOOT_DB_NAME", "postgres"))
@@ -61,14 +56,12 @@ def parse_args() -> argparse.Namespace:
         default=Path(os.environ.get("MPBOOT_DB_CMD", ".tools/bin/psql_docker.sh")),
     )
     parser.add_argument("--reasoning", default=os.environ.get("MPBOOT_RODI_REASONING", "structural"))
-    parser.add_argument("--ontop-port", type=int, default=int(os.environ.get("MPBOOT_ONTOP_PORT", "8089")))
     parser.add_argument(
         "--db-setup",
         choices=["auto", "rodi", "dump", "none"],
         default=os.environ.get("MPBOOT_DB_SETUP", "auto"),
         help="How to prepare the database before evaluation",
     )
-    parser.add_argument("--compare-tabular", action="store_true", help="Compare Ontop and RODI tabular reports")
     parser.add_argument("--keep-going", action="store_true", help="Continue with later datasets after a failure")
     parser.add_argument(
         "--no-log-file",
@@ -152,7 +145,7 @@ def _build_config(dataset_dir: Path, args: argparse.Namespace) -> EvaluationRunC
         dump_file=dump_file,
         output_dir=dataset_dir / "evaluation",
         rodi_root=args.rodi_root.resolve(),
-        ontop_dir=args.ontop_dir.resolve(),
+        ontop_dir=Path(".tools/ontop").resolve(),
         db_host=args.db_host,
         db_port=args.db_port,
         db_name=args.db_name,
@@ -160,65 +153,30 @@ def _build_config(dataset_dir: Path, args: argparse.Namespace) -> EvaluationRunC
         db_password=args.db_password,
         db_cmd=db_cmd,
         reasoning=args.reasoning,
-        ontop_port=args.ontop_port,
+        ontop_port=8089,
     )
 
 
 def _has_existing_evaluation(cfg: EvaluationRunConfig, args: argparse.Namespace) -> bool:
     if args.method == "rodi":
         return cfg.eval_rodi_report_file.exists() and cfg.eval_rodi_tabular_file.exists()
-    if args.method == "ontop":
-        return (
-            cfg.eval_ontop_metrics_file.exists()
-            and cfg.eval_ontop_summary_file.exists()
-            and cfg.eval_ontop_tabular_file.exists()
-        )
     if args.method == "all":
-        return (
-            cfg.eval_rodi_report_file.exists()
-            and cfg.eval_rodi_tabular_file.exists()
-            and cfg.eval_ontop_metrics_file.exists()
-            and cfg.eval_ontop_summary_file.exists()
-            and cfg.eval_ontop_tabular_file.exists()
-        )
+        return cfg.eval_rodi_report_file.exists() and cfg.eval_rodi_tabular_file.exists()
     return False
-
-
-def _run_compare(cfg: EvaluationRunConfig) -> None:
-    from evaluation.utils_compare import build_tabular_diff
-
-    diff_text = build_tabular_diff(cfg.eval_ontop_tabular_file, cfg.eval_rodi_tabular_file)
-    if diff_text:
-        cfg.compare_output_dir.mkdir(parents=True, exist_ok=True)
-        cfg.comparison_diff_file.write_text(diff_text + "\n", encoding="utf-8")
-        raise RuntimeError(f"Tabular reports differ. Diff saved to: {cfg.comparison_diff_file}")
-    if cfg.comparison_diff_file.exists():
-        cfg.comparison_diff_file.unlink()
-    print("[CHECK] Tabular files are identical.")
 
 
 def _resolve_db_setup(cfg: EvaluationRunConfig, args: argparse.Namespace) -> str:
     if args.db_setup != "auto":
         return args.db_setup
-    if args.method == "ontop":
-        return "dump"
-    if args.method == "rodi":
-        return "rodi"
     return "rodi" if cfg.qpair_dir.exists() else "dump"
 
 
 def _run_dataset(cfg: EvaluationRunConfig, args: argparse.Namespace) -> None:
-    from evaluation.ontop_like_llm4vkg import evaluate_with_ontop_like_llm4vkg
     from evaluation.rodi import run_rodi, run_rodi_setup
     from evaluation.database import ensure_dataset_database_ready, prepare_database_from_dump
 
     cfg.evaluation_dir.mkdir(parents=True, exist_ok=True)
-    if args.method == "rodi":
-        log_dir = cfg.rodi_output_dir
-    elif args.method == "ontop":
-        log_dir = cfg.ontop_output_dir
-    else:
-        log_dir = cfg.evaluation_dir
+    log_dir = cfg.rodi_output_dir if args.method == "rodi" else cfg.evaluation_dir
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "evaluation.log"
     db_setup = _resolve_db_setup(cfg, args)
@@ -242,16 +200,12 @@ def _run_dataset(cfg: EvaluationRunConfig, args: argparse.Namespace) -> None:
         print(f"Method    : {args.method}")
         print(f"DB setup  : {db_setup}")
         print(f"RODI root : {cfg.rodi_root}")
-        print(f"Ontop dir : {cfg.ontop_dir}")
         print(f"DB        : {cfg.db_user}@{cfg.db_host}:{cfg.db_port}/{cfg.db_name}")
         if args.no_log_file:
             print("Log file  : disabled (--no-log-file)")
         else:
             print(f"Log file  : {log_file}")
         print(f"{'=' * 72}")
-
-        if args.method == "ontop" and db_setup == "rodi":
-            raise ValueError("RODI DB setup is not allowed with --method ontop. Use --db-setup dump or none.")
 
         if args.method == "rodi":
             if db_setup == "dump":
@@ -264,29 +218,17 @@ def _run_dataset(cfg: EvaluationRunConfig, args: argparse.Namespace) -> None:
         else:
             if db_setup == "rodi":
                 run_rodi_setup(cfg)
+                run_rodi(cfg, include_setup=False)
             elif db_setup == "dump":
                 prepare_database_from_dump(cfg)
+                run_rodi(cfg, include_setup=True)
             elif db_setup == "none":
                 ensure_dataset_database_ready(cfg)
+                run_rodi(cfg, include_setup=True)
             elif db_setup != "none":
                 raise ValueError(f"Unsupported db setup mode: {db_setup}")
 
-        if args.method in {"all", "ontop"}:
-            evaluate_with_ontop_like_llm4vkg(cfg)
-        if args.method == "all":
-            if db_setup == "rodi":
-                run_rodi(cfg, include_setup=False)
-            else:
-                run_rodi(cfg, include_setup=True)
-        if args.compare_tabular and args.method == "all":
-            _run_compare(cfg)
-
-        if args.method == "rodi":
-            saved_dir = cfg.rodi_output_dir
-        elif args.method == "ontop":
-            saved_dir = cfg.ontop_output_dir
-        else:
-            saved_dir = cfg.evaluation_dir
+        saved_dir = cfg.rodi_output_dir if args.method == "rodi" else cfg.evaluation_dir
         print(f"\nSaved evaluation artifacts under: {saved_dir}\n")
 
 
