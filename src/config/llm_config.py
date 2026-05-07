@@ -1,6 +1,6 @@
 """
 LLM Configuration Module
-Manages API configurations for multiple LLM providers
+Manages API configurations for multiple LLM providers.
 """
 from typing import Dict, Any
 import os
@@ -19,6 +19,13 @@ class LLMConfig:
     """Configuration class for LLM providers"""
 
     ANTHROPIC_PROXY_URL = os.getenv("ANTHROPIC_PROXY_URL")
+    API_KEY_ENV_VARS = {
+        "gpt4o-mini": "GPT4O_MINI_API_KEY",
+        "gpt4o": "GPT4O_API_KEY",
+        "groq": "GROQ_API_KEY",
+        "claude": "ANTHROPIC_API_KEY",
+        "gemini": "GEMINI_API_KEY",
+    }
 
     # API Endpoints
     ENDPOINTS = {
@@ -29,13 +36,13 @@ class LLMConfig:
         "gemini":     "https://generativelanguage.googleapis.com/v1beta/models"
     }
 
-    # API Keys (can be overridden by environment variables)
+    # API Keys
     API_KEYS = {
-        "gpt4o-mini": os.getenv("GPT4O_MINI_API_KEY", ""),
-        "gpt4o":      os.getenv("GPT4O_API_KEY", ""),
-        "groq":       os.getenv("GROQ_API_KEY", ""),
-        "claude":     os.getenv("ANTHROPIC_API_KEY", ""),
-        "gemini":     os.getenv("GEMINI_API_KEY", "")
+        "gpt4o-mini": os.getenv("GPT4O_MINI_API_KEY"),
+        "gpt4o":      os.getenv("GPT4O_API_KEY"),
+        "groq":       os.getenv("GROQ_API_KEY"),
+        "claude":     os.getenv("ANTHROPIC_API_KEY"),
+        "gemini":     os.getenv("GEMINI_API_KEY"),
     }
 
     # Model Names
@@ -73,9 +80,10 @@ class LLMConfig:
 
         api_key = cls.API_KEYS.get(provider)
         if not api_key:
+            env_var = cls.API_KEY_ENV_VARS[provider]
             raise ValueError(
                 f"API key not found for provider: {provider}. "
-                f"Please set it in environment variables or llm_config.py"
+                f"Please set environment variable {env_var}."
             )
 
         return {
