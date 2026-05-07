@@ -319,7 +319,11 @@ Main entrypoints:
 - [scripts/generate_summary_portal.sh](scripts/generate_summary_portal.sh)
 - [scripts/start_anthropic_mock_server.sh](scripts/start_anthropic_mock_server.sh)
 
-# Reference metadata
+## Experimental Results 
+
+Experimental results are archived on Zenodo at [10.5281/zenodo.20073873](https://doi.org/10.5281/zenodo.20073873).
+
+## Reference metadata
 
 DOI: 10.5281/zenodo.20073239
 
