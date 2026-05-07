@@ -227,3 +227,4 @@ outputs
 src/inputs
 src/memory
 anthropic_mock_server/cache.sqlite3
+outputs_folder_backup

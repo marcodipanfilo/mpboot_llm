@@ -6,6 +6,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_bootstrap_common.sh"
 
 DOWNLOAD_RODI=0
 SELECTED_DATASETS=()
+SELECTED_DATASET_COUNT=0
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -20,6 +21,7 @@ parse_args() {
           exit 1
         fi
         SELECTED_DATASETS+=("$2")
+        SELECTED_DATASET_COUNT=$((SELECTED_DATASET_COUNT + 1))
         shift 2
         ;;
       *)
@@ -30,7 +32,7 @@ parse_args() {
     esac
   done
 
-  if [[ "${#SELECTED_DATASETS[@]}" -gt 0 && "${DOWNLOAD_RODI}" -ne 1 ]]; then
+  if [[ "${SELECTED_DATASET_COUNT}" -gt 0 && "${DOWNLOAD_RODI}" -ne 1 ]]; then
     echo "--dataset can only be used together with --download-rodi" >&2
     exit 1
   fi
@@ -49,7 +51,7 @@ main() {
   bash "${ROOT_DIR}/scripts/bootstrap_psql_wrapper.sh"
 
   if [[ "${DOWNLOAD_RODI}" -eq 1 ]]; then
-    if [[ "${#SELECTED_DATASETS[@]}" -gt 0 ]]; then
+    if [[ "${SELECTED_DATASET_COUNT}" -gt 0 ]]; then
       dataset_args=()
       for dataset in "${SELECTED_DATASETS[@]}"; do
         dataset_args+=("--dataset" "${dataset}")

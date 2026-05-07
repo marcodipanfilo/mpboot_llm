@@ -7,6 +7,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_bootstrap_common.sh"
 require_command git
 
 SELECTED_DATASETS=()
+SELECTED_DATASET_COUNT=0
 DATASET_LIST=()
 
 parse_args() {
@@ -18,6 +19,7 @@ parse_args() {
           exit 1
         fi
         SELECTED_DATASETS+=("$2")
+        SELECTED_DATASET_COUNT=$((SELECTED_DATASET_COUNT + 1))
         shift 2
         ;;
       *)
@@ -31,7 +33,10 @@ parse_args() {
 
 validate_selected_datasets() {
   local dataset known
-  for dataset in "${SELECTED_DATASETS[@]}"; do
+  if [[ "${SELECTED_DATASET_COUNT}" -eq 0 ]]; then
+    return 0
+  fi
+  for dataset in "${SELECTED_DATASETS[@]-}"; do
     known=0
     for allowed in "${RODI_DATASETS[@]}"; do
       if [[ "${dataset}" == "${allowed}" ]]; then
@@ -48,8 +53,8 @@ validate_selected_datasets() {
 }
 
 selected_downloads() {
-  if [[ "${#SELECTED_DATASETS[@]}" -gt 0 ]]; then
-    DATASET_LIST=("${SELECTED_DATASETS[@]}")
+  if [[ "${SELECTED_DATASET_COUNT}" -gt 0 ]]; then
+    DATASET_LIST=("${SELECTED_DATASETS[@]-}")
   else
     DATASET_LIST=("${RODI_DATASETS[@]}")
   fi
@@ -59,7 +64,7 @@ parse_args "$@"
 validate_selected_datasets
 selected_downloads
 
-if [[ "${#SELECTED_DATASETS[@]}" -eq 0 ]]; then
+if [[ "${SELECTED_DATASET_COUNT}" -eq 0 ]]; then
   rm -rf "${DATASETS_DIR}"
 fi
 mkdir -p "${DATASETS_DIR}"

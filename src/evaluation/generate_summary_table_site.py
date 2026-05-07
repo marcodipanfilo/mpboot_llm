@@ -246,6 +246,17 @@ def _paper_metrics(score: float) -> dict[str, Any]:
     }
 
 
+def _unique_in_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
+
+
 def _build_payload(run_path: Optional[Path], discover_root: Path) -> dict[str, object]:
     rows: list[dict[str, object]] = []
     row_index_by_dataset: dict[str, int] = {}
@@ -321,10 +332,10 @@ def _build_payload(run_path: Optional[Path], discover_root: Path) -> dict[str, o
         "rows": rows,
         "sources": sources,
         "scores": source_scores,
-        "groups": sorted({row["group"] for row in rows}),
-        "domains": sorted({row["domain"] for row in rows}),
-        "variants": sorted({row["variant"] for row in rows}),
-        "scenarios": sorted({row["scenario"] for row in rows}),
+        "groups": _unique_in_order([str(row["group"]) for row in rows]),
+        "domains": _unique_in_order([str(row["domain"]) for row in rows]),
+        "variants": _unique_in_order([str(row["variant"]) for row in rows]),
+        "scenarios": _unique_in_order([str(row["scenario"]) for row in rows]),
     }
 
 
