@@ -41,10 +41,13 @@ Then create `.env`:
 cp .env.example .env
 ```
 
-At minimum, set the API key for the provider you want to use. The active provider/model is configured in [src/config/llm_config.py](src/config/llm_config.py).
+At minimum, set the API key for the provider you want to use and set `LLM_PROVIDER` to select it.
 
 Useful environment variables:
 
+- `LLM_PROVIDER` — provider to use (`claude`, `gpt4o`, `gpt4o-mini`, `groq`, `gemini`, `ollama`; default: `claude`)
+- `OLLAMA_BASE_URL` — Ollama server URL (default: `http://localhost:11434`)
+- `OLLAMA_MODEL` — model name to use with Ollama (default: `llama3.1`)
 - `ANTHROPIC_API_KEY`
 - `ANTHROPIC_PROXY_URL`
 - `ANTHROPIC_MOCK_LOG_LEVEL`
@@ -52,7 +55,93 @@ Useful environment variables:
 - `MPBOOT_DB_NAME`
 - `MPBOOT_R2RML_FORCE_DOUBLE_FOR_DECIMALS`
 
-## Workflow 1: Full RODI Pipeline
+## Workflow 1: Generate Mappings From Your Own Dump And Ontology
+
+If you already have a relational dump and an ontology, you do not need the RODI dataset download path. The mapping pipeline expects a dataset directory containing:
+
+- `dump.sql` or `dump_pg_compatible.sql`
+- `ontology.ttl` or `ontology.owl`
+- optionally `queries/*.qpair` if you also want RODI-style evaluation later
+
+### Minimal directory layout
+
+Example:
+
+```text
+my_input/
+  my_dataset/
+    dump.sql
+    ontology.ttl
+```
+
+### Convert your dataset to the repo's PostgreSQL-compatible format
+
+```bash
+bash scripts/create_pg_compatible_dataset.sh my_input pg_compatible/outputs/data_pg_compatible
+```
+
+That will create:
+
+```text
+pg_compatible/outputs/data_pg_compatible/my_dataset/
+```
+
+with:
+
+- `dump_pg_compatible.sql`
+- `ontology.ttl` or copied `ontology.owl`
+- copied extra files such as `queries/`
+
+If you only want to process a single dataset directory directly:
+
+```bash
+bash scripts/create_pg_compatible_dataset.sh my_input/my_dataset pg_compatible/outputs/data_pg_compatible/my_dataset
+```
+
+### Generate `ontology.owl` if your ontology is Turtle
+
+```bash
+bash scripts/generate_owlxml_ontologies.sh pg_compatible/outputs/data_pg_compatible --dataset my_dataset
+```
+
+If `ontology.owl` already exists, this step can be skipped unless you want to overwrite it:
+
+```bash
+bash scripts/generate_owlxml_ontologies.sh pg_compatible/outputs/data_pg_compatible --dataset my_dataset --overwrite
+```
+
+### Run mapping generation for that dataset
+
+```bash
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/my_dataset
+```
+
+The runner will stage the dataset into the live workspace:
+
+- [src/inputs/database](src/inputs/database)
+- [src/inputs/ontology](src/inputs/ontology)
+
+and then execute the mapping phases.
+
+Useful variants:
+
+```bash
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/my_dataset --dry-run
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/my_dataset --from phase1
+bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/my_dataset --only phase7
+```
+
+### Evaluate your own dataset
+
+Evaluation is optional. If you also provide `queries/*.qpair`, you can evaluate an archived run later with:
+
+```bash
+bash scripts/evaluation.sh outputs/<model>/<timestamp> --dataset my_dataset --method all
+```
+
+If you have no qpair queries, the mapping-generation workflow still works; only the RODI query evaluation path is unavailable.
+
+## Workflow 2: Full RODI Pipeline
 
 This is the workflow for the bundled RODI benchmark datasets under `datasets/rodi/`.
 
@@ -172,92 +261,6 @@ bash scripts/generate_summary_portal.sh outputs/<model>/<timestamp>
 - strips obsolete schema prefixes from the Mondial `.qpair` SQL
 
 That normalization is handled by [scripts/bootstrap_prepare_rodi_dumps.sh](scripts/bootstrap_prepare_rodi_dumps.sh).
-
-## Workflow 2: Generate Mappings From Your Own Dump And Ontology
-
-If you already have a relational dump and an ontology, you do not need the RODI dataset download path. The mapping pipeline expects a dataset directory containing:
-
-- `dump.sql` or `dump_pg_compatible.sql`
-- `ontology.ttl` or `ontology.owl`
-- optionally `queries/*.qpair` if you also want RODI-style evaluation later
-
-### Minimal directory layout
-
-Example:
-
-```text
-my_input/
-  my_dataset/
-    dump.sql
-    ontology.ttl
-```
-
-### Convert your dataset to the repo's PostgreSQL-compatible format
-
-```bash
-bash scripts/create_pg_compatible_dataset.sh my_input pg_compatible/outputs/data_pg_compatible
-```
-
-That will create:
-
-```text
-pg_compatible/outputs/data_pg_compatible/my_dataset/
-```
-
-with:
-
-- `dump_pg_compatible.sql`
-- `ontology.ttl` or copied `ontology.owl`
-- copied extra files such as `queries/`
-
-If you only want to process a single dataset directory directly:
-
-```bash
-bash scripts/create_pg_compatible_dataset.sh my_input/my_dataset pg_compatible/outputs/data_pg_compatible/my_dataset
-```
-
-### Generate `ontology.owl` if your ontology is Turtle
-
-```bash
-bash scripts/generate_owlxml_ontologies.sh pg_compatible/outputs/data_pg_compatible --dataset my_dataset
-```
-
-If `ontology.owl` already exists, this step can be skipped unless you want to overwrite it:
-
-```bash
-bash scripts/generate_owlxml_ontologies.sh pg_compatible/outputs/data_pg_compatible --dataset my_dataset --overwrite
-```
-
-### Run mapping generation for that dataset
-
-```bash
-bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/my_dataset
-```
-
-The runner will stage the dataset into the live workspace:
-
-- [src/inputs/database](src/inputs/database)
-- [src/inputs/ontology](src/inputs/ontology)
-
-and then execute the mapping phases.
-
-Useful variants:
-
-```bash
-bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/my_dataset --dry-run
-bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/my_dataset --from phase1
-bash scripts/create_mapping_single_dataset.sh --dataset-dir pg_compatible/outputs/data_pg_compatible/my_dataset --only phase7
-```
-
-### Evaluate your own dataset
-
-Evaluation is optional. If you also provide `queries/*.qpair`, you can evaluate an archived run later with:
-
-```bash
-bash scripts/evaluation.sh outputs/<model>/<timestamp> --dataset my_dataset --method all
-```
-
-If you have no qpair queries, the mapping-generation workflow still works; only the RODI query evaluation path is unavailable.
 
 ## Outputs
 

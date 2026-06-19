@@ -10,22 +10,25 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-# ===== CHANGE PROVIDER HERE =====
-SELECTED_PROVIDER = "claude" # or "gpt4o-mini", "claude", "gpt4o" etc.
-# ================================
+SELECTED_PROVIDER = os.getenv("LLM_PROVIDER", "claude")
 
 
 class LLMConfig:
     """Configuration class for LLM providers"""
 
     ANTHROPIC_PROXY_URL = os.getenv("ANTHROPIC_PROXY_URL")
+    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
     API_KEY_ENV_VARS = {
         "gpt4o-mini": "GPT4O_MINI_API_KEY",
-        "gpt4o": "GPT4O_API_KEY",
-        "groq": "GROQ_API_KEY",
-        "claude": "ANTHROPIC_API_KEY",
-        "gemini": "GEMINI_API_KEY",
+        "gpt4o":      "GPT4O_API_KEY",
+        "groq":       "GROQ_API_KEY",
+        "claude":     "ANTHROPIC_API_KEY",
+        "gemini":     "GEMINI_API_KEY",
     }
+
+    # Providers that do not require an API key
+    NO_KEY_PROVIDERS = {"ollama"}
 
     # API Endpoints
     ENDPOINTS = {
@@ -33,7 +36,8 @@ class LLMConfig:
         "gpt4o":      "https://api2.aigcbest.top/v1/chat/completions",
         "groq":       "https://api.groq.com/openai/v1/chat/completions",
         "claude":     ANTHROPIC_PROXY_URL or "https://api.anthropic.com/v1/messages",
-        "gemini":     "https://generativelanguage.googleapis.com/v1beta/models"
+        "gemini":     "https://generativelanguage.googleapis.com/v1beta/models",
+        "ollama":     f"{os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')}/v1/chat/completions",
     }
 
     # API Keys
@@ -43,6 +47,7 @@ class LLMConfig:
         "groq":       os.getenv("GROQ_API_KEY"),
         "claude":     os.getenv("ANTHROPIC_API_KEY"),
         "gemini":     os.getenv("GEMINI_API_KEY"),
+        "ollama":     "ollama",  # Ollama ignores the key; must be non-empty for the HTTP header
     }
 
     # Model Names
@@ -52,11 +57,12 @@ class LLMConfig:
         "groq":       "openai/gpt-oss-120b",
 #        "claude":     "claude-haiku-4-5-20251001",
         "claude":     "claude-sonnet-4-6",
-        "gemini":     "gemini-2.0-flash-exp"
+        "gemini":     "gemini-2.0-flash-exp",
+        "ollama":     os.getenv("OLLAMA_MODEL", "deepseek-r1:32b"),
     }
 
     # Supported providers
-    SUPPORTED_PROVIDERS = ["gpt4o-mini", "gpt4o", "groq", "claude", "gemini"]
+    SUPPORTED_PROVIDERS = ["gpt4o-mini", "gpt4o", "groq", "claude", "gemini", "ollama"]
 
     @classmethod
     def get_config(cls, provider: str) -> Dict[str, Any]:
@@ -79,7 +85,7 @@ class LLMConfig:
             )
 
         api_key = cls.API_KEYS.get(provider)
-        if not api_key:
+        if not api_key and provider not in cls.NO_KEY_PROVIDERS:
             env_var = cls.API_KEY_ENV_VARS[provider]
             raise ValueError(
                 f"API key not found for provider: {provider}. "
