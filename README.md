@@ -47,13 +47,17 @@ Useful environment variables:
 
 - `LLM_PROVIDER` — provider to use (`claude`, `gpt4o`, `gpt4o-mini`, `groq`, `gemini`, `ollama`; default: `claude`)
 - `OLLAMA_BASE_URL` — Ollama server URL (default: `http://localhost:11434`)
-- `OLLAMA_MODEL` — model name to use with Ollama (default: `llama3.1`)
+- `OLLAMA_MODEL` — model name to use with Ollama (default: `deepseek-r1:32b`)
 - `ANTHROPIC_API_KEY`
 - `ANTHROPIC_PROXY_URL`
 - `ANTHROPIC_MOCK_LOG_LEVEL`
 - `MPBOOT_DB_PORT`
 - `MPBOOT_DB_NAME`
 - `MPBOOT_R2RML_FORCE_DOUBLE_FOR_DECIMALS`
+
+## Tutorial
+
+A worked example using the Conference NoFKs dataset is in [tutorial/](tutorial/README.md). It runs entirely locally — Ollama for the LLM and Docker for PostgreSQL — with no cloud API key required. It covers all steps from running the pipeline to the optional RODI evaluation.
 
 ## Workflow 1: Generate Mappings From Your Own Dump And Ontology
 
