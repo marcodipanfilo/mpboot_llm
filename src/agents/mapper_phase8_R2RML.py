@@ -316,16 +316,20 @@ def _needs_sql_query(name: str, template_cols: list = None,
                      extra_cols: list = None) -> bool:
     """
     True when rr:sqlQuery is required instead of rr:tableName:
-    1. Table name is a PostgreSQL reserved word (RODI passes it unquoted).
-    2. Table name is mixed-case or contains a hyphen.
-    3. Any template column or extra column is mixed-case or contains a hyphen.
+    1. Table name is a PostgreSQL reserved word.
+    2. Table name or any column contains a hyphen (SQL alias required so the
+       template placeholder can use an underscore form).
+
+    Mixed-case identifiers no longer need rr:sqlQuery: they are now emitted
+    SQL-delimited (via delimited()), so rr:tableName "\"Paper\"" resolves
+    correctly without any preprocessing of the dump.
     """
     if name.lower() in _PG_RESERVED:
         return True
-    if "-" in name or name != name.lower():
+    if "-" in name:
         return True
     for col in (template_cols or []) + (extra_cols or []):
-        if col != col.lower() or "-" in col:
+        if "-" in col:
             return True
     return False
 
@@ -338,6 +342,37 @@ def _safe_alias(col: str) -> str:
 def _lower_template(template: str) -> str:
     """Lowercase all {PLACEHOLDER} names and replace hyphens with underscores."""
     return re.sub(r"\{([^}]+)\}", lambda m: "{" + _safe_alias(m.group(1)) + "}", template)
+
+
+def delimited(ident: str) -> str:
+    """SQL-delimit an identifier for R2RML.
+
+    R2RML §6 says a name in rr:tableName, rr:column, or a template {…} is an
+    *undelimited* SQL identifier unless the double-quote characters are carried
+    inside the Turtle literal.  Emitting them delimited makes mappings work
+    against schemas with mixed-case or reserved-word identifiers without any
+    preprocessing of the dump.
+
+    Inside a Python f-string the result is embedded as-is: the two \\\" become
+    the literal characters \\" in the .ttl file, which Turtle reads as a
+    SQL-delimited identifier. Example:
+        delimited("paperID")  →  \\"paperID\\"
+        in Turtle literal     →  "\"paperID\""
+    """
+    return '\\"' + ident.replace('"', '\\"' + '\\"') + '\\"'
+
+
+def _delimit_template(template: str) -> str:
+    """Wrap every {placeholder} in an rr:template string with SQL-delimited form.
+
+    {col}      →  {\\"col\\"}
+    {col-name} →  {\\"col_name\\"}  (hyphens → underscores to match SQL aliases)
+    """
+    return re.sub(
+        r"\{([^}]+)\}",
+        lambda m: '{\\"' + m.group(1).replace("-", "_") + '\\"}',
+        template,
+    )
 
 
 def _extract_template_cols(template: str) -> list:
@@ -432,7 +467,7 @@ def _pom_literal(pred: str, col: str, datatype: str) -> List[str]:
             f"    rr:predicateObjectMap [",
             f"        rr:predicate {pred} ;",
             f"        rr:objectMap  [",
-            f"            rr:column    \"{_safe_alias(col)}\" ;",
+            f"            rr:column    \"{delimited(col.replace('-', '_'))}\" ;",
             f"            rr:termType  rr:IRI ;",
             f"        ] ;",
             f"    ] ;",
@@ -443,7 +478,7 @@ def _pom_literal(pred: str, col: str, datatype: str) -> List[str]:
             f"    rr:predicateObjectMap [",
             f"        rr:predicate {pred} ;",
             f"        rr:objectMap  [",
-            f"            rr:column   \"{_safe_alias(col)}\" ;",
+            f"            rr:column   \"{delimited(col.replace('-', '_'))}\" ;",
             f"            rr:datatype {datatype} ;",
             f"        ] ;",
             f"    ] ;",
@@ -454,7 +489,7 @@ def _pom_literal(pred: str, col: str, datatype: str) -> List[str]:
         f"    rr:predicateObjectMap [",
         f"        rr:predicate {pred} ;",
         f"        rr:objectMap  [",
-        f"            rr:column   \"{_safe_alias(col)}\" ;",
+        f"            rr:column   \"{delimited(col.replace('-', '_'))}\" ;",
         f"        ] ;",
         f"    ] ;",
         f"",
@@ -468,8 +503,8 @@ def _pom_join(pred: str, parent_iri: str,
         f"        rr:objectMap  [",
         f"            rr:parentTriplesMap <{parent_iri}> ;",
         f"            rr:joinCondition [",
-        f"                rr:child  \"{_safe_alias(child_col)}\" ;",
-        f"                rr:parent \"{_safe_alias(parent_col)}\" ;",
+        f"                rr:child  \"{delimited(child_col.replace('-', '_'))}\" ;",
+        f"                rr:parent \"{delimited(parent_col.replace('-', '_'))}\" ;",
         f"            ] ;",
         f"        ] ;",
         f"    ] ;",
@@ -555,7 +590,7 @@ def _make_table_line(table_name: str, all_col_names: list,
         sql         = _build_star_sql(table_name, hyphen_cols)
         return f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql}{_q3} ] ;"
     else:
-        return f'    rr:logicalTable [ rr:tableName "{table_name}" ] ;'
+        return f'    rr:logicalTable [ rr:tableName "{delimited(table_name)}" ] ;'
 
 
 def build_entity_block(table_name: str, entry: Dict,
@@ -584,7 +619,7 @@ def build_entity_block(table_name: str, entry: Dict,
     _q3  = "'''"
 
     collision_note = entry.get("_collision_note", "")
-    tmpl = _lower_template(entry["subject"]["template"])
+    tmpl = _delimit_template(entry["subject"]["template"])
 
     # Deduplicate predicate_object_maps: remove exact-duplicate POMs that
     # accumulate in the JSON from multiple phase 5b runs on the same file.
@@ -833,7 +868,7 @@ def build_sr_section(sr_raw: Dict, entity_entries: Dict,
                 list(dict.fromkeys([s_child, o_child_col]))
             )
             _br_sql   = _build_star_sql(bridge_table, hyphen_cols)
-            subj_tmpl = _lower_template(subj_tmpl)
+            subj_tmpl = _delimit_template(subj_tmpl)
 
             lines = [
                 f"# ── SR_{bridge_table} ({subj_tag} → {obj_tag}) {'─' * 10}",
@@ -848,8 +883,8 @@ def build_sr_section(sr_raw: Dict, entity_entries: Dict,
                 f"",
             ]
             lines += _pom_join(pred, obj_iri,
-                               _safe_alias(o_child_col),
-                               _safe_alias(o_join.get("parent", "")))
+                               o_child_col.replace("-", "_"),
+                               o_join.get("parent", "").replace("-", "_"))
             bridge_name_blocks.append(_close(lines))
 
         if bridge_name_blocks:
@@ -920,9 +955,6 @@ def _build_axiom_typing_blocks(sr_raw: Dict) -> str:
             )
             continue
 
-        # Lowercase the template placeholder for PostgreSQL compatibility
-        subject_template_lower = subject_template.lower()
-
         # Build SQL: SELECT DISTINCT "col" FROM "table"
         sql = f'SELECT DISTINCT "{source_column}" FROM "{logical_table}"'
 
@@ -939,7 +971,7 @@ def _build_axiom_typing_blocks(sr_raw: Dict) -> str:
             f"    rr:logicalTable [ rr:sqlQuery {_q3b}{sql}{_q3b} ] ;",
             f"",
             f"    rr:subjectMap [",
-            f'        rr:template "{subject_template_lower}" ;',
+            f'        rr:template "{_delimit_template(subject_template)}" ;',
             f"        rr:class     {typing_class} ;",
             f"    ]  .",
             f"",
@@ -1490,9 +1522,9 @@ def run_r2rml_generation():
                     sql_q       = _build_star_sql(t, hyphen_cols,
                                                   f'"{data_col}" IS NOT NULL')
                 else:
-                    sql_q = (f'SELECT {owner_fk_col}, {data_col} '
+                    sql_q = (f'SELECT "{owner_fk_col}", "{data_col}" '
                              f'FROM "{t}" '
-                             f'WHERE {data_col} IS NOT NULL')
+                             f'WHERE "{data_col}" IS NOT NULL')
                 table_line = f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql_q}{_q3} ] ;"
 
                 # ── KEY FIX: Check if predicate is OBJECT property or DATA property
@@ -1724,7 +1756,7 @@ def run_r2rml_generation():
                         table_line,
                         f"",
                         f"    rr:subjectMap [",
-                        f'        rr:template "{owner_tmpl_fk}" ;',
+                        f'        rr:template "{_delimit_template(owner_tmpl_fk)}" ;',
                         f"    ] ;",
                         f"",
                         f"    rr:predicateObjectMap [",
@@ -1732,8 +1764,8 @@ def run_r2rml_generation():
                         f"        rr:objectMap  [",
                         f"            rr:parentTriplesMap <{target_iri}> ;",
                         f"            rr:joinCondition [",
-                        f'                rr:child  "{_safe_alias(data_col)}" ;',
-                        f'                rr:parent "{_safe_alias(target_pk)}" ;',
+                        f'                rr:child  "{delimited(data_col.replace("-", "_"))}" ;',
+                        f'                rr:parent "{delimited(target_pk.replace("-", "_"))}" ;',
                         f"            ] ;",
                         f"        ] ;",
                         f"    ]  .",
@@ -1753,13 +1785,13 @@ def run_r2rml_generation():
                         table_line,
                         f"",
                         f"    rr:subjectMap [",
-                        f'        rr:template "{owner_tmpl_fk}" ;',
+                        f'        rr:template "{_delimit_template(owner_tmpl_fk)}" ;',
                         f"    ] ;",
                         f"",
                         f"    rr:predicateObjectMap [",
                         f"        rr:predicate {predicate} ;",
                         f"        rr:objectMap  [",
-                        f'            rr:column   "{_safe_alias(data_col)}" ;',
+                        f'            rr:column   "{delimited(data_col.replace("-", "_"))}" ;',
                         f"        ] ;",
                         f"    ]  .",
                         f"",
@@ -1777,13 +1809,13 @@ def run_r2rml_generation():
                         table_line,
                         f"",
                         f"    rr:subjectMap [",
-                        f'        rr:template "{owner_tmpl_fk}" ;',
+                        f'        rr:template "{_delimit_template(owner_tmpl_fk)}" ;',
                         f"    ] ;",
                         f"",
                         f"    rr:predicateObjectMap [",
                         f"        rr:predicate {predicate} ;",
                         f"        rr:objectMap  [",
-                        f'            rr:column   "{_safe_alias(data_col)}" ;',
+                        f'            rr:column   "{delimited(data_col.replace("-", "_"))}" ;',
                         f"        ] ;",
                         f"    ]  .",
                         f"",
@@ -1855,7 +1887,7 @@ def run_r2rml_generation():
                     sql_b         = _build_star_sql(t, hcols_b, f'"{col}" IS NOT NULL')
                     table_line_b  = f"    rr:logicalTable [ rr:sqlQuery {_q3}{sql_b}{_q3} ] ;"
                 else:
-                    table_line_b  = f'    rr:logicalTable [ rr:tableName "{t}" ] ;'
+                    table_line_b  = f'    rr:logicalTable [ rr:tableName "{delimited(t)}" ] ;'
                 rescue_block = "\n".join([
                     f"# ── SEw_{t} [rescued property: {col}] {'─'*20}",
                     f"<{rescue_iri}>",
@@ -1864,13 +1896,13 @@ def run_r2rml_generation():
                     table_line_b,
                     f"",
                     f"    rr:subjectMap [",
-                    f'        rr:template "{owner_tmpl_fk}" ;',
+                    f'        rr:template "{_delimit_template(owner_tmpl_fk)}" ;',
                     f"    ] ;",
                     f"",
                     f"    rr:predicateObjectMap [",
                     f"        rr:predicate {predicate} ;",
                     f"        rr:objectMap  [",
-                    f'            rr:column   "{_safe_alias(col)}" ;',
+                    f'            rr:column   "{delimited(col.replace("-", "_"))}" ;',
                     f"        ] ;",
                     f"    ]  .",
                     f"",
